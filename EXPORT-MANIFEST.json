@@ -1,0 +1,4229 @@
+{
+  "format": 1,
+  "scope": "client-only",
+  "files": [
+    {
+      "path": ".env.example",
+      "bytes": 91,
+      "sha256": "76af7b1ad2147ceb031049365847ea43c8a5baed566c05e2264b430bc937178b"
+    },
+    {
+      "path": ".gitignore",
+      "bytes": 423,
+      "sha256": "e89ac2f58dc97131a7e1208ba14b88798d11fd8fdf39a3b49698ba087c8024cc"
+    },
+    {
+      "path": "build-windows.cmd",
+      "bytes": 692,
+      "sha256": "106e627d50196c8f9f58551c7f61cc599c5e6f478a9a82433872a02989bbe5f8"
+    },
+    {
+      "path": "config.example.json",
+      "bytes": 969,
+      "sha256": "4cadd7e00e4e7a40c40810443117332c5a4a4d20fc68d1fdfa42fe3ff1b68d99"
+    },
+    {
+      "path": "core/account.mjs",
+      "bytes": 12603,
+      "sha256": "92fda2b9e365dfdd49099677d74ada1ce47e0ddecb3e8989e5a5d6ff54610595"
+    },
+    {
+      "path": "core/api-logs.mjs",
+      "bytes": 4556,
+      "sha256": "51cd2435d2728bfffaf5e71456382200487a8294272349020d983f54d2441a71"
+    },
+    {
+      "path": "core/assets.mjs",
+      "bytes": 6586,
+      "sha256": "b3ec648e9ebfc4199b61588e8d735a729615ff3392c7d39dfa9326924b6aaf9d"
+    },
+    {
+      "path": "core/bootstrap.cjs",
+      "bytes": 147,
+      "sha256": "9d6e2135202bdf0a712a31b4a14f8182177b55390b335aa7ad1f3f4917b6fd9e"
+    },
+    {
+      "path": "core/client-env.cjs",
+      "bytes": 2732,
+      "sha256": "4c63f636de7bf182ff833b8732357947162b7b358b059cae5bb37edb8cfef684"
+    },
+    {
+      "path": "core/compact.mjs",
+      "bytes": 2610,
+      "sha256": "72cef49cd0f636a699fa7067ab90bba86c1fe712df70a3b47e7755add0f94a2c"
+    },
+    {
+      "path": "core/environment.mjs",
+      "bytes": 382,
+      "sha256": "68b278da73511ccd5047075fdba1e1b2b21d76c25a8946b1e59c2ab99e30c49d"
+    },
+    {
+      "path": "core/events.mjs",
+      "bytes": 563,
+      "sha256": "c4a70c08deec73e05122a757f803c8db5a42ace6741de3bd970770d06f1a5397"
+    },
+    {
+      "path": "core/experts.mjs",
+      "bytes": 11983,
+      "sha256": "677f003eef01600f4a16a3cd3b589b38febf5a31fcbeb7f60b44d8d73ef6db30"
+    },
+    {
+      "path": "core/llm.mjs",
+      "bytes": 32340,
+      "sha256": "bb3ded2affb87411df2f58038471e23fab30bdca5e0836dabc49f8b753170ffb"
+    },
+    {
+      "path": "core/local-skills.mjs",
+      "bytes": 2015,
+      "sha256": "705b0e2a3794e991b500d08541e333f7c8df57f0ea11fba79f139dd713802a64"
+    },
+    {
+      "path": "core/loop.mjs",
+      "bytes": 16737,
+      "sha256": "553ac5541e9891017908bdc34c05f1d14714226d88e613eedd34b902360c098f"
+    },
+    {
+      "path": "core/mcp.mjs",
+      "bytes": 6436,
+      "sha256": "afa02fd80b37e2321623fc667cd2b499881b26c5ca4e1643c79cb7fa4d818c77"
+    },
+    {
+      "path": "core/memory.mjs",
+      "bytes": 2218,
+      "sha256": "a6da0f5f78e567588d7f76b9d6b076555c7851696a9b51dfc38c5880be3cabdc"
+    },
+    {
+      "path": "core/paths.mjs",
+      "bytes": 2714,
+      "sha256": "dfb9462d6b3c132f0ae9bbcdc31bd0272385534e90405609945e65a95313f736"
+    },
+    {
+      "path": "core/permissions.mjs",
+      "bytes": 8013,
+      "sha256": "56e00a221df1ac9bec0b9c12dc7f87b55684f8ac14c4a64fd0ef9b4ad9abcbe8"
+    },
+    {
+      "path": "core/platform-plugins.mjs",
+      "bytes": 4581,
+      "sha256": "20f1b9777e1df380dde1597776f5420e59735e5c85a99a71bb38aa3825b8a2bd"
+    },
+    {
+      "path": "core/plugin-resolver.mjs",
+      "bytes": 1383,
+      "sha256": "694570bbde63d09121112e574a438d0500f19d9d89fc6b6fa0b95d851adad25b"
+    },
+    {
+      "path": "core/plugins.mjs",
+      "bytes": 13223,
+      "sha256": "63112bd3df67f63cfd2398dcb5995419c07c35d2d9bdf5acfe0b3e60d3a2364a"
+    },
+    {
+      "path": "core/prompts.mjs",
+      "bytes": 6691,
+      "sha256": "f174e0e58d99ebbe52352dec81395c67742fee529649fc4acf837776f0763ff0"
+    },
+    {
+      "path": "core/providers.mjs",
+      "bytes": 920,
+      "sha256": "7943dd66717b84709c3c951278cd76d9d43232de9f5636797ea065e50f41ed25"
+    },
+    {
+      "path": "core/session-import.mjs",
+      "bytes": 5871,
+      "sha256": "1156f7e3cf514be02221bc590057968ef4250370bb90bb2f5d74b573dcd80e3b"
+    },
+    {
+      "path": "core/session.mjs",
+      "bytes": 17910,
+      "sha256": "c11c252a61f212a44b8a15f8c900eb7a0aa8d6d7c32ba247e354f5d012bdace4"
+    },
+    {
+      "path": "core/stream.mjs",
+      "bytes": 11490,
+      "sha256": "e38bccaa3039e873c272e84b7513ea7fb450b299e7af3c00bab64cb2c8ca3512"
+    },
+    {
+      "path": "core/task-summary.mjs",
+      "bytes": 3024,
+      "sha256": "1152ab9d857aa9babf2803d8d252f7ba83005663077b77423268387eb0db6e48"
+    },
+    {
+      "path": "core/tools.mjs",
+      "bytes": 14042,
+      "sha256": "956d541984e52fb54f3f4ebcac94c2a2d1983bfcff09c93e5bf43ffff76b67ab"
+    },
+    {
+      "path": "core/workspace-files.mjs",
+      "bytes": 12299,
+      "sha256": "be91aa48599f2f0db616b648a42b1c53afeacc1cbc86576273dffdef6dab1d2e"
+    },
+    {
+      "path": "core/workspaces.mjs",
+      "bytes": 2546,
+      "sha256": "e031fc54dfc76637360d4b6eeff88fd57baa1e1d3692a1efebe4125c5cac8f78"
+    },
+    {
+      "path": "core/zip.mjs",
+      "bytes": 1722,
+      "sha256": "06a8892c973d9fd9b6b4f1245d6d6bca0f76def71e5cda4f04671c984b089a86"
+    },
+    {
+      "path": "docs/OPEN-SOURCE.md",
+      "bytes": 6847,
+      "sha256": "0788dae796938fae7fc0eba381544c791ca76d812301c85e4958d3670298dced"
+    },
+    {
+      "path": "docs/WINDOWS-PACKAGING.md",
+      "bytes": 8966,
+      "sha256": "184ea0046eb96cdfaf4b92c85f1f564d006d5af2ac2639440a1739f9d4a693a0"
+    },
+    {
+      "path": "electron/assets/icon.png",
+      "bytes": 1481413,
+      "sha256": "7b3125d60a795dbf1bbdac54d92f74c0a1e6e2a73b9a4bbeb7556f77a9a573f8"
+    },
+    {
+      "path": "electron/compat.cjs",
+      "bytes": 722,
+      "sha256": "d9f54e490e2f9c9ba9d2d1ef8520149453caadd31498691847b2185e90e28699"
+    },
+    {
+      "path": "electron/main.cjs",
+      "bytes": 7002,
+      "sha256": "7c81eda7152e8f1c718b1834f7074a9b5f405cb403231aef1ac355f5036d81ae"
+    },
+    {
+      "path": "electron/preload.cjs",
+      "bytes": 630,
+      "sha256": "c8ab294f4be140c53bacf27deaef5bf5defb3c7832c3b7153baa20396f1fa6b1"
+    },
+    {
+      "path": "electron/runtime.cjs",
+      "bytes": 2685,
+      "sha256": "dc543df74f76d70cc483a3b5ba9d83f2cc64775ff4f900bd14025519fe22e073"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 260941,
+      "sha256": "593445c46ccf37965229676c67110bd63f42fd33573b19faab9a3371cdf87f30"
+    },
+    {
+      "path": "package.json",
+      "bytes": 2181,
+      "sha256": "77e7fd66ac1e297a2c84883129ebb0f67ed8a09bfbc30c59651421d9b97617ae"
+    },
+    {
+      "path": "PLUGIN-COMPATIBILITY.md",
+      "bytes": 1408,
+      "sha256": "83446452a3d53988e2507b17edfe618666bb201f9c27304e3969e9682b43fe06"
+    },
+    {
+      "path": "plugins/build-web-apps/.codex-plugin/plugin.json",
+      "bytes": 1693,
+      "sha256": "1bb943064c8cc040166a23816723bc6375c8fbbcb893312432d09034db783c82"
+    },
+    {
+      "path": "plugins/build-web-apps/agents/openai.yaml",
+      "bytes": 280,
+      "sha256": "c3a754f5c2c6b860387ad08b88dbbb33ac773f476edf07bbd6f2d5fdc883c317"
+    },
+    {
+      "path": "plugins/build-web-apps/assets/app-icon.png",
+      "bytes": 4049,
+      "sha256": "d83c4aebc93b4d894973ef6891e2135709e0ec4a91cdf51f1af7c9f9075f632a"
+    },
+    {
+      "path": "plugins/build-web-apps/assets/build-web-apps-small.svg",
+      "bytes": 1760,
+      "sha256": "a17db861c23f72749bde1cd25c7cdb75e288c95a882a2f4276453cd2686617cc"
+    },
+    {
+      "path": "plugins/build-web-apps/README.md",
+      "bytes": 543,
+      "sha256": "88f972b949edc457b3602936d046ad8ae36caf7f35c366bdabc815f8a6721885"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/frontend-app-builder/agents/openai.yaml",
+      "bytes": 208,
+      "sha256": "a009c5172be0f965636fec201098992b8eff79636866275e3e60a3b427c1e5fb"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/frontend-app-builder/references/imagegen-website-concepts.md",
+      "bytes": 19805,
+      "sha256": "d34b7d03aba1e748decb5ba099d84f45edd0a594c8a89bdde19c0beed9fd9907"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/frontend-app-builder/SKILL.md",
+      "bytes": 31987,
+      "sha256": "62b27eb930de74432fba337ba5028419711e443dab8ecd0bef3e672683b6bb3a"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/frontend-testing-debugging/agents/openai.yaml",
+      "bytes": 157,
+      "sha256": "7d9f0756da68c80d951c1b1e914f65f2b93f6767399e6fec22b8226c57977c73"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/frontend-testing-debugging/SKILL.md",
+      "bytes": 9942,
+      "sha256": "150c376701a76b4f09f731f0844099a3b0eab1c60e042a2af0f9db9affb2540c"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/AGENTS.md",
+      "bytes": 97869,
+      "sha256": "924b5c33d0f671769467ac8b10ed98c9708d6db3e5465cc3dec368454ff059d0"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/agents/openai.yaml",
+      "bytes": 134,
+      "sha256": "3e3d82e03ea4a01429213c88370c629af43f4168e30c13cc5a936a46b4933521"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/metadata.json",
+      "bytes": 936,
+      "sha256": "1874ee16ee8ec9be9058dd31e0be60f9117ae1ac33986b258bac3923b5dd395f"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/README.md",
+      "bytes": 3483,
+      "sha256": "2e7e6cbe3952689bf9c00b9a7032f1bffb263cde2d01635f0aa49d3375c33ff5"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/_sections.md",
+      "bytes": 1600,
+      "sha256": "f352f75b84d6c6ee644c3fade99eaf2186bdfdc1d9e5b598bae436f32b3bce4f"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/_template.md",
+      "bytes": 659,
+      "sha256": "21231af1b4c70cfe6f07625830d982934295c735f91fddd9741b3a8e3688d735"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/advanced-event-handler-refs.md",
+      "bytes": 1538,
+      "sha256": "029f0c929c665fb9263b8c72a44e50610caf94a6e22a8142821a84482eda825d"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/advanced-init-once.md",
+      "bytes": 1000,
+      "sha256": "3d209bc4b17c2a503fdbb53b39261bc5ee824703a8b387daef3f53bad1f32ce4"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/advanced-use-latest.md",
+      "bytes": 1111,
+      "sha256": "84b3504ef0dc85f171c6aa0c5d15ac6d252ba72e38fc4e87872c0a3b1728345f"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/async-api-routes.md",
+      "bytes": 1163,
+      "sha256": "adf38ea4f34fa74b275b908e49aa20de20af9d9935b4a656314a49217b182663"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/async-defer-await.md",
+      "bytes": 2108,
+      "sha256": "6a2b9e19555a17662755e01d129fa21b8c6a659731d860b7cc918ba47be2a942"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/async-dependencies.md",
+      "bytes": 1344,
+      "sha256": "4901341bd7f7b7036eb8d98b243515ce294e6e4079370b3187c1514c3e597ec6"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/async-parallel.md",
+      "bytes": 682,
+      "sha256": "ff95abbb67b62a889d7ef71f1d06834238c47ecd3d49483f7823b4cd17d92680"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/async-suspense-boundaries.md",
+      "bytes": 2609,
+      "sha256": "8a6e88c6e5190e10d3e3ebca89a1bc4fefc4bdb0cbc9c6f406ce02452a5759df"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/bundle-barrel-imports.md",
+      "bytes": 2429,
+      "sha256": "f3a0d74c71aaa98547d970901d73d1bc4c082762e891244e9103def40846eecb"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/bundle-conditional.md",
+      "bytes": 980,
+      "sha256": "16992beeaf9bdd1e7ff20989b8672cfffc8b918deb0783c058560c7a233dd37c"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/bundle-defer-third-party.md",
+      "bytes": 969,
+      "sha256": "64de0f01dfe58b4d3a3865baa623f743ef1b8c363106c7dfaf2b2867f69b96d4"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/bundle-dynamic-imports.md",
+      "bytes": 826,
+      "sha256": "0fb947cdfec5ce0e95a894c6b68220f88983eff73ce65b98e4f00c885ebd9b36"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/bundle-preload.md",
+      "bytes": 1199,
+      "sha256": "b673a49f4cf4bf385ddf6956ca704139ec2915802bade1925134f8cfabb2278c"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/client-event-listeners.md",
+      "bytes": 2043,
+      "sha256": "e2229c8e121dfdd6bad8063ba6c41213ff612e19e077f17ba805b70d48151775"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/client-localstorage-schema.md",
+      "bytes": 2021,
+      "sha256": "f9d177a557f4bd4bd1a81f30f841f75041821dd88f706a6b8c4eac86c7472e05"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/client-passive-event-listeners.md",
+      "bytes": 1692,
+      "sha256": "277118e32363381459bc7439fa942966da668d2c128d93968f9a289f0bb32861"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/client-swr-dedup.md",
+      "bytes": 1215,
+      "sha256": "866e6cc267f06df39129c44c68c5e6a2e62faa554bc8cdb6ada1f58afe4bcbbe"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/js-batch-dom-css.md",
+      "bytes": 3373,
+      "sha256": "d7343005afc6a9c7e86368e22318f49b88492973e673f7b0ba2eb65697597143"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/js-cache-function-results.md",
+      "bytes": 2029,
+      "sha256": "bbef6423ad250227e8c73a5d9be6fd687707dd187ef50236fd5b6883a41d49b6"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/js-cache-property-access.md",
+      "bytes": 560,
+      "sha256": "bbecc553a5b51caab2ddc90423a23d4c3245669439ff91e5204e48d62aaf1c5e"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/js-cache-storage.md",
+      "bytes": 1721,
+      "sha256": "7710a2ceb421d9b6d3828d7f38ec8a093af4a372c2b3b4ea2299d5df2518f770"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/js-combine-iterations.md",
+      "bytes": 785,
+      "sha256": "c43a02979586d39f341fa6da7fc61bdd6a6917fa0c4f9c926091fa540cdf8022"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/js-early-exit.md",
+      "bytes": 1183,
+      "sha256": "b6b967ab80d2a5fc19851d9db9464cf8e4d0e57dccb607a474b8f7818015951d"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/js-flatmap-filter.md",
+      "bytes": 1471,
+      "sha256": "acfa11d07d7982ec565e4d8cfb410d477ffb73a7b41a532b938bcdb15c6ba51f"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/js-hoist-regexp.md",
+      "bytes": 1073,
+      "sha256": "86f4772c5d732c1f5f0656412713c6dc919360f0f3ea32bb1a45937eaaa5866e"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/js-index-maps.md",
+      "bytes": 874,
+      "sha256": "752dd0803a7394a70e8d437b7eb025d1e085566e30ad733e75b9d2e04cc6c4d9"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/js-length-check-first.md",
+      "bytes": 1796,
+      "sha256": "9e57362d76e57ea6a2ff8cd137cf2a87b094aaff152eac61758305acb450a25c"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/js-min-max-loop.md",
+      "bytes": 2372,
+      "sha256": "f0054bcd1c3168ea8a6474df33c398bc0066eb1e813d59ae57fe36806ec900b6"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/js-set-map-lookups.md",
+      "bytes": 556,
+      "sha256": "7143f8d7b71cdbc77a171fc801bdcf5e7a209e0f471ff17bb669acc986a6b064"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/js-tosorted-immutable.md",
+      "bytes": 1839,
+      "sha256": "2722514cac46990f3361fa35ee20d499a12da2539362e7871b670978664d158a"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rendering-activity.md",
+      "bytes": 590,
+      "sha256": "e23dd494d955db99d376b5bf62a59ce7df9f14576d94094f2e53cfdc388453a0"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rendering-animate-svg-wrapper.md",
+      "bytes": 1232,
+      "sha256": "dca7f0251244489b3bbb6f5aaf7d70f280d91dc13de8ebd24403286f382ec0f4"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rendering-conditional-render.md",
+      "bytes": 1020,
+      "sha256": "6db58f36c8b080c35e91f6504281f85ea2dbd133030610c860e60181d6d9556a"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rendering-content-visibility.md",
+      "bytes": 853,
+      "sha256": "45437e9594857ee1066ee061e946ed129731cf2e80f7e08f3cc621fa0554c567"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rendering-hoist-jsx.md",
+      "bytes": 1085,
+      "sha256": "c5fa7274f067ce3760107196a9416df333a7b4187254ef66c547fad7c45cd8d3"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rendering-hydration-no-flicker.md",
+      "bytes": 2390,
+      "sha256": "bfedc3a73f9687c7836acf915165fb845880453b6dfcf2fa6475dfec96b23027"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rendering-hydration-suppress-warning.md",
+      "bytes": 902,
+      "sha256": "7ec1623c69e1a82b09b8b5a6028005e3eb8485741898447af1bcaed8ff8c0139"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rendering-resource-hints.md",
+      "bytes": 2634,
+      "sha256": "03ffeb3c26ae514bd24ea8683621d67a4b8432926ef7ee8d3296f82ae5c1b6ab"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rendering-script-defer-async.md",
+      "bytes": 1936,
+      "sha256": "28ef87814467a4758645889dcbb0ccb9a9e2387c4cebbd8cd4dfa33435e3e5d8"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rendering-svg-precision.md",
+      "bytes": 616,
+      "sha256": "d57cdfaaaf660a28a9a5d6d10e97202a5eb13e1bc1675e024cb1ccbfa8bb2c32"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rendering-usetransition-loading.md",
+      "bytes": 2149,
+      "sha256": "c2186f944b60630c67d42222f60ecb12b5a85395e7f31f193982f85983165720"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rerender-defer-reads.md",
+      "bytes": 1012,
+      "sha256": "bb98d9b7c7622641887df6407406a8c4f61510af9cc1bd275574ebee71bac8c8"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rerender-dependencies.md",
+      "bytes": 869,
+      "sha256": "4f0a1806694c2391c0b5b79bb4dee89fdf2c02ee322acf308509c17542240446"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rerender-derived-state-no-effect.md",
+      "bytes": 1241,
+      "sha256": "1d50f7b1b86d24f987c557415590f79b06250e3ec1ca552da981e31a31f9edb9"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rerender-derived-state.md",
+      "bytes": 757,
+      "sha256": "6a501211aa53036905df7531deaf25fdb8582697366fd071d4c2607828662dcb"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rerender-functional-setstate.md",
+      "bytes": 3042,
+      "sha256": "e46096d4c2c8fc89ab717bd7e56b8a884b612a88013a99b0c63e7dfc45d8cf25"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rerender-lazy-state-init.md",
+      "bytes": 2074,
+      "sha256": "b8b9e6b6001a1e94979776e744eb38a98432858dd2369995731c9a095ecd1d2e"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rerender-memo-with-default-value.md",
+      "bytes": 1211,
+      "sha256": "e69d637687b85967554df7d5fcfd83cc6fbb89237e9b80d10fbea7916244aa8b"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rerender-memo.md",
+      "bytes": 1192,
+      "sha256": "8cc2d062f22ae762f7f5f93baf2bfc374c917079131896559721f9dfbd402a7c"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rerender-move-effect-to-event.md",
+      "bytes": 1313,
+      "sha256": "00f5eaf8d4380c736c9177b67583f6b33f6b1f84addc252653cd6dea9551ad8d"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rerender-no-inline-components.md",
+      "bytes": 2217,
+      "sha256": "381ec0a4224c20c57545b6c44a65ffcaf0ed520fad97f3d0f8abcb7389de602f"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rerender-simple-expression-in-memo.md",
+      "bytes": 1053,
+      "sha256": "1e41299336d72ce42ffe0b4d397496e520eae13ea544b1412b83761555f4e631"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rerender-split-combined-hooks.md",
+      "bytes": 1908,
+      "sha256": "93543c1987b8bb639302a4598f1444bc9ed02d200ea7ad0e47e890ff3fa8cf21"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rerender-transitions.md",
+      "bytes": 1095,
+      "sha256": "b51a82fb6b223d13c585dfddaeb753c79d7da0524da87b708f61fd6939600ab6"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rerender-use-deferred-value.md",
+      "bytes": 1905,
+      "sha256": "2c393cc085e9ae6285ee9e71f4db86ddd0120a41b84c6a1d659f46e8c7684db5"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/rerender-use-ref-transient-values.md",
+      "bytes": 1815,
+      "sha256": "26ddded1d59cc04cddf7c1412ffb05315dd1f358510edcce3c3474d5acb63f32"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/server-after-nonblocking.md",
+      "bytes": 2085,
+      "sha256": "86c8670ad8e6285753645c2cebd164c56baf6f0fa74f914c0ca496d0a0156bcc"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/server-auth-actions.md",
+      "bytes": 2745,
+      "sha256": "a413aba63b73f7f82cf2482646c8c1598eaa75753c8f73f33055b8508de99fea"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/server-cache-lru.md",
+      "bytes": 1394,
+      "sha256": "19d844eebd1fb7ef5f43f4d1e85baf1fc0160547400ab838ba4d40226eb891b9"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/server-cache-react.md",
+      "bytes": 2304,
+      "sha256": "7448470adc9f0066455f9cf45b658f5c3f1884a7990c89f880fbb272a4028b05"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/server-dedup-props.md",
+      "bytes": 2125,
+      "sha256": "5c4d4c9930812d3ab98e28ad97ca2f5af778effbf9b50b6a7558c18abf2e98b5"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/server-hoist-static-io.md",
+      "bytes": 4535,
+      "sha256": "a30574079b57e726075adae656735d0adcbeebebd18dae1b0c0de40a910ff0ce"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/server-parallel-fetching.md",
+      "bytes": 1637,
+      "sha256": "f8f275fea2378e7707a50f2df4af6a2f65fe1fa84edb3ffc4720af805ebabe42"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/rules/server-serialization.md",
+      "bytes": 1034,
+      "sha256": "567ce457f775d4e03e2a6ef7bf67213fee35c6c3b9d1bcfa783007d1df414d4b"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/react-best-practices/SKILL.md",
+      "bytes": 6813,
+      "sha256": "d206b66626a0a7088550a735c46c4f727b6422db561a133826e752348a3ea758"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/shadcn-best-practices/agents/openai.yaml",
+      "bytes": 243,
+      "sha256": "92be2f46bf42718ad62fd987d1c0dff5baacc37895bf8ab5e7ba858442b5f997"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/shadcn-best-practices/assets/shadcn-small.png",
+      "bytes": 1049,
+      "sha256": "0ecc62d682727f68fc4937eed19960c706714fa084d44f63028d611ae02bf3d7"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/shadcn-best-practices/assets/shadcn.png",
+      "bytes": 3852,
+      "sha256": "7d60ad6fec4d89a0d44ba5a3c9283d2fea0047af5467f9227040e20d927d39b7"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/shadcn-best-practices/cli.md",
+      "bytes": 15547,
+      "sha256": "8b979ba249ec0920a3d75ba3ed8dfa12c4277856e28b08f65044a5fb1df6445f"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/shadcn-best-practices/customization.md",
+      "bytes": 6171,
+      "sha256": "327b0de976b667a7ae8a5b40dbe579594917d2d80f0b4d5f8018e0df1c8ffb2e"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/shadcn-best-practices/evals/evals.json",
+      "bytes": 3165,
+      "sha256": "0d0f2727540fe1b8846c52ed47d8f51ff0b1066596d6a6d750214b812be5e22b"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/shadcn-best-practices/mcp.md",
+      "bytes": 2448,
+      "sha256": "810159e21991304593e62086bcc22e8344e16daa838248dfad9093b404ac24a9"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/shadcn-best-practices/rules/base-vs-radix.md",
+      "bytes": 7260,
+      "sha256": "d0b66cd55a921602e7ca1f3b8c03a2f744b8d688f843155bbb2d9c7cef08eb0a"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/shadcn-best-practices/rules/composition.md",
+      "bytes": 4463,
+      "sha256": "b8cd03b5343a7a42ff015252b689d573ecd492ff96738888f93c688f4f5bbc6c"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/shadcn-best-practices/rules/forms.md",
+      "bytes": 5049,
+      "sha256": "a5422ccca0bcaa9ccb5e8a3745bacd08eadcf9a96f54e1b39f5ffe725f316feb"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/shadcn-best-practices/rules/icons.md",
+      "bytes": 2059,
+      "sha256": "08a07baacbbef0926002b88ca1fc410bf70eb7938a3f3521e4d8f643f6621908"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/shadcn-best-practices/rules/styling.md",
+      "bytes": 3957,
+      "sha256": "6e9c6ee8c29cb5930b16d295a45e2109ab8913f2300237448f04fd25deaf15b0"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/shadcn-best-practices/SKILL.md",
+      "bytes": 16666,
+      "sha256": "95ee97b9e79c4d25ad274017bb528ccf7b92c1d442bbfc540a46f3c9197263df"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/stripe-best-practices/agents/openai.yaml",
+      "bytes": 127,
+      "sha256": "95ff9863109a7c3c3f720dbf3c86bdd1c74b69ad3e6ba33db6ac66f6ead22090"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/stripe-best-practices/references/billing.md",
+      "bytes": 1370,
+      "sha256": "5e15b999db8dc31e576ea4295a51d8420910e718eb4922a0fcbdacb357911fc6"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/stripe-best-practices/references/connect.md",
+      "bytes": 2977,
+      "sha256": "54202b51b8a89b5cfcc66aa1d585c636883be489cbad20429df413118809de78"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/stripe-best-practices/references/payments.md",
+      "bytes": 4193,
+      "sha256": "d2374c3ac1ff7bff31dbafe109916ed00f1feaed838d060a6e8434d312318a7c"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/stripe-best-practices/references/treasury.md",
+      "bytes": 770,
+      "sha256": "e736cba69ca36e6e97a346f32974bdc6d32230c4f37c6d6b871716296c392a59"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/stripe-best-practices/SKILL.md",
+      "bytes": 2043,
+      "sha256": "7f720061479d380ae9cf6c8ea9f33ef8d84961bc31f100b938f42110b736493c"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/AGENTS.md",
+      "bytes": 2227,
+      "sha256": "f3336d9942583a30df20e4bad03adeb48d1f246583999979e5cceb215bda55e9"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/agents/openai.yaml",
+      "bytes": 148,
+      "sha256": "7fce5f98f915cee7c669a6a0103fc36747973367772b92593cc76c4519a28964"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/README.md",
+      "bytes": 3291,
+      "sha256": "5194fb8833f9f45ff524653f902ffc7b39050febf1cfc0b0da3d69a85a08bfc7"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/_contributing.md",
+      "bytes": 4337,
+      "sha256": "9e56540725c635470fc485cbb26880514fa9b7cdb23eef250a0d12b5b23a2893"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/_sections.md",
+      "bytes": 1721,
+      "sha256": "ad2d6f6b0938ff844f7f8971153ab6d08a03ef6511b02fb9cee9336c7b209e93"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/_template.md",
+      "bytes": 1074,
+      "sha256": "39e9fce3c6ae1af110f689e018d4417f3547ed0417a7b6198b207285e60bf9b8"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/advanced-full-text-search.md",
+      "bytes": 1523,
+      "sha256": "0682b713263c5b6b9638a31f810bad07aa179bc4f79bbb787b92ed287e00fe76"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/advanced-jsonb-indexing.md",
+      "bytes": 1493,
+      "sha256": "9bcbf7da33f6fe6fa9525680ca26d4e3412b534104cffb5f8529596d76631e4f"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/conn-idle-timeout.md",
+      "bytes": 1328,
+      "sha256": "cd4386d0b5a2bd6d0148975f0f379016b47c7cf139b9483c4f24619c6a89f5e3"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/conn-limits.md",
+      "bytes": 1369,
+      "sha256": "9ed6e5e3a45458a52f2863a60324a05d80da1d9f3e23bcb83b06f464f6a3cee7"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/conn-pooling.md",
+      "bytes": 1423,
+      "sha256": "60cd5f7942c44bdf6d8622a49a2e9f0f7fd01daf8e62bd1bd66b195cd6942975"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/conn-prepared-statements.md",
+      "bytes": 1575,
+      "sha256": "5ce48ff1e426c9b90c75c5733817fc2dd8feea9e4db3298ec9373b9cd0cf3bf8"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/data-batch-inserts.md",
+      "bytes": 1341,
+      "sha256": "98251b608bb6cfefd28828c9e5fffc705a155f1212fa0cb82904c5bc2e417572"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/data-n-plus-one.md",
+      "bytes": 1414,
+      "sha256": "f5c60f85f208161cd7567bb7cff0f559618814216a4426bb1351b51f75ec334d"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/data-pagination.md",
+      "bytes": 1408,
+      "sha256": "c0bffeb6880c1f5b961e7c2ff36fd16686ebb09e5e49ed17499654beabea3e60"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/data-upsert.md",
+      "bytes": 1440,
+      "sha256": "b366aa7da1e7929fba3011f99d949b2593967920d0c3c8572e07c0407c367054"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/lock-advisory.md",
+      "bytes": 1587,
+      "sha256": "6d6b50c5ec9f85eb7aebbb1466e642e427c1732efa558488a9cae7ef9903febd"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/lock-deadlock-prevention.md",
+      "bytes": 1923,
+      "sha256": "55f2074581d4db4996fc3ea1d3c120295209a70115f773e2c54f6b312405b293"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/lock-short-transactions.md",
+      "bytes": 1400,
+      "sha256": "2538a22231c0dfde9967812b6bd5fb347287b671f72806495f89d0d0764e5fe6"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/lock-skip-locked.md",
+      "bytes": 1407,
+      "sha256": "42c7492ba7f5d2c8ede9a5af072ea63deacf71e5695e022cae15b46b1ce4df13"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/monitor-explain-analyze.md",
+      "bytes": 1486,
+      "sha256": "94881b47194cb164b1d2a004e79f181370af44ec830b9263e990e2710bd02b76"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/monitor-pg-stat-statements.md",
+      "bytes": 1473,
+      "sha256": "812bf181876bacac5a2f914e7ffcf2a0a215b6d18dda752e65e75d926cbbcef4"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/monitor-vacuum-analyze.md",
+      "bytes": 1561,
+      "sha256": "8d35221e676f13b122865d5df947a008c41367bd180010e52fde3c429e8552a9"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/query-composite-indexes.md",
+      "bytes": 1498,
+      "sha256": "7e75d1b4d4431cb874ecc28710e95b7d2d7364511daa5d2c8e9d7de7ce1d0054"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/query-covering-indexes.md",
+      "bytes": 1327,
+      "sha256": "028770393de8c0be6dcc7b9fb017f8209761d1854ebf433f036367e602f2d04d"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/query-index-types.md",
+      "bytes": 1569,
+      "sha256": "5f054ce4f835091bb5ff89875deb5f8ade9e447e2ea62d1ca07382d104af0f2d"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/query-missing-indexes.md",
+      "bytes": 1261,
+      "sha256": "15ddf120c86020612d2713225c850e0e4f022b38021f40f45e5bbe58f245dcc3"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/query-partial-indexes.md",
+      "bytes": 1392,
+      "sha256": "106e2b88ff64115efa0a6b5f448d31788681493eeec05ad373f7c2ce6c8e0381"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/schema-constraints.md",
+      "bytes": 1960,
+      "sha256": "d6e16d565c9832b70f8b1d472f7dc86dafa1351a44e8da72c88b48d337f73d7f"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/schema-data-types.md",
+      "bytes": 1499,
+      "sha256": "df3197b3393f37b065396c2d3d2035d870d5d572ceaf6562e7c85559dcd11871"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/schema-foreign-key-indexes.md",
+      "bytes": 1738,
+      "sha256": "b49a4e74ded6dd2a2bcf82d21fd22470c403b54cc526dc387f95c001c005c5d2"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/schema-lowercase-identifiers.md",
+      "bytes": 1783,
+      "sha256": "e7e3e073df2fd787cc4e58dbfe1b7eb1f80439326042c5e73a69ae8a3b1dd734"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/schema-partitioning.md",
+      "bytes": 1603,
+      "sha256": "d940ee09551e970f97c629e816502989c37f7dcea1df94b4b52f79f6eefc9971"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/schema-primary-keys.md",
+      "bytes": 1882,
+      "sha256": "8e4350d0c4b0034fa843ef74716978729329543ff57fe9fad1d22e31a86ae0c5"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/security-privileges.md",
+      "bytes": 1620,
+      "sha256": "079b20aba6ce8dbea81678fafdd95b4f9785440e91d07eb96029104597cb9693"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/security-rls-basics.md",
+      "bytes": 1422,
+      "sha256": "e1b419ae752d06f6180a0dd61fa21cfdc2b19e34902495bd2827d3e6e350dfe3"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/references/security-rls-performance.md",
+      "bytes": 1550,
+      "sha256": "acbccc505618d213a1d3e227bef4411444564bb4233bebb46fab4dc71e04320c"
+    },
+    {
+      "path": "plugins/build-web-apps/skills/supabase-best-practices/SKILL.md",
+      "bytes": 2627,
+      "sha256": "d454ecdb939d26490f829a8198cdd40048114312a282e44b28b96438bbf8cd7a"
+    },
+    {
+      "path": "plugins/build-web-apps/THIRD-PARTY-NOTICE.md",
+      "bytes": 163,
+      "sha256": "2bad494007151eaf374e0fa5fd78ebe3924b7138f51c5746ea7ff90b5a60847a"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/.codex-plugin/plugin.json",
+      "bytes": 2651,
+      "sha256": "be4bb31100997609d4b661f63f2adfdc5ca12bc76f7e57b6165ccbc00a501076"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/agents/openai.yaml",
+      "bytes": 421,
+      "sha256": "4b4b17582826228b316436c3ef7a41ea70df01440e2d2c518b6dee2f5789bcbc"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/app-icon.svg",
+      "bytes": 981,
+      "sha256": "3c587add2a55c01eaae80c6d3495a3873c7ad424b899d6feb72aa65525dd2b6a"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/data-visualization-small.svg",
+      "bytes": 594,
+      "sha256": "0fe54a456470c36f15e3d1ae343c56cfc05b7dbb201cfeb7e8c5efc56d98cf4a"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/templates/accessibility-review-checklist.md",
+      "bytes": 2440,
+      "sha256": "2f4557a28e05a66ec089e0f250845d6fa8eebe62afc835afa59cf2d9fca5dc6a"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/templates/advanced-interactive-visualization-contract.md",
+      "bytes": 5766,
+      "sha256": "4a020cafc137495a875eb32580ce0af6798b0251e8e3b56181b4c67caec3f9b0"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/templates/chart-brief.md",
+      "bytes": 1251,
+      "sha256": "3715b99a39d993aa6a83121506edf210662ee2abae083491f5d1268673fb9254"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/templates/critique-checklist.md",
+      "bytes": 1936,
+      "sha256": "11ff89084ac75786e89e4a3178ae6038905f505db87ad3f7d44e2997ead5b212"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/templates/editorial-evaluation-rubric.md",
+      "bytes": 4626,
+      "sha256": "87d6f367ba3ae4299805b9ab9cbd9ad66128b07493e9dfd82909766144c337ab"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/templates/editorial-infographic-brief.md",
+      "bytes": 5649,
+      "sha256": "97444c346b15dde2963e505a62b61c6d1ac7cefb09ddbb766a7f67f8ef1cf10c"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/templates/editorial-infographic-examples.md",
+      "bytes": 3853,
+      "sha256": "9c6f47321383709bfb6a7357f1b68e7d769fc75192ecf320cae46e1dcd07cabb"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/templates/export-checklist.md",
+      "bytes": 683,
+      "sha256": "1cf3ae847d0fe317109f37a765253868bba0c3a511483e0ab98f8dc8f1fd9daf"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/templates/html-report-starter.html",
+      "bytes": 2178,
+      "sha256": "106865fe2f5b1cb00121933964afcedf7d8904245552bc2657ccff787692f8ff"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/templates/human-visual-review-checklist.md",
+      "bytes": 8677,
+      "sha256": "084ce82fd911a21b7d9c3690bf31936ff331408f7e270a41f5e60dbfe7851536"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/templates/image-generation-visual-asset-brief.md",
+      "bytes": 3911,
+      "sha256": "9b4c72e4ce51541859cea4de320899e209d2c5de8b54c6d3b676dd5ca33d2a1a"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/templates/interactive-editorial-storyboard.md",
+      "bytes": 6740,
+      "sha256": "763f64af2e489519d1a01f9100e00b17ec328e939789839810943d96f6a16e95"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/templates/interactive-uml-test-plan.md",
+      "bytes": 1592,
+      "sha256": "ace6da6af929ce0f7fd2068423fa37ee546c4ae1b6e909dcb96fa269b7f0224f"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/templates/live-dashboard-review-checklist.md",
+      "bytes": 1122,
+      "sha256": "52ede0de2805472ab13cec811007ca5f550342c9bfc40e567dc5b03347728df2"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/templates/playwright-pdf-starter.ts",
+      "bytes": 542,
+      "sha256": "738e309a6ba20a8e9927a47c8eafc24c91370af81cb8c337f512d4be341e736a"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/templates/playwright-starters.test.ts",
+      "bytes": 1476,
+      "sha256": "0230f3173b38a25e4bf88fc5f420715d4168fce41085351762b4d35b6ae01c43"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/templates/playwright-visual-regression-starter.ts",
+      "bytes": 1632,
+      "sha256": "a57cb272b80d75ff87f83889ed8e2263894f43b2f171f46bd571261f554b8507"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/templates/uml-diagram-brief.md",
+      "bytes": 897,
+      "sha256": "6226060a5f56a1c30076e32f71cebc89a5f99dcf2a04aebb16b84dfb6f88dfbe"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/templates/visual-design-contract.md",
+      "bytes": 6009,
+      "sha256": "0796f8b83049bc3de12799abd7fa94dc7965c153a69ccb1b321044f6b924911b"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/assets/templates/visualization-test-plan.md",
+      "bytes": 4152,
+      "sha256": "477fd7eb85f578928a74586bf7c720d0f9dd08da507bf149efda5c0258834351"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/references/foundations/art-directed-interactive-visual-stories.md",
+      "bytes": 13345,
+      "sha256": "054946a76343155fd9901987b25137052749bb03763496555ad61e3023c7d0ca"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/references/foundations/domain-contextual-surfaces.md",
+      "bytes": 5426,
+      "sha256": "566195f1832062d6d9e5463780db646e1e8675de80d5da00c03b864e5ee93a0c"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/references/foundations/editorial-infographic-system.md",
+      "bytes": 16610,
+      "sha256": "88e3c5e58722074e95ac92b11ab17e6b878ba690fc799511ade82378637fab20"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/references/foundations/embedded-visualization-self-use.md",
+      "bytes": 8971,
+      "sha256": "eba2d00d88d6d86d34b01f2ebf7f5c4f8230155642721a701c3220f011833d32"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/references/foundations/fictional-data-story-simulation.md",
+      "bytes": 5415,
+      "sha256": "807eed73926ccbb87e6b630786b7d60909d337507939ddc417cd68de3dff6cc5"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/references/foundations/implementation-design-and-tradeoffs.md",
+      "bytes": 7371,
+      "sha256": "e3bbf562e8874a636693fb0af62c61a03aad1b91576c333540e8344725b94f06"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/references/foundations/interaction-models-and-progressive-disclosure.md",
+      "bytes": 3850,
+      "sha256": "c67ca0b97232ab27eb3ae98b6557143ba7bf4c4b64dace4fdc53161e9c25ece2"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/references/foundations/layout-hierarchy-and-self-explanatory-ux.md",
+      "bytes": 3614,
+      "sha256": "5987a961cdc91ef0af2f6b395b706055cb1b94e7d957d504d149e3b5a27ecf38"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/references/foundations/meaning-preserving-visual-design-workflow.md",
+      "bytes": 19527,
+      "sha256": "94f4c739f8c5160389171aea8ef3ce9f72395b9b14e26d1ece9bc0ce34d6ac57"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/references/foundations/mobile-first-responsive-visualization.md",
+      "bytes": 12817,
+      "sha256": "72eb259e4cbeba93b06c8c0d24ca6e19793a4005453f2dbf7afc281019299fa9"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/references/foundations/operational-visualization-workspaces.md",
+      "bytes": 5577,
+      "sha256": "d13f255210c06b69ea4a8ac5d80a7be2baeb4062c5c591f5299ec29855ace89d"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/references/foundations/perception-color-and-encoding.md",
+      "bytes": 4606,
+      "sha256": "c992380a3c4f373a644bb4122242961617cee1f394422b61f0870bd07db6c17b"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/references/foundations/sensitive-geopolitical-and-humanitarian-stories.md",
+      "bytes": 8414,
+      "sha256": "a6e15d74217ea613054227a1b70fb6ce9dbd9f1d89a22065a8e8755af3f9463b"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/references/foundations/shareable-state-and-persistence.md",
+      "bytes": 5657,
+      "sha256": "74a67c31a2d29245cf8b95a2a050357848790c42a65e926f88f08137f474ad08"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/references/foundations/storytelling-annotation-and-critique.md",
+      "bytes": 2602,
+      "sha256": "bb99e317bafb087ae9440dcc39f0f75a8726a2298360a20417fda9c3107feafa"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/references/foundations/task-abstraction-and-chart-selection.md",
+      "bytes": 1511,
+      "sha256": "fb291ca2da22a82b70d81dcb9cbffbc643b6acba6a5a3a874cef10b92a33ebec"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/references/foundations/theory-and-principles.md",
+      "bytes": 2551,
+      "sha256": "01b9ee4c81c5e586f42705ac8e314eabcf194b89caa901c1a8879bd25302b9d8"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/references/source-index/export-and-automation-sources.md",
+      "bytes": 1226,
+      "sha256": "5d393f62441374e12f8d7d25e7a2cde853602a8c0e6de0ed1d8b8243555f1256"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/references/source-index/official-implementation-docs.md",
+      "bytes": 16978,
+      "sha256": "33f2eaeeeb13a2ef6807954d62400b3658dd5e606a2efad4d588d4aecb957a60"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/references/source-index/practitioner-guides.md",
+      "bytes": 6059,
+      "sha256": "a7e91bee59f05235768fef917c8c561b3045a67f0f74e4b0ca6adeed1513a206"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/references/source-index/theory-books-and-papers.md",
+      "bytes": 4506,
+      "sha256": "c22bb223871122a9e0de17de460d63d2d2055cba30f5520fda464823bfba4c35"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/accessibility-and-inclusive-visualization/agents/openai.yaml",
+      "bytes": 192,
+      "sha256": "a6d098767fea882a03cf98cac93b32e7219ec6f45b8855e4f4ffb554f6f57fb2"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/accessibility-and-inclusive-visualization/references/color-contrast-and-redundant-encoding.md",
+      "bytes": 2379,
+      "sha256": "1dffb6850f6be38ae7cb5a5b80f2e38684683a2962f130df61506119e31d9507"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/accessibility-and-inclusive-visualization/references/keyboard-screen-reader-and-export.md",
+      "bytes": 1357,
+      "sha256": "9478f105eccb0ac02efd91eba1361a3ea97e138ad61313e864d3e75c6e7425c5"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/accessibility-and-inclusive-visualization/references/testing-and-review-workflow.md",
+      "bytes": 852,
+      "sha256": "954264a80d58c138946511341cf8975afcb847dd172895d1c22d4c90d1dad5fe"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/accessibility-and-inclusive-visualization/references/text-alternatives-and-complex-images.md",
+      "bytes": 930,
+      "sha256": "5ba2d0490843283cf490ff76a42ec4eb23e56467401628f34ffd07f17a6d5c08"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/accessibility-and-inclusive-visualization/SKILL.md",
+      "bytes": 6510,
+      "sha256": "fc052419e290f113b044b7abd7a5e809b6000b4dec03441e63796b02f474a2c8"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/canvas2d-data-visualization/agents/openai.yaml",
+      "bytes": 169,
+      "sha256": "0561538fe19fa228ba1e2589c9c6fe2072d99b80edb85010cef19bb8671674eb"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/canvas2d-data-visualization/references/high-density-interaction.md",
+      "bytes": 11181,
+      "sha256": "50f4fe03590b2afa701b1c75da43978353698a0716d442af7f0971e67ac7eb67"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/canvas2d-data-visualization/references/performance-playbook.md",
+      "bytes": 6816,
+      "sha256": "13680084e8df42a22b2bd6bbca214da936c8032f9aa39e94a6904248cd1a0dcb"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/canvas2d-data-visualization/references/rendering-architecture.md",
+      "bytes": 7604,
+      "sha256": "69261e5f6b0e9c4e2a2e51c4e9a43be5c9b059f53f7b980e8dda17311d9e1682"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/canvas2d-data-visualization/references/sparklines-and-microcharts.md",
+      "bytes": 5596,
+      "sha256": "acc34a3aec4b4242765ea26ca4b4d9f56eafea558967c22a428b742452c19fcb"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/canvas2d-data-visualization/SKILL.md",
+      "bytes": 9312,
+      "sha256": "3a90bb37ac0ad1392152bc836f937490fa4c14cc16c5fb66dc3500952434b869"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/d3-data-visualization/agents/openai.yaml",
+      "bytes": 163,
+      "sha256": "31e69bcf994568fc8b5a12e2dff7207c22159b806c25b819a63b1b0319d8db3d"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/d3-data-visualization/references/d3-architecture-patterns.md",
+      "bytes": 795,
+      "sha256": "8dea034c1777d04ca6622951126f0796c8cb8dd886a840eccafcf01ee994abe6"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/d3-data-visualization/references/d3-interaction-and-annotation.md",
+      "bytes": 898,
+      "sha256": "9fbd79a3ead366053efdc3e0071895af05ac62b639514f4e119a70ef7cd0cc6e"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/d3-data-visualization/references/d3-module-map.md",
+      "bytes": 881,
+      "sha256": "5ae3764b669695ba2dfff11b0c8fd4f63cf23b759b451632fb8cd85460273a6d"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/d3-data-visualization/references/d3-pitfalls-and-scale-limits.md",
+      "bytes": 933,
+      "sha256": "36c8a61eac374887b487548c51b38bf84e3597e80a72eceb2f92e63e64b259fc"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/d3-data-visualization/references/svg-polish-and-crispness.md",
+      "bytes": 11794,
+      "sha256": "7b64a334c91a180d7be54adeb0eb98ea42fe0afb977dd2feae9a453f97f0f0d3"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/d3-data-visualization/SKILL.md",
+      "bytes": 9349,
+      "sha256": "7e333c70eed27846d5772034afbec21675c6c3e907a634eb560750c62edf3946"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/dashboards-and-real-time-visualization/agents/openai.yaml",
+      "bytes": 188,
+      "sha256": "ca92f4da620948f8e96d3f7649fd759823d1b1b78bbf2b5edbc66bf3613b65e3"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/dashboards-and-real-time-visualization/references/interaction-patterns.md",
+      "bytes": 1408,
+      "sha256": "d966d484666c27b74fbb19b8a478eb0baf767315efa28fb751f52c6150a9a08c"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/dashboards-and-real-time-visualization/references/monitoring-vs-analysis.md",
+      "bytes": 839,
+      "sha256": "bdf8e09d8b5eb420b341b3537a081cdaf4cf7f225358a3dc857bfb7f0d11639e"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/dashboards-and-real-time-visualization/references/performance-and-degradation.md",
+      "bytes": 1242,
+      "sha256": "ef775ed3308f3d13c35a27695f273003aa01ef5b484239d65745dda5b2c04a75"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/dashboards-and-real-time-visualization/references/streaming-data-pipelines.md",
+      "bytes": 1429,
+      "sha256": "1c4aeb89dec12a69ed3749a7a5f86a734e0cd39fa83bceb61f069b1f0000040d"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/dashboards-and-real-time-visualization/SKILL.md",
+      "bytes": 7848,
+      "sha256": "a13d4fb8b466f05746e8c7f63baa041a8ad3246a9b0ffc258bb663b3048c3a37"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/data-visualization/agents/openai.yaml",
+      "bytes": 406,
+      "sha256": "5fe691a29fe39bf138df5de4508e71bc2aeb6e0ac02a243e70e138bfe7847f53"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/data-visualization/references/default-stack-selection.md",
+      "bytes": 8699,
+      "sha256": "d37c3fd80e0dd2ef9d84e4f627ba23b1baa531e4db8bec29a1385ce36acd4179"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/data-visualization/references/prompt-routing-examples.md",
+      "bytes": 7116,
+      "sha256": "76c895f5f27ae82c025a2280afc390d9ce3587b7862ceb4b40407d561c2ead1e"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/data-visualization/references/route-by-problem.md",
+      "bytes": 7771,
+      "sha256": "bc514559d714f7f9e7cd5775c1c30b48413f932d775fe9d54919fd68ed4ba348"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/data-visualization/SKILL.md",
+      "bytes": 11213,
+      "sha256": "0078ccf7d8f448dba767e6d0bd12e903c18df7411a09272289e48b5dd3b4731c"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/gantt-chart-visualization/agents/openai.yaml",
+      "bytes": 188,
+      "sha256": "cc045541456c41ef6269a69f1fdfb4abd4a6eaf1823e63bd3a822463867d2657"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/gantt-chart-visualization/references/gantt-accessibility-export-and-testing.md",
+      "bytes": 6298,
+      "sha256": "7d20ffb122effae36fdee3e9c5ab5aa0c4b92cb240c80598a83af3f2c4caf69d"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/gantt-chart-visualization/references/gantt-api-and-export-format-ingestion.md",
+      "bytes": 11607,
+      "sha256": "b6cfcd1620b7312b90a67a8ca8e6681e7545b58bdbb5d1295d69b45c37e45d78"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/gantt-chart-visualization/references/gantt-chart-design-and-use-cases.md",
+      "bytes": 5223,
+      "sha256": "4d9a1d00f61074898556a15f33cd39bd1f3fd9e326f0e221f937d3a1996446c2"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/gantt-chart-visualization/references/gantt-data-contracts-and-integrations.md",
+      "bytes": 6376,
+      "sha256": "88bee1863d32504dd60fb4646e6cfb121a10627170f6f07375c62d8c20ed53d3"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/gantt-chart-visualization/references/gantt-interaction-patterns.md",
+      "bytes": 4796,
+      "sha256": "4dcad4cdc96c36f474829eed8b85efb04a6c56f1673604cc4bd5c6a5a20dde1c"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/gantt-chart-visualization/references/gantt-performance-and-rendering.md",
+      "bytes": 5897,
+      "sha256": "99536dab2de1cde15e7a65964331aad9c5860738b59f7cafd0567189af42f4ea"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/gantt-chart-visualization/SKILL.md",
+      "bytes": 9525,
+      "sha256": "d207d3a674d0aca0a3cec35b68cf5cf80c968e9c70a08f393d7bf555dc6a97f1"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/geospatial-and-cartographic-visualization/agents/openai.yaml",
+      "bytes": 192,
+      "sha256": "1e7d558eb4a3343d567b7bf649f83c673c35c366442224dabc98eccae6fe1b0c"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/geospatial-and-cartographic-visualization/references/adaptive-basemaps-and-layer-stacks.md",
+      "bytes": 12152,
+      "sha256": "83a6d702439b5cc59f44bce105d4f25b18d0a27bda86d7e6c89ebf1fe036e3f6"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/geospatial-and-cartographic-visualization/references/choropleths-symbols-and-flows.md",
+      "bytes": 1406,
+      "sha256": "cf8aecbb0c482f4f42dd7cb0f73473c76dfdba4700b2b9e69a98d1dab4c2389d"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/geospatial-and-cartographic-visualization/references/deckgl-d3-geo-stack-selection.md",
+      "bytes": 2099,
+      "sha256": "268bf111c6d3dbc77692f9ee4ac1e78dc8f9679a68cf03d4615304f50261dc07"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/geospatial-and-cartographic-visualization/references/map-or-not.md",
+      "bytes": 862,
+      "sha256": "d31badb2147fd9925b23c7f8739fe1ea6d4d466f7e1f2fd3b31360e43c46439f"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/geospatial-and-cartographic-visualization/references/multiscale-symbols-and-zoom-behavior.md",
+      "bytes": 3219,
+      "sha256": "e9d458b014267da33e63b9fffbbadbe4e222ddcc23708ed3253eaf5f289228b5"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/geospatial-and-cartographic-visualization/references/point-overlap-strategies.md",
+      "bytes": 4745,
+      "sha256": "0714ba47302be6f886c8e87553acc7972e67d499e9ce07ae6b7d1bf444023778"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/geospatial-and-cartographic-visualization/references/projections-and-normalization.md",
+      "bytes": 855,
+      "sha256": "12c01442a5be50987c70c1b67f59c74fdfcf4222f1104526827d1109be805a0c"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/geospatial-and-cartographic-visualization/references/slippy-map-and-product-stack-selection.md",
+      "bytes": 3523,
+      "sha256": "8e7c12dc46e82453e6d795fd521efd2cbc06900c1254e4f69280265bd5b57108"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/geospatial-and-cartographic-visualization/references/source-method-and-coordinate-ledger.md",
+      "bytes": 1870,
+      "sha256": "93764fee2239d21357e638a63cc3b064dfa764013ce1fa81ab25c69fe03a90b0"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/geospatial-and-cartographic-visualization/SKILL.md",
+      "bytes": 11331,
+      "sha256": "ee7595430af215ebc65ae8e9396006ae95255478cbb4c196b6bd93cec5d86153"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/grammar-of-graphics-and-declarative-visualization/agents/openai.yaml",
+      "bytes": 202,
+      "sha256": "464e3590b1dc7e977050473e275d783c4ce52b9da436fd08b7b9d1ac9ecb639c"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/grammar-of-graphics-and-declarative-visualization/references/observable-plot.md",
+      "bytes": 959,
+      "sha256": "7f56b5b624fe3c1dacec05039c3d395094b1e341decf05f45e4f413c3fbe6450"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/grammar-of-graphics-and-declarative-visualization/references/vega-lite-and-vega.md",
+      "bytes": 994,
+      "sha256": "f6ad6b02737f81a532e985d12d93e52392ef8ba81bca0a0e476dc66d35f7202e"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/grammar-of-graphics-and-declarative-visualization/references/when-to-stay-declarative.md",
+      "bytes": 1397,
+      "sha256": "2bcf3ec22f114cdcdb0cd7324883270cda607927c73b899cac5c1ee0cde32145"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/grammar-of-graphics-and-declarative-visualization/SKILL.md",
+      "bytes": 3368,
+      "sha256": "5e0feec02c4ae815013c983481c10611af02aa55a59786e86ee53e4c8ffeb1ff"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/node-link-and-diagram-layout/agents/openai.yaml",
+      "bytes": 177,
+      "sha256": "128f6e6783d14dff09338b16dd469daeddefd2d381e76dde822a8df554ed9dc4"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/node-link-and-diagram-layout/references/algorithm-selection.md",
+      "bytes": 3511,
+      "sha256": "8eb511252db415cfebdb47dacfaae0610d0800db10b20efb44d1be36221bff0e"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/node-link-and-diagram-layout/references/layered-tree-force-and-radial-layouts.md",
+      "bytes": 4624,
+      "sha256": "2bd67ffa4cc6ddfb0b8881950b2486c6d958669d07eca9ba28a4494e09db4909"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/node-link-and-diagram-layout/references/routing-overlap-and-quality.md",
+      "bytes": 4647,
+      "sha256": "96691c96dc91a5481c4b9215ab7633c4c81b746135c1cdc60c52e5cffe9b66a9"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/node-link-and-diagram-layout/SKILL.md",
+      "bytes": 11518,
+      "sha256": "4fcfaac03db9f35a30f185f5b491f1d79cad5c3651b15c383e6c2e501bed7e24"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/react-and-nextjs-data-visualization/agents/openai.yaml",
+      "bytes": 203,
+      "sha256": "95f08ba64463f0f660b8e657c3312163a30f79e25f3d386737a2d0b04533c2bf"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/react-and-nextjs-data-visualization/references/d3-canvas-and-grammar-in-react.md",
+      "bytes": 1197,
+      "sha256": "86b5b21e5828af5f080833dfed2e11f13734d1617e98ed443c8070eaaa115617"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/react-and-nextjs-data-visualization/references/lazy-loading-ssr-and-bundle-strategy.md",
+      "bytes": 1120,
+      "sha256": "1716e74df77a50420c158515cc8ff363f7e3b3cd62061bbbddddf50d12dab74c"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/react-and-nextjs-data-visualization/references/nextjs-client-server-boundaries.md",
+      "bytes": 1096,
+      "sha256": "a5b7418937bbe276452fd158c25a1a637807dbb201e799c260f7d26ebe978c83"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/react-and-nextjs-data-visualization/references/react-component-patterns.md",
+      "bytes": 1051,
+      "sha256": "b125bffce1b0c0fef19d57e95d482bcc78ec7b4aa9ea571b19109547e333ec74"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/react-and-nextjs-data-visualization/SKILL.md",
+      "bytes": 12387,
+      "sha256": "9d42a3e58680e4cc3fb8e4587b3db094886cbd4a1179d99d8ffaf79a97139227"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/reports-pdfs-and-slide-automation/agents/openai.yaml",
+      "bytes": 187,
+      "sha256": "267f855fb767679813764f4656fdc27ce535dd6adb96c65fcdd0f68164f6e81f"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/reports-pdfs-and-slide-automation/references/document-embedding-and-regeneration.md",
+      "bytes": 896,
+      "sha256": "75356e3a3169f50fae26f6320196cea39adbd3dafce889cab44f0b92802fff8e"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/reports-pdfs-and-slide-automation/references/pdf-generation-paths.md",
+      "bytes": 806,
+      "sha256": "9559c531f916cb5de46b5770d441e46036e56f0d277be0446f231656264c5796"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/reports-pdfs-and-slide-automation/references/powerpoint-and-google-slides.md",
+      "bytes": 890,
+      "sha256": "be99053b786c231f8fd842aad827d95c3884bc048ae2262a71de96baba71842c"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/reports-pdfs-and-slide-automation/references/report-structure-and-figure-packaging.md",
+      "bytes": 875,
+      "sha256": "dbe8df0b19bc9afa398f0152e94d4357c5e41c44e95f40dd227e02996e4a1d29"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/reports-pdfs-and-slide-automation/SKILL.md",
+      "bytes": 8295,
+      "sha256": "5ff8af2886df8ecec3fbaada93e5cd066237ac083fc533ac293608addef74eac"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/scrollytelling-and-parallax-data-visualization/agents/openai.yaml",
+      "bytes": 207,
+      "sha256": "02d020df66f19193f0fa82e90cdaae42a07582b5803b6002f75903c4b0b0e9d9"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/scrollytelling-and-parallax-data-visualization/references/accessibility-testing-and-review.md",
+      "bytes": 4383,
+      "sha256": "f5f0ee5fefd982afc04033ea69b78f0fb19ad1c74b99c145039d1ddd77ca0f8e"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/scrollytelling-and-parallax-data-visualization/references/implementation-and-performance.md",
+      "bytes": 6479,
+      "sha256": "98144904633a6eaa663bdc061f2ce111f3ac72b2a804e271f78dd524aa2473e3"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/scrollytelling-and-parallax-data-visualization/references/story-patterns-and-scene-contracts.md",
+      "bytes": 7247,
+      "sha256": "0b656f362cb15abd09e9ef4628fb1a1cd34d9678b17d8037193ca69c30f53475"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/scrollytelling-and-parallax-data-visualization/SKILL.md",
+      "bytes": 9714,
+      "sha256": "2b0d62b04f1555e1a28ea1ae87b25793e47220e8a6c1fb6d044531a567745d0e"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/statistical-and-uncertainty-visualization/agents/openai.yaml",
+      "bytes": 207,
+      "sha256": "36f421a3c371dc2fd366c225b3bce5320fce889d587a3ae94a0ac2060290a619"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/statistical-and-uncertainty-visualization/references/distribution-and-summary-choices.md",
+      "bytes": 959,
+      "sha256": "c86b1bf49bea44e7cf7dae5f5dd718afef628c51c5f600d919bd8502efed9f97"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/statistical-and-uncertainty-visualization/references/experimental-and-analytical-pitfalls.md",
+      "bytes": 908,
+      "sha256": "1cc777d41a7f5f14d39a507295fc32514ad9fdc1e4ef1ef82e443a1942b37bd1"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/statistical-and-uncertainty-visualization/references/missingness-and-confidence.md",
+      "bytes": 845,
+      "sha256": "4fd2a8005e2721f1fdda9e716cc641ebd2413df6ecf3804b95f79e37c6d7ef02"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/statistical-and-uncertainty-visualization/references/uncertainty-encodings.md",
+      "bytes": 873,
+      "sha256": "08520849c9bd3f7e727784357ed7fd64c393177596708bddc17d5841ffe1c6b9"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/statistical-and-uncertainty-visualization/SKILL.md",
+      "bytes": 2118,
+      "sha256": "df7790fc9d40638abbeb6c983ee1a1cf136ebc530adacc747048d120817b7c23"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/testing-data-visualizations/agents/openai.yaml",
+      "bytes": 168,
+      "sha256": "ce705d445d035bb86cd632764d6a6a27537547c44480401125b714f0098eed3d"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/testing-data-visualizations/references/avoiding-brittle-over-testing.md",
+      "bytes": 1731,
+      "sha256": "af3e9927834c493aa0b74ab129d64f07c1e85ee609886af548bf36a74edf549b"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/testing-data-visualizations/references/data-mocking-and-fixtures.md",
+      "bytes": 1625,
+      "sha256": "95df6da8087f2acf8c63439ea93bc737556a18179dfd08c21210be91dcd1ab67"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/testing-data-visualizations/references/e2e-dashboard-and-export-strategies.md",
+      "bytes": 2164,
+      "sha256": "19083e201a7345e53e33fe0b881bab0bf85fea66d4bd67d3c9546205462419ce"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/testing-data-visualizations/references/test-level-selection.md",
+      "bytes": 1613,
+      "sha256": "493e1967dedc504b59ba39083b908187df40dac39c8cb5f73e3aa59871211532"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/testing-data-visualizations/references/unit-and-component-tests.md",
+      "bytes": 1826,
+      "sha256": "ffbba16d27f04dc79b10c39fc3b77a6904dd9ad5932203e3a4cae40f0217a8cf"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/testing-data-visualizations/references/visual-regression-and-image-testing.md",
+      "bytes": 2175,
+      "sha256": "eb873b7f1857edb0a1767b1bbd792bc1836669ea0e20762799c5d96e01cb4de8"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/testing-data-visualizations/SKILL.md",
+      "bytes": 13962,
+      "sha256": "be5fd4725bd3fdbb1a75aa9d44dba666b69b6654d8cafd3a21d89c19b8b66d86"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/threejs-data-visualization/agents/openai.yaml",
+      "bytes": 183,
+      "sha256": "13c25d54abb4192a9a0f23c4b2225e5312812d4b0ddb4efa0d450560aef23400"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/threejs-data-visualization/references/cutaway-terrain-and-domain-scenes.md",
+      "bytes": 2905,
+      "sha256": "846fd16ea0ebeb3c3e58792b5c45356eb8d7cdbb1d8d67c5ecf0294b689d330f"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/threejs-data-visualization/references/gpu-scaling-and-interaction.md",
+      "bytes": 4542,
+      "sha256": "886f146d56c1121616d3c1ef6a174fa29fc80068727a311ca9b7dedcd029dfb4"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/threejs-data-visualization/references/particle-effects-and-flow.md",
+      "bytes": 7709,
+      "sha256": "7617bbb503129ab732a6d17a3b73e9fb3c0d8676776dcc55c647a55e100754c5"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/threejs-data-visualization/references/scene-architecture-and-encodings.md",
+      "bytes": 4398,
+      "sha256": "e0328c4d6a660fb830a3221d856d21498146acb3d08f3431105ce0c1b6e2026f"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/threejs-data-visualization/references/scene-readiness-and-interaction-qa.md",
+      "bytes": 2741,
+      "sha256": "ac51123ef1f9ef2878a5652fb90c40df7decddaad51fe887c8fd4c70554424f8"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/threejs-data-visualization/references/webgl-2d-animation-patterns.md",
+      "bytes": 5788,
+      "sha256": "3ae9f9c47d7d82f3a9c2b44c2c6c0852c3906a0604a64c78aebf373f7b2d055f"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/threejs-data-visualization/references/webgl-library-selection.md",
+      "bytes": 7774,
+      "sha256": "6a098dc66e1e9b09eac7d371261d1c796baba28a973ac65872fe6fa912310433"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/threejs-data-visualization/references/when-3d-is-justified.md",
+      "bytes": 4210,
+      "sha256": "2b4f4cd36e863480d53ca424a7a4245cbd43c85e630d321445ef48f48d51d833"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/threejs-data-visualization/SKILL.md",
+      "bytes": 12561,
+      "sha256": "406048727d478742f7073eba7e2a923a65ecdf88e5e346799560066cfd78eb45"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/typescript-data-visualization-engineering/agents/openai.yaml",
+      "bytes": 188,
+      "sha256": "9191c2b35bf99f913dcbf53faba722224f14746eb295416c17ec44b0a52f3054"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/typescript-data-visualization-engineering/references/export-and-product-integration.md",
+      "bytes": 881,
+      "sha256": "1ad6d7a11886cb0e5cb87e54939d7f721b00f45b153689954ea94eeab9bb01ac"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/typescript-data-visualization-engineering/references/library-selection-for-builders.md",
+      "bytes": 2882,
+      "sha256": "0af43e69f7be76f5716e5c21929aa9446b31a6ddf64611c0b034d10fb791554f"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/typescript-data-visualization-engineering/references/react-and-framework-boundaries.md",
+      "bytes": 767,
+      "sha256": "ac38bdcfb8eab4cd3f7c8a130e097611d1bb12ccd42a3835f9afcc86fd2eefdc"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/typescript-data-visualization-engineering/references/types-and-data-contracts.md",
+      "bytes": 775,
+      "sha256": "d8ed0018d7cf8b00f3a435ea3c73a105028641485cf857c70490d132b5133a9a"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/typescript-data-visualization-engineering/SKILL.md",
+      "bytes": 10391,
+      "sha256": "3a080b13543b99749926504659f8095c3f6f644e88b2a55ca902ae21d1845fa1"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/uml-and-software-architecture-visualization/agents/openai.yaml",
+      "bytes": 204,
+      "sha256": "9e477f2daebe7c68718d6a4b8e9e40190180643882f190eb72001cba9594d3e0"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/uml-and-software-architecture-visualization/references/formats-and-interchange.md",
+      "bytes": 5083,
+      "sha256": "1756fccc2877225cfde2764d6920484a19477626d52e68fa5fd113715e10f5cb"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/uml-and-software-architecture-visualization/references/interactive-diagram-patterns.md",
+      "bytes": 6937,
+      "sha256": "b04bedea7b5e843e7716c13cef441766e22e3212db3cbf3fe3366292a9eeec71"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/uml-and-software-architecture-visualization/references/quality-accessibility-export-testing.md",
+      "bytes": 5277,
+      "sha256": "cb8eee465f5dcb3a231b4ccaf57cf090203239efff1d752d41eddccedaf9d72a"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/uml-and-software-architecture-visualization/references/typescript-web-rendering.md",
+      "bytes": 6649,
+      "sha256": "71a33bdf10ddeeaec701a745aebe900a498c7084a9233ee620141c22d39de664"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/uml-and-software-architecture-visualization/references/uml-diagram-types-and-selection.md",
+      "bytes": 5722,
+      "sha256": "56095d845057ed157b8ce6437a03500f7d0b72fe6f139faf09aec495bd38fc54"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/uml-and-software-architecture-visualization/SKILL.md",
+      "bytes": 12441,
+      "sha256": "3c5f2101ab938525fd8c44729f3165cdb8bf6dbb6f9e73f84735b52c5aad5d26"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/visualization-strategy-and-critique/agents/openai.yaml",
+      "bytes": 195,
+      "sha256": "d9dc6b4ed57a8bb3948200581bc7c30649cb331ee277316f581d74cf6e58fdce"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/visualization-strategy-and-critique/references/chart-selection-patterns.md",
+      "bytes": 2841,
+      "sha256": "edeb6d4c29d34ce016ab50cba723bad1f58d3dc65f051969e426db6caf9f653b"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/visualization-strategy-and-critique/references/critique-lenses.md",
+      "bytes": 935,
+      "sha256": "d67c6aa791883fc998a8dcf1ecd087dfd5d74a5ab09246998d3fc6c694cfa025"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/visualization-strategy-and-critique/references/decision-framing.md",
+      "bytes": 894,
+      "sha256": "e74eb51ba417a84c5354343242159e9bd668aec2c7cf58feaba84500cc8cf380"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/visualization-strategy-and-critique/references/tufte-munzner-cairo-synthesis.md",
+      "bytes": 1068,
+      "sha256": "ac20cb8916eeb4b312e91bd95d9ded351be3d94cb2592f43d4430f267dae513c"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/skills/visualization-strategy-and-critique/SKILL.md",
+      "bytes": 20671,
+      "sha256": "3bcd91d14f9968346cf2ae91781e48784fb36d8fc95a6f5891d10cdc6ef67a1f"
+    },
+    {
+      "path": "plugins/build-web-data-visualization/THIRD-PARTY-NOTICE.md",
+      "bytes": 177,
+      "sha256": "82218ce9f44a0e959455a1ae2d7f6c7c2c4110bab43d736929ae1501389276d3"
+    },
+    {
+      "path": "plugins/desktop/.codex-plugin/plugin.json",
+      "bytes": 657,
+      "sha256": "42c978475d2c23c07f00fde27b4607ed7782916b53e25f2fe925bf4d9f1c2073"
+    },
+    {
+      "path": "plugins/desktop/plugin.json",
+      "bytes": 306,
+      "sha256": "4e5c2e508c1d8b2e357a17c8af815abb4a6b2f1c1cec241fb08d402720df1b8a"
+    },
+    {
+      "path": "plugins/desktop/plugin.mjs",
+      "bytes": 10036,
+      "sha256": "ec5c66b5e0113340d6b83ee9e39dbd0301c83f3264f9313e2e0bc93285a3ac08"
+    },
+    {
+      "path": "plugins/desktop/skills/desktop-guide.md",
+      "bytes": 846,
+      "sha256": "a096e4736ad581ff228857f108a54611609b92d9557458910c612e27464109ed"
+    },
+    {
+      "path": "plugins/ffmpeg/.codex-plugin/plugin.json",
+      "bytes": 776,
+      "sha256": "f7e9fc3f63fd65f30ec0f869980692b386805cf4d09f8d67255e45ef0bef492d"
+    },
+    {
+      "path": "plugins/ffmpeg/plugin.json",
+      "bytes": 252,
+      "sha256": "f27f3620566cd0025a6adbaa31349e86ecbff4222c687bb2a60bb8f3edc0dc11"
+    },
+    {
+      "path": "plugins/ffmpeg/plugin.mjs",
+      "bytes": 7262,
+      "sha256": "1abf20f9576744c51c7a40cb7e436c91115eeb2b9ee81166eb61232bdccf4904"
+    },
+    {
+      "path": "plugins/ffmpeg/skills/ffmpeg-guide.md",
+      "bytes": 449,
+      "sha256": "df265ef8d5737085c7a77029e537c621f75f77f41b576e04a97643b26f5394b4"
+    },
+    {
+      "path": "plugins/github/.app.json",
+      "bytes": 241,
+      "sha256": "6f06c37aace9adb2e3bde213753ce13599f5f7d96ed271f6879dee7c3cb4fc28"
+    },
+    {
+      "path": "plugins/github/.codex-plugin/plugin.json",
+      "bytes": 1758,
+      "sha256": "2dbcd1bc26f4a330b2a64e62780159031bacf58460610677be32d6910223c9c9"
+    },
+    {
+      "path": "plugins/github/.mcp.json",
+      "bytes": 179,
+      "sha256": "0d17e27da4d35564797ca2983597277764cd85ee3c9522f96168c7ab2fdf40c4"
+    },
+    {
+      "path": "plugins/github/assets/github-dark.png",
+      "bytes": 27648,
+      "sha256": "9352c02c11e4b5c63e8990f6d8b973f551d25284186d3faeb8d7d0186d89c919"
+    },
+    {
+      "path": "plugins/github/assets/github-small.svg",
+      "bytes": 856,
+      "sha256": "71ff625ee0ef38ccfab47e97832323a06b4b093db55fd658a884859cb86b9183"
+    },
+    {
+      "path": "plugins/github/assets/github.png",
+      "bytes": 9380,
+      "sha256": "07e4d8c81c906dc6fffa42f2686f446724c86c2079b23aa6c77ab9dab782fdea"
+    },
+    {
+      "path": "plugins/github/THIRD-PARTY-NOTICE.md",
+      "bytes": 189,
+      "sha256": "3601bda8f00627228a1960e3c562901ab458935890dd068219a4af358fe31f3c"
+    },
+    {
+      "path": "plugins/google-drive/.app.json",
+      "bytes": 112,
+      "sha256": "99650e61d2a8ec4bf66b965e8241075b994ddb9d6372af76a96316747a73a63c"
+    },
+    {
+      "path": "plugins/google-drive/.codex-plugin/plugin.json",
+      "bytes": 1585,
+      "sha256": "df9a3e97465c6a87f53589d8832090c887191e794ea155a1bd57a264221a8c68"
+    },
+    {
+      "path": "plugins/google-drive/.mcp.json",
+      "bytes": 505,
+      "sha256": "b6121a305f93ddbab1fe45dc301c4b5f1583f41669602c79fd181b3352bb86fd"
+    },
+    {
+      "path": "plugins/google-drive/assets/google-drive.svg",
+      "bytes": 1461,
+      "sha256": "340a898059ac66d63c43764caeff579bf8e3bd1a7f14d3625b7093db622491f2"
+    },
+    {
+      "path": "plugins/google-drive/assets/logo.png",
+      "bytes": 56020,
+      "sha256": "585b2c8a695f8167559e9177e6aa9a73b0347a238e21b82df0f669b819670c6c"
+    },
+    {
+      "path": "plugins/google-drive/OWNERS",
+      "bytes": 42,
+      "sha256": "2204839e2e56a8ddfa6e6044e6e11311c865c149f0e85b3d093c402a8e4e161d"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/agents/openai.yaml",
+      "bytes": 422,
+      "sha256": "e13277bebbba05ce8ada2c0c787633a685e031c2cd9f77ada95a3beb3fccbd0a"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/assets/google-docs-small.svg",
+      "bytes": 2160,
+      "sha256": "2623b4188d12f7e2c2dbcf8f8ac5c342760f62cf64e08915fcc8ea74ca02c574"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/assets/google-docs.png",
+      "bytes": 65371,
+      "sha256": "b416735b10fb7bc27fe80f72007ef957486d7c29ae603083e137ca689d6920d5"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/host/docs-dropdown-executor.mjs",
+      "bytes": 34081,
+      "sha256": "5e15f3ef610cd8df7aed23222dbca0fcc87057eb2b5498118add135d7e6d39a0"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/host/docs-dropdown-file-bridge.mjs",
+      "bytes": 9605,
+      "sha256": "00007d25e3e5f6492f1e3e43376d5b0dd92b3e7b9b56b932e5787d164836f6fb"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/host/docs-stdin-receiver.pl",
+      "bytes": 3181,
+      "sha256": "43762d397d5bf1f528ad30f04511b19a7c3029b71da6fbd36c10cc3b8c633eca"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/host/docs-trusted-read-file-bridge.mjs",
+      "bytes": 23488,
+      "sha256": "7030af93189bd081d91f577bfcb32b63752f785139921ecb07294c96152d24a8"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/host/docs-trusted-read-wrapper.mjs",
+      "bytes": 16858,
+      "sha256": "a21d61571df1dbc1ff961c924dffa44e129982f7bbb0ef684ca535ed67de571c"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/references/reference-citations-and-hyperlinks.md",
+      "bytes": 4887,
+      "sha256": "cde52922fbb06c358eccd73c25990c017a79f7a92bebb718cc426087c67fb2f9"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/references/reference-connector-runtime-and-safety.md",
+      "bytes": 9089,
+      "sha256": "8019b3b1f70e2b70630f893aecf7a3b7c1fe709056aa1087763b48cf2fda1947"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/references/reference-direct-request-composition.md",
+      "bytes": 9578,
+      "sha256": "7ea6332d6e7c2b0f2fdb8b967dda18c8a24fb95678eb0088ea6701b733bb41a7"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/references/reference-dropdown-code-mode.md",
+      "bytes": 16349,
+      "sha256": "6029f2a630c8173b21bbb5fd3623c91205bdeda7083e66b36a51162945b8a9d5"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/references/reference-figures-and-image-insertion.md",
+      "bytes": 3486,
+      "sha256": "98fec644ba4a1fb8b6e51078ee9a340e271fd7422e9c362475acc0727812d6ec"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/references/reference-foreground-guard.md",
+      "bytes": 2588,
+      "sha256": "56d4c0aa6286fa57e8193b34dc0986d18bb5375d1d445a0d7812f46f3fd4fb8a"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/references/reference-headings-and-question-format.md",
+      "bytes": 5535,
+      "sha256": "dde9fabf93485e8f93923d8855004d590c785b97f5c37bcf365dc8ec6419b8ee"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/references/reference-import-docx-to-native-docs.md",
+      "bytes": 6742,
+      "sha256": "30e7606e9b4dc9174a24b42797a24ffd9add8c6a47515431eee6a275629bf692"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/references/reference-meeting-notes-direct.md",
+      "bytes": 9495,
+      "sha256": "abc84d985d92b213cd362e0cbbbfe44c9a8df6eed35c4a0e1fff97cdf9228225"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/references/reference-native-create-direct.md",
+      "bytes": 4900,
+      "sha256": "3a475dfe44421f45a4084bf31abf4e30c44a9d04ef9fa5510a6a66949c1ad61c"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/references/reference-pdf-export-visual-qa.md",
+      "bytes": 4166,
+      "sha256": "b4f692a54718cb8cc255d42e70c509f90edd8d2dc11b1f86986d944635115954"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/references/reference-request-shapes-and-write-safety.md",
+      "bytes": 14981,
+      "sha256": "0366ff85d40bfb6ddf5461c65724e9a15bd02cd3f54ad44cf9b979b53a5bcd8f"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/references/reference-response-and-list-format.md",
+      "bytes": 2688,
+      "sha256": "5cb42dc22a07c4bfae8ebf30ae46f51d650c9ef9df1bc7e92e7aa2d9731d61f4"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/references/reference-section-completeness-and-final-pass.md",
+      "bytes": 9337,
+      "sha256": "27781d675dde39722a2bf69454d8d9204739a694a15a30bbe62b765c48dd78a7"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/references/reference-smart-chips-and-building-blocks.md",
+      "bytes": 11008,
+      "sha256": "5148d3438cf06fd0b138ba6942bc3f334dd4836bd8bfc37dac242ee026e16f04"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/references/reference-table-formatting-deep-dive.md",
+      "bytes": 15317,
+      "sha256": "bfb3a13b024d0357e41f6545f33532bd638a371aeb216a4789279cc4798dd8ed"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/references/reference-template-preservation-and-edit-scope.md",
+      "bytes": 15384,
+      "sha256": "0590c24c6cceeb1bfa7a4b0c8d5ce7200ea366f7df113b8a1daad6eb7a11d538"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/references/reference-trusted-read-wrapper.md",
+      "bytes": 7474,
+      "sha256": "ad56f7afa0603753e51d1670a2051d8ba90e5cc3bb6a0776bbe95138241f8911"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/runtime/docs-read-normalizer.mjs",
+      "bytes": 11026,
+      "sha256": "b9a1283f1903e19ff054192d916bd17e4e3cebfeab6aa3ece67d212e224219e0"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/runtime/dropdown-common.mjs",
+      "bytes": 3435,
+      "sha256": "828f93571577e47c36cefe3702e19f0c9b38d9d3c69516c07b02c3588a8e8b9f"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/runtime/dropdown-contract.mjs",
+      "bytes": 4086,
+      "sha256": "a9a1f4088c2a80f4675852641170b5364654246ae3a0adba88c42375322c15cf"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/runtime/dropdown-inventory.mjs",
+      "bytes": 10798,
+      "sha256": "a18552439f08caacccf7a46cf5cdd34aa40f2b2ce8a85c1458110191833247c5"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/runtime/dropdown-plan.mjs",
+      "bytes": 14904,
+      "sha256": "ae2143c333712b02bb0c99fcf455533a9dd48dbd8a48934e170039e400cc7507"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/runtime/dropdown-routing.mjs",
+      "bytes": 2116,
+      "sha256": "6da87bf695be9c8c2dac4711c5bda2bc18ddf00a22f47631d518d9ac5852823d"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/scripts/build_docs_dropdown_inventory.mjs",
+      "bytes": 825,
+      "sha256": "6c5108cf4a394eaf127737ba5857aae84fcf432b3ebe0a019a668f775a81c387"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/scripts/canonicalize_google_workspace_url.mjs",
+      "bytes": 3155,
+      "sha256": "edc464342e4a799d76b5230fc36aaa37c90e5e4d3ed9b8a342e1f573132fce39"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/scripts/create_docs_dropdown_execution_context.mjs",
+      "bytes": 759,
+      "sha256": "1504109d95aac6c178bfdb0a39894593c3e583be873ea919053c44598547225c"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/scripts/freeze_docs_dropdown_contract.mjs",
+      "bytes": 667,
+      "sha256": "583c46e38d479b68e59a287877d71abc6b9805e9946411acfe89540919693649"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/scripts/validate_docs_dropdown_plan.mjs",
+      "bytes": 1186,
+      "sha256": "0c69384a9498a0249452fe5a8cc3dbdc544a232fc09055779ffb7fc4c561a433"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-docs/SKILL.md",
+      "bytes": 28387,
+      "sha256": "967d7c44cc08056097e7125a86907061cdfd258cf124562ece2f880dfa2ac542"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-drive-comments/agents/openai.yaml",
+      "bytes": 279,
+      "sha256": "a741b5df73e062e9b2781b165beae89f9a47402a686efeb29d223e3f7b5d1cb0"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-drive-comments/SKILL.md",
+      "bytes": 4361,
+      "sha256": "ca15dbcec6d56cb6ad73b32126ad8469af657960a599e36a435835bb383bbdaf"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-drive/agents/openai.yaml",
+      "bytes": 535,
+      "sha256": "15aa350736efdef0d22bebcd1204b3a84b6b759d1146b53777b6f0283e837964"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-drive/assets/app-icon.png",
+      "bytes": 58200,
+      "sha256": "a0da54a5f966e876668ab59d8df987ddad1328846216578356e6c10b07791f6c"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-drive/assets/google-drive-small.svg",
+      "bytes": 1461,
+      "sha256": "340a898059ac66d63c43764caeff579bf8e3bd1a7f14d3625b7093db622491f2"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-drive/assets/google-drive.png",
+      "bytes": 58200,
+      "sha256": "a0da54a5f966e876668ab59d8df987ddad1328846216578356e6c10b07791f6c"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-drive/assets/google-drive.svg",
+      "bytes": 1461,
+      "sha256": "340a898059ac66d63c43764caeff579bf8e3bd1a7f14d3625b7093db622491f2"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-drive/references/slides/chart-refresh-workflows.md",
+      "bytes": 5373,
+      "sha256": "71205e432330e9ba660c4efe6b51e36969ad10ee35741c4d7235e190bc437155"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-drive/references/slides/deck-scope-verification.md",
+      "bytes": 1742,
+      "sha256": "b56f05de886c5c1b311acddca8d38818e4405c156312328147bca40170f52b15"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-drive/references/slides/sheets-chart-replacement.md",
+      "bytes": 3609,
+      "sha256": "3fbb1f2f9c0a83bcab3b637ec87bba06e2f3df4696e46ec449660f266ecca5ac"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-drive/references/slides/visual-change-loop.md",
+      "bytes": 6177,
+      "sha256": "62a21ed4e629d462e606a564ee9fce2e17c34614604ca3c04f1f9574122a2569"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-drive/SKILL.md",
+      "bytes": 8441,
+      "sha256": "b10e70c54dda846125140a4037f44f059a03203c089ee321691aed42ebbab1f2"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-sheets/agents/openai.yaml",
+      "bytes": 373,
+      "sha256": "c033353727d6cdc6b44630b23ae670e1d489a604dd2af6c36ae042eb7fc961e7"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-sheets/assets/google-sheets-small.svg",
+      "bytes": 1592,
+      "sha256": "d35c488daabf0254ec62422f234ddb197ecf6d8f390511c0f6f25e1c65643a3f"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-sheets/assets/google-sheets.png",
+      "bytes": 74354,
+      "sha256": "e3775513bef981e135ed001ee82be2381e04c6361093628628360b565635e4fe"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-sheets/references/reference-batch-update-recipes.md",
+      "bytes": 17971,
+      "sha256": "9c46eceac2c87e3605658e0e08b361b84c99526cdd700947a17e6ce516283859"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-sheets/references/reference-chart-recipes.md",
+      "bytes": 13484,
+      "sha256": "68d4aa485c974ae7743b98e417b03f7b3e82e74292c4d4fbb845480b3049a4cc"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-sheets/references/reference-edit-workflow.md",
+      "bytes": 2738,
+      "sha256": "ee9759d530ea1b3358ca55c324abc69e3e43157f1a4b72b0430e47ae6a20a2a1"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-sheets/references/reference-formula-patterns.md",
+      "bytes": 5058,
+      "sha256": "9aebf3a57ee1b7c3fd2528191fa0403d3ef17d94fd6edb9ca66093288dde6de9"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-sheets/references/reference-import-spreadsheet-to-native-sheets.md",
+      "bytes": 4538,
+      "sha256": "1d848558c32d6bf4c32e98ec1aa86b09cce92c478e21246c29d8d76e483a6bdd"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-sheets/references/reference-live-read-search-safety.md",
+      "bytes": 2399,
+      "sha256": "fd963aaee17f403e646e565947c4610d1e053f1b87526739d619ccb00101864e"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-sheets/references/reference-native-cell-structure.md",
+      "bytes": 4814,
+      "sha256": "113ef90176dfbc58dff468cf7366ac629f14dace7e5648b3b8ac4de3142ac257"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-sheets/references/reference-visual-quality.md",
+      "bytes": 1820,
+      "sha256": "10440fd4994a0fe0e57d09a8b7cf779723214741650a9aaff10a1f4dab5b7e22"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-sheets/references/style-profiles.md",
+      "bytes": 1457,
+      "sha256": "77d1590f0af65c993480e75856c6947b0e2883880b3c36c47414331345dc2480"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-sheets/SKILL.md",
+      "bytes": 9197,
+      "sha256": "a7ad9382dfe64bd6244523ddf144321eeabe6bb4709fb8b5109f6f873e8714b6"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-slides/agents/openai.yaml",
+      "bytes": 424,
+      "sha256": "14084d373cbfcdefba2e5f156d37b12087e77218ffea28596294ac1b7cd0a725"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-slides/assets/google-slides-small.svg",
+      "bytes": 2814,
+      "sha256": "5bfcc038e2379522fef3135ab0dc936948c1be7a1d470f42645c0504731b4a18"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-slides/assets/google-slides.png",
+      "bytes": 81642,
+      "sha256": "b9e27de164f75478c181d2f2804b259f96bcd2d28b8af4328f94ab20dd0cd71d"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-slides/host/export-and-render-slides.mjs",
+      "bytes": 24593,
+      "sha256": "644e6f7589084a900b712f230cb34185cb99591ef82526f137aded86f6fc42e0"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-slides/host/export-and-render-slides.test.mjs",
+      "bytes": 16192,
+      "sha256": "10f7c4554661cb6ce2236acefc2b0fc9d7862027f4a4106e3e0927ea5205b2bc"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-slides/host/read-template-to-file.mjs",
+      "bytes": 8830,
+      "sha256": "9c3c0b7c2142a1ae0f330e3b4f3240f009bc5d18ed8d8e6a01d009ce89116e8a"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-slides/host/slides-stdin-receiver.pl",
+      "bytes": 3204,
+      "sha256": "4fc11030397a5e7a3b4b9ca63a66b3fbea4e88355b5645bdf7da4f945eca642e"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-slides/runtime/common.mjs",
+      "bytes": 5964,
+      "sha256": "dbfd90ec96c3f6119349bc5dceab7661d527f1fd40628d66aa3b8790b616a1c0"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-slides/runtime/design-system.mjs",
+      "bytes": 23371,
+      "sha256": "1946ab839ae456ea055379e960957ab2d459bf75f292ea47f80a306e6fefd4cb"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-slides/runtime/media-geometry.mjs",
+      "bytes": 10302,
+      "sha256": "8d10e5d038d730cd68536914e504a1aa05941bf96428ccea010a8605b7eadb36"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-slides/runtime/normalize.mjs",
+      "bytes": 15069,
+      "sha256": "4c1cb80161daae0833b53e4d563c4db706b3dff3b6ad2322389cd0d8308ca8da"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-slides/runtime/output-issues.mjs",
+      "bytes": 12812,
+      "sha256": "08ac09df810b6255591b155d34f4f9b4a128f9efac8cbc6aaca3c8c85660d278"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-slides/runtime/result.mjs",
+      "bytes": 2197,
+      "sha256": "cd3bfb71e6e364de6c4cbf8658822537b029ea8721ebaf778b7bdb5b8a42f537"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-slides/scripts/check_output_issues.mjs",
+      "bytes": 2317,
+      "sha256": "22c93e9113987e4ddb954172dc939279199476776cd8e427ea271944ba1781a4"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-slides/scripts/parse_template_design_system.mjs",
+      "bytes": 2649,
+      "sha256": "f719a7f9bcbf03bf2435574946bfca4063581c0a6d80fdb86a1b76977d51af08"
+    },
+    {
+      "path": "plugins/google-drive/skills/google-slides/SKILL.md",
+      "bytes": 15547,
+      "sha256": "2ca649eaf542c8c87a2f8e791c49435138c341513775460b2cf9c6e8231d9f59"
+    },
+    {
+      "path": "plugins/google-drive/THIRD-PARTY-NOTICE.md",
+      "bytes": 201,
+      "sha256": "503c7eedf6373954f93f5d6440e2e9c935e13f25771a728ec68ee5eff27ebfd2"
+    },
+    {
+      "path": "plugins/linear/.app.json",
+      "bytes": 103,
+      "sha256": "f1dc7c212ff577c648f05928f2b973d2579e01371ea401db5170b44021cf492b"
+    },
+    {
+      "path": "plugins/linear/.codex-plugin/plugin.json",
+      "bytes": 1367,
+      "sha256": "0465e60bcd48ba5daf0e1be8249e79ce6afab569deb1e05452fa415cbef79d52"
+    },
+    {
+      "path": "plugins/linear/.mcp.json",
+      "bytes": 175,
+      "sha256": "f4d8d0a8c5ce8e2e0ff192788899739834738dfca77f06532a3e7c94e060517b"
+    },
+    {
+      "path": "plugins/linear/assets/composer-icon.svg",
+      "bytes": 7590,
+      "sha256": "69c952d70cd35d072ce73edddbe291d5f893db83a7a2076d49d69bc516a62da5"
+    },
+    {
+      "path": "plugins/linear/assets/linear-icon.svg",
+      "bytes": 7590,
+      "sha256": "69c952d70cd35d072ce73edddbe291d5f893db83a7a2076d49d69bc516a62da5"
+    },
+    {
+      "path": "plugins/linear/assets/logo.png",
+      "bytes": 19496,
+      "sha256": "c5114902ad243dbb36ebd4e250f318871bfafd152d346b7ffea027124133b879"
+    },
+    {
+      "path": "plugins/linear/assets/logo.svg",
+      "bytes": 7590,
+      "sha256": "69c952d70cd35d072ce73edddbe291d5f893db83a7a2076d49d69bc516a62da5"
+    },
+    {
+      "path": "plugins/linear/README.md",
+      "bytes": 1700,
+      "sha256": "f711ed1d0d553f82ecbbd0709ba96299a04b0f1ae97ad917a3282ceab7b85580"
+    },
+    {
+      "path": "plugins/linear/THIRD-PARTY-NOTICE.md",
+      "bytes": 189,
+      "sha256": "ebd11765ea4fcc307fbe51a709eccb6c122d05a8b6ca328f5f3597be0b1a4d24"
+    },
+    {
+      "path": "plugins/notion/.app.json",
+      "bytes": 103,
+      "sha256": "665ebaf4bd4c2f173a920f06ee30bbd5cc323b1f5f8dc34c347404134f703b2d"
+    },
+    {
+      "path": "plugins/notion/.codex-plugin/plugin.json",
+      "bytes": 1826,
+      "sha256": "43f8882672a8ba0d0bc98337309f9c4a472e14347d21725fd564165c1f87efb1"
+    },
+    {
+      "path": "plugins/notion/.mcp.json",
+      "bytes": 171,
+      "sha256": "9b492802d99ebedbe3d8411838b562b3954acc3a905ea98ef07cd8a9f9fbdf84"
+    },
+    {
+      "path": "plugins/notion/agents/openai.yaml",
+      "bytes": 367,
+      "sha256": "1bf26bd6d606f84102f6934fe6ebf98448be013e9a350b2487bbc413d371cbe2"
+    },
+    {
+      "path": "plugins/notion/assets/notion-dark.png",
+      "bytes": 4651,
+      "sha256": "014ab1e20210938aea95d5b118eba970d7f4955068c9acc47223eb51ed79f74c"
+    },
+    {
+      "path": "plugins/notion/assets/notion-small.svg",
+      "bytes": 1604,
+      "sha256": "724a69c77f638ad4dac8f073af5e3671ff465b06da60e5c042c61bbf5df840a7"
+    },
+    {
+      "path": "plugins/notion/assets/notion.png",
+      "bytes": 3581,
+      "sha256": "e20b9668553aeb46b55a366d0a8eddd9051b5ac55207ab067ed347029a53434e"
+    },
+    {
+      "path": "plugins/notion/plugin.lock.json",
+      "bytes": 1727,
+      "sha256": "747a6a49853ea8c5d730f2856cffdb2b7d90eceae076a62bef822cbfd364138c"
+    },
+    {
+      "path": "plugins/notion/README.md",
+      "bytes": 1491,
+      "sha256": "0b12972992eb0e6fcbb319f8ca79fdd8385fca5a5881227e8a5c9731aa0c8d34"
+    },
+    {
+      "path": "plugins/notion/skills/notion-knowledge-capture/agents/openai.yaml",
+      "bytes": 333,
+      "sha256": "64af696295e9f5e80c237079198d6c7d026a2f78fa9098b8a81444bd0433b06f"
+    },
+    {
+      "path": "plugins/notion/skills/notion-knowledge-capture/assets/notion-small.svg",
+      "bytes": 1564,
+      "sha256": "05e71ce9e88cc40f0b7c8418f7ccf8d3e6d351c2b8d78a74c9a0642ba2969ab9"
+    },
+    {
+      "path": "plugins/notion/skills/notion-knowledge-capture/assets/notion.png",
+      "bytes": 8526,
+      "sha256": "5eef1e62d96a3d09bc9d18e4140486c22799145b017033bd0924c2c49d741cd4"
+    },
+    {
+      "path": "plugins/notion/skills/notion-knowledge-capture/evaluations/conversation-to-wiki.json",
+      "bytes": 2057,
+      "sha256": "51440efeb14208d73c92483474a08cf76089fe3dff108108dfe36951bdb94d5c"
+    },
+    {
+      "path": "plugins/notion/skills/notion-knowledge-capture/evaluations/decision-record.json",
+      "bytes": 2221,
+      "sha256": "a8ca5eb08d99ccb5702041c4c5aa0cd73bacf1d5a6409310158e20462665f3b8"
+    },
+    {
+      "path": "plugins/notion/skills/notion-knowledge-capture/evaluations/README.md",
+      "bytes": 3584,
+      "sha256": "d5d0e832ee0f5b16a9858a05ad7f6d2a5ce7b51913edb2c94cd45711f8644cd6"
+    },
+    {
+      "path": "plugins/notion/skills/notion-knowledge-capture/examples/conversation-to-faq.md",
+      "bytes": 16508,
+      "sha256": "4ac612a6f60fa92ace29a9dd7fce0a20c945d356183fba50d5b948072258a730"
+    },
+    {
+      "path": "plugins/notion/skills/notion-knowledge-capture/examples/decision-capture.md",
+      "bytes": 3757,
+      "sha256": "7ea8a53b5c60173901831771f738512b4cf851f246ab46542f824b26a79a5a45"
+    },
+    {
+      "path": "plugins/notion/skills/notion-knowledge-capture/examples/how-to-guide.md",
+      "bytes": 3337,
+      "sha256": "c66c6b575d0f9bd20dbc545eee3124b9d08a68a43bf9dfd382f587ff73ffd8f9"
+    },
+    {
+      "path": "plugins/notion/skills/notion-knowledge-capture/LICENSE.txt",
+      "bytes": 1064,
+      "sha256": "bfb72d6e9280fef2aed5228cb6da0286444a5fb837e1c919d407e8e698b2df91"
+    },
+    {
+      "path": "plugins/notion/skills/notion-knowledge-capture/reference/database-best-practices.md",
+      "bytes": 2499,
+      "sha256": "00376299e49e0e5aadae7d8e13ec7f156928f6f10c44c7971e33a02b1188ecfb"
+    },
+    {
+      "path": "plugins/notion/skills/notion-knowledge-capture/reference/decision-log-database.md",
+      "bytes": 2089,
+      "sha256": "51f205f1c302a6097cb66c994d3508ec6ca50d99830c7f01b60acbc71f61d5eb"
+    },
+    {
+      "path": "plugins/notion/skills/notion-knowledge-capture/reference/documentation-database.md",
+      "bytes": 2405,
+      "sha256": "b28a081481a75f82e5aca4baa24dad98ad194169e93eb0c7e7b4dc43fc3b88d0"
+    },
+    {
+      "path": "plugins/notion/skills/notion-knowledge-capture/reference/faq-database.md",
+      "bytes": 2092,
+      "sha256": "dc47225f3b9d5754377c1437381dd9a942db8a2038ec3fd551afbe7dfb17bf08"
+    },
+    {
+      "path": "plugins/notion/skills/notion-knowledge-capture/reference/how-to-guide-database.md",
+      "bytes": 1273,
+      "sha256": "f404609e06e54c38020db37bbbe0f219190973124bee1884116261de9a03081e"
+    },
+    {
+      "path": "plugins/notion/skills/notion-knowledge-capture/reference/learning-database.md",
+      "bytes": 1355,
+      "sha256": "020b2371950a92c5321552592331d6117e65679fea36498f2f8039f9d10ae838"
+    },
+    {
+      "path": "plugins/notion/skills/notion-knowledge-capture/reference/team-wiki-database.md",
+      "bytes": 952,
+      "sha256": "f3ab0b5aa734862650adda9a78acbe89338e822640ba7a8ffb681490b2c04d4d"
+    },
+    {
+      "path": "plugins/notion/skills/notion-knowledge-capture/SKILL.md",
+      "bytes": 4558,
+      "sha256": "b1fe0f233c5ed71e78a21bd32a2bb673bb17883f6275e21beacc35b715af7737"
+    },
+    {
+      "path": "plugins/notion/skills/notion-meeting-intelligence/agents/openai.yaml",
+      "bytes": 333,
+      "sha256": "9eade355066c8afc363b335ec34fe6bc9150e0d1f874dd538d3b753286c599ba"
+    },
+    {
+      "path": "plugins/notion/skills/notion-meeting-intelligence/assets/notion-small.svg",
+      "bytes": 1564,
+      "sha256": "05e71ce9e88cc40f0b7c8418f7ccf8d3e6d351c2b8d78a74c9a0642ba2969ab9"
+    },
+    {
+      "path": "plugins/notion/skills/notion-meeting-intelligence/assets/notion.png",
+      "bytes": 8526,
+      "sha256": "5eef1e62d96a3d09bc9d18e4140486c22799145b017033bd0924c2c49d741cd4"
+    },
+    {
+      "path": "plugins/notion/skills/notion-meeting-intelligence/evaluations/decision-meeting-prep.json",
+      "bytes": 3488,
+      "sha256": "5eedffa48a6b028382fb89f02610c8aeb5f30ba2cd1befa9e7aa044c8df5a20c"
+    },
+    {
+      "path": "plugins/notion/skills/notion-meeting-intelligence/evaluations/README.md",
+      "bytes": 4153,
+      "sha256": "bc5bf634fb86230912191e50fb7b835f7737872a564e152386b1ef122d1aa25d"
+    },
+    {
+      "path": "plugins/notion/skills/notion-meeting-intelligence/evaluations/status-meeting-prep.json",
+      "bytes": 3338,
+      "sha256": "966f5dd284aef25367b88b6d04fc556901586309bcea318d7bb444742211134b"
+    },
+    {
+      "path": "plugins/notion/skills/notion-meeting-intelligence/examples/customer-meeting.md",
+      "bytes": 3451,
+      "sha256": "36b50b70020d58ff279fd7774de8b2bdfc3d0e8fc4a41cb7f11e8a02eff93a22"
+    },
+    {
+      "path": "plugins/notion/skills/notion-meeting-intelligence/examples/executive-review.md",
+      "bytes": 2574,
+      "sha256": "58428b5122de4b4948cb3a2cd77c43c78e904c41103535b3ac95d1aec3a8f2ea"
+    },
+    {
+      "path": "plugins/notion/skills/notion-meeting-intelligence/examples/project-decision.md",
+      "bytes": 13213,
+      "sha256": "08107a73a49571c0e9c4c59e5ae09f5fa791c34ceb81813b4ebf827e0a76bd55"
+    },
+    {
+      "path": "plugins/notion/skills/notion-meeting-intelligence/examples/sprint-planning.md",
+      "bytes": 2650,
+      "sha256": "42afe8cef817fd152aaceb0270c8e8702b4ebe6a8fc80c67c470e7f11924049a"
+    },
+    {
+      "path": "plugins/notion/skills/notion-meeting-intelligence/LICENSE.txt",
+      "bytes": 1064,
+      "sha256": "bfb72d6e9280fef2aed5228cb6da0286444a5fb837e1c919d407e8e698b2df91"
+    },
+    {
+      "path": "plugins/notion/skills/notion-meeting-intelligence/reference/brainstorming-template.md",
+      "bytes": 1559,
+      "sha256": "98edb84aaec25e95aa1709ee8388fcd8146a50dc18d6abf9f8da8e59e380db0d"
+    },
+    {
+      "path": "plugins/notion/skills/notion-meeting-intelligence/reference/decision-meeting-template.md",
+      "bytes": 1917,
+      "sha256": "73d771afa45cc221535e04f770bee7e7461c976539c3dcbe78306ebed12b1fea"
+    },
+    {
+      "path": "plugins/notion/skills/notion-meeting-intelligence/reference/one-on-one-template.md",
+      "bytes": 988,
+      "sha256": "dd5bd062e0876a23a3c5540943a21dc54de2eefe92c7e12a0dec9a53368236c2"
+    },
+    {
+      "path": "plugins/notion/skills/notion-meeting-intelligence/reference/retrospective-template.md",
+      "bytes": 996,
+      "sha256": "5c6fc5e6775b36f5bc45cfc04926b35dfa4fe28945be3487f6ad98e56dec1626"
+    },
+    {
+      "path": "plugins/notion/skills/notion-meeting-intelligence/reference/sprint-planning-template.md",
+      "bytes": 1367,
+      "sha256": "476904a53d7bb4fa974326fbf7385505a18d88cacb622e8c437e549dbdb60a00"
+    },
+    {
+      "path": "plugins/notion/skills/notion-meeting-intelligence/reference/status-update-template.md",
+      "bytes": 1428,
+      "sha256": "bab1811749eeee68fe25ebd347fff69d08628048082a7780cabedc688362d466"
+    },
+    {
+      "path": "plugins/notion/skills/notion-meeting-intelligence/reference/template-selection-guide.md",
+      "bytes": 2009,
+      "sha256": "8126cdaa0f8cc22da92ab016109b10a2495bc4514a313d05d3707e32839aabbb"
+    },
+    {
+      "path": "plugins/notion/skills/notion-meeting-intelligence/SKILL.md",
+      "bytes": 4452,
+      "sha256": "b31e0a4e5c3fd223d2e945f0a6c645d5292e0127e01d057e95aa43a5a461cba2"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/agents/openai.yaml",
+      "bytes": 318,
+      "sha256": "a4f5232394b52684808d49738a78c2185d72bfff07003d7305cf6655830b3a11"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/assets/notion-small.svg",
+      "bytes": 1564,
+      "sha256": "05e71ce9e88cc40f0b7c8418f7ccf8d3e6d351c2b8d78a74c9a0642ba2969ab9"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/assets/notion.png",
+      "bytes": 8526,
+      "sha256": "5eef1e62d96a3d09bc9d18e4140486c22799145b017033bd0924c2c49d741cd4"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/evaluations/basic-research.json",
+      "bytes": 1743,
+      "sha256": "3d96065bd05fd8b69a8ca49f796654a97a77522f2e9ecffb343aadbaf594c5d1"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/evaluations/README.md",
+      "bytes": 4372,
+      "sha256": "1a3ec2c2471d323966f77bd3ac36359db1967d9130876c8df9cd412e0f2aca09"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/evaluations/research-to-database.json",
+      "bytes": 1687,
+      "sha256": "5949e827648caaf31fe9d9fe01be0d9ca955b406651a5b57b91305a7b0e5845f"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/examples/competitor-analysis.md",
+      "bytes": 8556,
+      "sha256": "ae09a5be1a23ce7b16bfd09337bb51af22e40f575b7c96f624594821c18cccb0"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/examples/market-research.md",
+      "bytes": 2254,
+      "sha256": "e34980ef82d629f3550a157f8e39bbaa463ffac583dc61245b87ae221a85406f"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/examples/technical-investigation.md",
+      "bytes": 6737,
+      "sha256": "295ff9176c9f0e9b2da5adf89d8d920e656c215328582e27bb34f657b781e872"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/examples/trip-planning.md",
+      "bytes": 4004,
+      "sha256": "3a1424b84233579881c404f35d2522e00d22cc77c02a5591fc52f1718e93e13b"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/LICENSE.txt",
+      "bytes": 1064,
+      "sha256": "bfb72d6e9280fef2aed5228cb6da0286444a5fb837e1c919d407e8e698b2df91"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/reference/advanced-search.md",
+      "bytes": 4803,
+      "sha256": "038ef8cd7a786980a70137052b9dcc5224b491948b9f35ac1cb390e509ef514d"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/reference/citations.md",
+      "bytes": 5338,
+      "sha256": "a6adce05742b285d9b338e8c98b2c4792b53eaf8d2d32ad9ec37d5d1f9f35d41"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/reference/comparison-format.md",
+      "bytes": 905,
+      "sha256": "cea1885197367cd15020d4c9c0313a754a78f74b5ecac5a23295794f49cb992a"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/reference/comparison-template.md",
+      "bytes": 953,
+      "sha256": "c1717848628e69cdf09bf4580a4513de487f884d198b325cf546cbcfb191c5c0"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/reference/comprehensive-report-format.md",
+      "bytes": 1115,
+      "sha256": "97c132f53d309900dcc467e44d09b4acf104c8789dd70f0219d6746d888f6d90"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/reference/comprehensive-report-template.md",
+      "bytes": 1332,
+      "sha256": "41682a265a6c8ddf08d62f7f6656324f8f1618d2e7d34dd0b4701c877dcaf45e"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/reference/format-selection-guide.md",
+      "bytes": 2891,
+      "sha256": "31a64659e14fb251aabee6aaa76e43c2422aff505b14c5c09ae03961bd0a55cc"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/reference/quick-brief-format.md",
+      "bytes": 802,
+      "sha256": "3455d67be88755ecc3da1f8507bb3c8cf418efaa746d4774773fef55eed94373"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/reference/quick-brief-template.md",
+      "bytes": 496,
+      "sha256": "374899ab3cd5111b2782fe1d5e3b58fee9944d2f106634afc32f74c77d40e64e"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/reference/research-summary-format.md",
+      "bytes": 872,
+      "sha256": "c3d70163cba9dc758bfab419f3f8501a9c685ac1b86e5c5c16bc4105d1a5d74e"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/reference/research-summary-template.md",
+      "bytes": 1199,
+      "sha256": "ab0495da75055b1d57c811e7440c89a0dffc0e142bc4fbdd8022574f8426cf35"
+    },
+    {
+      "path": "plugins/notion/skills/notion-research-documentation/SKILL.md",
+      "bytes": 4316,
+      "sha256": "b725a7981d65d08ea7b25b14b64c459c3370cfd8c7dc43480f4584f06b0cba0a"
+    },
+    {
+      "path": "plugins/notion/skills/notion-spec-to-implementation/agents/openai.yaml",
+      "bytes": 345,
+      "sha256": "3aee0e5d7d6bf5ec67a98ae4c236356b212026932b2ca1e99597ab1555767757"
+    },
+    {
+      "path": "plugins/notion/skills/notion-spec-to-implementation/assets/notion-small.svg",
+      "bytes": 1564,
+      "sha256": "05e71ce9e88cc40f0b7c8418f7ccf8d3e6d351c2b8d78a74c9a0642ba2969ab9"
+    },
+    {
+      "path": "plugins/notion/skills/notion-spec-to-implementation/assets/notion.png",
+      "bytes": 8526,
+      "sha256": "5eef1e62d96a3d09bc9d18e4140486c22799145b017033bd0924c2c49d741cd4"
+    },
+    {
+      "path": "plugins/notion/skills/notion-spec-to-implementation/evaluations/basic-spec-implementation.json",
+      "bytes": 2389,
+      "sha256": "c1fbe697e3ae59834f74d9ee1a8cb9d22ee5bca49de6bde30711a533d7cb49e8"
+    },
+    {
+      "path": "plugins/notion/skills/notion-spec-to-implementation/evaluations/README.md",
+      "bytes": 4560,
+      "sha256": "3e0edb1a5bf5c90818728ad54e0920ef331d7f9547444042c95bdbeb8212dbe2"
+    },
+    {
+      "path": "plugins/notion/skills/notion-spec-to-implementation/evaluations/spec-to-tasks.json",
+      "bytes": 2538,
+      "sha256": "9f9e272d983c512aac44592b97fc95874e11a0c90bd3d87f1dd9207fa1b53fda"
+    },
+    {
+      "path": "plugins/notion/skills/notion-spec-to-implementation/examples/api-feature.md",
+      "bytes": 14527,
+      "sha256": "b22b1f055918a8c5a9235cf53a227a9a4954d4f961ed4f4835fdd7efb44f4d54"
+    },
+    {
+      "path": "plugins/notion/skills/notion-spec-to-implementation/examples/database-migration.md",
+      "bytes": 2741,
+      "sha256": "a612876fa37b8c141856af517053f9cafa0766d90d6ca8eaafbf8a12e1ad9b8a"
+    },
+    {
+      "path": "plugins/notion/skills/notion-spec-to-implementation/examples/ui-component.md",
+      "bytes": 2237,
+      "sha256": "8dc798bac4c4dcac3825ee9bb7e7f0ae49506299b111288019169610ffd91f4d"
+    },
+    {
+      "path": "plugins/notion/skills/notion-spec-to-implementation/LICENSE.txt",
+      "bytes": 1064,
+      "sha256": "bfb72d6e9280fef2aed5228cb6da0286444a5fb837e1c919d407e8e698b2df91"
+    },
+    {
+      "path": "plugins/notion/skills/notion-spec-to-implementation/reference/milestone-summary-template.md",
+      "bytes": 481,
+      "sha256": "ce60ffa71386e5a66eb29789333d356d500768c02f17b159f7a9d5c2b492f179"
+    },
+    {
+      "path": "plugins/notion/skills/notion-spec-to-implementation/reference/progress-tracking.md",
+      "bytes": 9475,
+      "sha256": "419336102aeccff0fabd0c4844eb2ab44f86a0a17b75dd666e44887e10f445f6"
+    },
+    {
+      "path": "plugins/notion/skills/notion-spec-to-implementation/reference/progress-update-template.md",
+      "bytes": 443,
+      "sha256": "c7e3085ee3c7bfba4b3a1fbb792237716a2cb3ab6c610180af6501f6563af3b5"
+    },
+    {
+      "path": "plugins/notion/skills/notion-spec-to-implementation/reference/quick-implementation-plan.md",
+      "bytes": 504,
+      "sha256": "e9ae4adddc90a2773c10cf8b155fe6b38f735bc1e38467b6e58f7e72a09ba9de"
+    },
+    {
+      "path": "plugins/notion/skills/notion-spec-to-implementation/reference/spec-parsing.md",
+      "bytes": 7447,
+      "sha256": "4c0d082da07c1aa897788acc1608984d410c662752ff86fb37ed67a5c3b38aa9"
+    },
+    {
+      "path": "plugins/notion/skills/notion-spec-to-implementation/reference/standard-implementation-plan.md",
+      "bytes": 3430,
+      "sha256": "4c88aae3a8e30fd8be71613936533bd871e3124db8aaa6ad073dfd07dc7694b0"
+    },
+    {
+      "path": "plugins/notion/skills/notion-spec-to-implementation/reference/task-creation-template.md",
+      "bytes": 629,
+      "sha256": "4fd5523f5ee4f83e846a6d31ac0d9e15291f918fdb82d137d5cd09b213b8dc33"
+    },
+    {
+      "path": "plugins/notion/skills/notion-spec-to-implementation/reference/task-creation.md",
+      "bytes": 8471,
+      "sha256": "b96043397b08d663ff604990b8134fa5e4e3cfebf2c345608714e7a8580d9a92"
+    },
+    {
+      "path": "plugins/notion/skills/notion-spec-to-implementation/SKILL.md",
+      "bytes": 4614,
+      "sha256": "887290939272e7b083ba084fac4299cff333711cc16dffc267ac11eeaad4c7d4"
+    },
+    {
+      "path": "plugins/notion/THIRD-PARTY-NOTICE.md",
+      "bytes": 278,
+      "sha256": "9ad7280fe486c2c891eb01aa4bf90a3bb02f1156b6ba7a93de3a8807d6a26df5"
+    },
+    {
+      "path": "plugins/office/.codex-plugin/plugin.json",
+      "bytes": 739,
+      "sha256": "d9b11bfedbc79bacb380888597cb3441ddd288be22b5d91bf07f0d520164a035"
+    },
+    {
+      "path": "plugins/office/lib/ooxml.mjs",
+      "bytes": 17398,
+      "sha256": "169feb506d5f34b9f4b3d4162412a93c04cc3ec27b8339a7dfd52ee12013b3c6"
+    },
+    {
+      "path": "plugins/office/lib/zip.mjs",
+      "bytes": 4965,
+      "sha256": "149e06c21123d685cf348c6edf0c1e8638fd35e2a3d5eb8b5a845b8f719ceae2"
+    },
+    {
+      "path": "plugins/office/plugin.json",
+      "bytes": 244,
+      "sha256": "9ae261835147edf5f20a2910f854c8f6cec69be0aaf0fd7651e02e641e6c7f5d"
+    },
+    {
+      "path": "plugins/office/plugin.mjs",
+      "bytes": 12941,
+      "sha256": "b2fcfa245324c8036bc62dfdfd5e44a7ccb610bbe42e1898108421edffb5be4f"
+    },
+    {
+      "path": "plugins/office/skills/office-guide.md",
+      "bytes": 873,
+      "sha256": "8d230089fbbde251e7a8e189912414e6951e196c2bf60eebf97e5217bdf8a97b"
+    },
+    {
+      "path": "plugins/remotion/.codex-plugin/assets/composer-icon.svg",
+      "bytes": 1360,
+      "sha256": "a539baed117e934a1119bbf6844cf721653c3106bb67472451be3830768bb188"
+    },
+    {
+      "path": "plugins/remotion/.codex-plugin/assets/logo-dark.png",
+      "bytes": 38781,
+      "sha256": "15ba8180bd1103e36852adc59caf7912274c2831d25283110079bf67b252b60f"
+    },
+    {
+      "path": "plugins/remotion/.codex-plugin/assets/logo.png",
+      "bytes": 37249,
+      "sha256": "d8a7965be77f75b74ef010a18f581b77d43770e9e9961b669636a14a860660eb"
+    },
+    {
+      "path": "plugins/remotion/.codex-plugin/plugin.json",
+      "bytes": 1732,
+      "sha256": "079a29b2d8b3df4a76a09eff3ae7346fbff066441e7d585bd4857584a0a329a3"
+    },
+    {
+      "path": "plugins/remotion/assets/composer-icon.svg",
+      "bytes": 1360,
+      "sha256": "a539baed117e934a1119bbf6844cf721653c3106bb67472451be3830768bb188"
+    },
+    {
+      "path": "plugins/remotion/assets/icon.png",
+      "bytes": 37249,
+      "sha256": "d8a7965be77f75b74ef010a18f581b77d43770e9e9961b669636a14a860660eb"
+    },
+    {
+      "path": "plugins/remotion/assets/logo-dark.png",
+      "bytes": 38781,
+      "sha256": "15ba8180bd1103e36852adc59caf7912274c2831d25283110079bf67b252b60f"
+    },
+    {
+      "path": "plugins/remotion/assets/logo.png",
+      "bytes": 37249,
+      "sha256": "d8a7965be77f75b74ef010a18f581b77d43770e9e9961b669636a14a860660eb"
+    },
+    {
+      "path": "plugins/remotion/README.md",
+      "bytes": 95,
+      "sha256": "e61707e629a00917a73b8ce86ab6b9af5a2b042704602c96eba4113e0e500de2"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/agents/openai.yaml",
+      "bytes": 318,
+      "sha256": "837f7b13b809031e5681b84d375ff98dd022984098629ef6c70c69223759ad9e"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-captions/agents/openai.yaml",
+      "bytes": 312,
+      "sha256": "8552f8c6909d2e245fa121975a54c21d9840f2967cd63ee0c9dd4000adc0d240"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-captions/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-captions/display-captions.md",
+      "bytes": 5681,
+      "sha256": "6611d38ee9dcb7bbf0a4176e4540feb1b39499a27fa57d2d9d3d0c04beb3671f"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-captions/import-srt-captions.md",
+      "bytes": 2342,
+      "sha256": "d87f42376221d4802b84ad2f81906a568b9ebb81525ccd1698dc434cea3eaa5c"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-captions/REFERENCE.md",
+      "bytes": 989,
+      "sha256": "33a50533689e0a3bf909398f3b1358d7d69c96ec6d80cf47c11cc332e21bfbd2"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-captions/transcribe-captions.md",
+      "bytes": 1967,
+      "sha256": "c28bc6bb42ea61e8021019839df8f9eabaab91da85950f098c9bf3f2f4b65505"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-create/agents/openai.yaml",
+      "bytes": 317,
+      "sha256": "5ca21a8c94be887127958febe84535cd6e01d7a9387c74b6cae01147ff7a708c"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-create/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-create/REFERENCE.md",
+      "bytes": 2105,
+      "sha256": "94e48e3e200290f501b2888432e201c0226c911da6beb512759e1c7142c91df2"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-create/tailwind.md",
+      "bytes": 397,
+      "sha256": "227275d9eb773b4f6767c7a4c0c309ede2eab144a7eb7827de8ecb486df05c63"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-create/video-layout.md",
+      "bytes": 507,
+      "sha256": "201aa71c368999290047fffc292d0263dbe1260081528da726830ea64b4d011c"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-docs/agents/openai.yaml",
+      "bytes": 314,
+      "sha256": "9e425fee1b8274ee824c24431c96024f8a5c9fffbb4ddd05073b403777e33f6e"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-docs/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-docs/REFERENCE.md",
+      "bytes": 1401,
+      "sha256": "ea51c38d7ae23c713dd3f6490e7a1abe2f121a8bd1fc22a0719da2054a082a7e"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-interactivity/agents/openai.yaml",
+      "bytes": 327,
+      "sha256": "ea70409b8efb730ff2d29d3531ce2bca6bffd164dcf32162a75acec3201e8633"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-interactivity/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-interactivity/REFERENCE.md",
+      "bytes": 7688,
+      "sha256": "d6b326a18cf7cdc2c4763b5ce6ebbd935ad1dd472cb2879e6531d5a3fa5e93a5"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/agents/openai.yaml",
+      "bytes": 300,
+      "sha256": "874866bbf8e09ef09ce9c6e10a8d5e9ea9e4220dffb19ef60cdb8fb60d7b21f2"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/REFERENCE.md",
+      "bytes": 1066,
+      "sha256": "f15ff6a8dc8c72f996b436c878e4576b901cc34bd65210cf8371b3cbe6844837"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/cesium/assets/cesium-path.json",
+      "bytes": 12628,
+      "sha256": "dc7d5b6de13523d2906dd8fc2e2bf8eb38fe9150f93e4fd1add959e1cfcb4d90"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/cesium/assets/city-path.json",
+      "bytes": 235,
+      "sha256": "875cf47dd5aa1e6406fdafd313f961857bca615408e397d5f4d37cce13b562ce"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/cesium/assets/flight-path.ts",
+      "bytes": 1275,
+      "sha256": "769e10a3652fba4dccf6cb7120800b7bc59c8d8c27ca2d413b4785b66fd628ff"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/cesium/assets/sample-river.geojson",
+      "bytes": 6624,
+      "sha256": "ba9c594935a89ddc2dcb5daadc219b6493cd37b002e4b62739f4ffb613ced5bd"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/cesium/references/3d-data-sources.md",
+      "bytes": 1494,
+      "sha256": "a48e9e361a2e52c3e0a714c3d9c49027fe430a9fe53e31f5caebd8503a6a2d85"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/cesium/references/3d-flyover-architecture.md",
+      "bytes": 8015,
+      "sha256": "67717e5cc0c25577c7c1abe4f4af6b6b4b717473e7c3ff68bd56ad018dda3e9e"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/cesium/references/3d-troubleshooting.md",
+      "bytes": 6798,
+      "sha256": "35b53fe40237899cf6f397b457a20be1b3902dbe404a7be047224589275a8d03"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/cesium/scripts/prep-cesium-path.mjs",
+      "bytes": 5722,
+      "sha256": "276296ec14ecf5b5c1f1694e2a5950a3df2174dd7768c44d55a3dbb41bddef45"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/cesium/TECHNIQUE.md",
+      "bytes": 3998,
+      "sha256": "74dfab6e9510ca021384ebfb9e995eaf5f2a372b0abb0ab9039bb0d678307e51"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/mapbox/references/render-stability.md",
+      "bytes": 3703,
+      "sha256": "7fc711afa379f7afc3401ffa98660e53a372e026d7090c0447194f892622ccbd"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/mapbox/TECHNIQUE.md",
+      "bytes": 13615,
+      "sha256": "144fa950811eca48afd4a3c46c6c2f6397f6eb6d941d7ece90ce49c70815e2c8"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/maplibre/references/render-stability.md",
+      "bytes": 3703,
+      "sha256": "7fc711afa379f7afc3401ffa98660e53a372e026d7090c0447194f892622ccbd"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/maplibre/TECHNIQUE.md",
+      "bytes": 13868,
+      "sha256": "edf65c0b966310db6bd69ac35d29aa2e776945bbf3f027b3bb24fd7de73d3f75"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/maptiler/assets/MapTilerVectorElement.ts",
+      "bytes": 2263,
+      "sha256": "8459596fd521f0a24e7645359e3abac158754d1a02189901ba3e64abc6d82379"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/maptiler/assets/sample-data/country-meta.json",
+      "bytes": 340669,
+      "sha256": "4d5839ef77492bb22ce432fe7138d13a3dc4f4db454539131a21c2bb3710a21a"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/maptiler/assets/sample-data/yarlung-flow.json",
+      "bytes": 13687,
+      "sha256": "6448cd1a1990d7fa61305371928cfa097b218f730d0d8ec6a3072ee97866a4fa"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/maptiler/assets/tokens.ts",
+      "bytes": 1290,
+      "sha256": "59544b61a8d00852a1865cd18dd9d5e2e77449c47a63f3dde6d35cd6b8efbfa8"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/maptiler/references/map-data-sources.md",
+      "bytes": 4889,
+      "sha256": "b11425a03e0ac423f82cad655eb35481adb41c7de0581bef0d82ebb59bcb6f7f"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/maptiler/references/map-explainer-architecture.md",
+      "bytes": 7000,
+      "sha256": "f12c26d2055ff8ed8756e8899af957b55f17504c94a26fee56ff821b2726996f"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/maptiler/references/map-geo-prep.md",
+      "bytes": 4183,
+      "sha256": "7b36cdcc3137c48657339ac9667802ef2e6079ede75f1b9beca9a906e6ce08aa"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/maptiler/references/render-stability.md",
+      "bytes": 3703,
+      "sha256": "7fc711afa379f7afc3401ffa98660e53a372e026d7090c0447194f892622ccbd"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/maptiler/scripts/prep-geo.mjs",
+      "bytes": 7755,
+      "sha256": "2affc2230115fd518c6483ef6f7f2b0516bc1224226a8eb9e62b3a8e66769f21"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/maptiler/TECHNIQUE.md",
+      "bytes": 4594,
+      "sha256": "a95f1e99ad7b2764555b9187f9c13301a383790f308f872f21a31448af2fa1f2"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-maps/techniques/static-map/TECHNIQUE.md",
+      "bytes": 1180,
+      "sha256": "cc7c3f6f06bd658b9d16ad9ab5ec7c9706cee346d18598aba6248a00fb040031"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/3d.md",
+      "bytes": 2378,
+      "sha256": "22c36e087eefd6cfef597bda54f72ae1f39099f9cf33ec38079dd53c4b08e651"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/agents/openai.yaml",
+      "bytes": 317,
+      "sha256": "9ea275e94ea0f1bc8fb0f0908f0729ff37883c265fe43811de3d352b874cfad1"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/audio-visualization.md",
+      "bytes": 5090,
+      "sha256": "ddb4440fdd236484a06fb39c81b532c48caa4365505b3b12438224832cb2857f"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/audio.md",
+      "bytes": 3786,
+      "sha256": "6c49c2bebcc75adf01f81156973f9bbe5601e2a1c2512a954ce7ea11928066e4"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/calculate-metadata.md",
+      "bytes": 3634,
+      "sha256": "047b544808442f146b9bc62589a899369567ed8ea739c920113899063b8fbcb8"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/compositions.md",
+      "bytes": 3307,
+      "sha256": "71d317ef83f28779640bc50634845807cd399bfa26597ba64758cf8af44d7147"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/cropping.md",
+      "bytes": 1136,
+      "sha256": "d8eda6dcff713b50e149633b63f4a6bdb104d35dd3a35994699ad55acd3403c2"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/effects.md",
+      "bytes": 9155,
+      "sha256": "630b28f25dc4787e757ee77c136ead3dba191ab42545fad6193e0d4832d4b458"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/embedding-videos.md",
+      "bytes": 3678,
+      "sha256": "0ab62ce98532f03d247bd2ce913dbdc680e7425a0e92022fa1a854a676974a89"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/ffmpeg.md",
+      "bytes": 1137,
+      "sha256": "60f34e4aca7976774872fa1b0cfda4a049c44bc1e8838d5b35bdb7270aa2cf6c"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/gifs.md",
+      "bytes": 3970,
+      "sha256": "ed6a4a3952d4c04d744aa8289477b162939940c5bae4239494731c8a66da7a51"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/google-fonts.md",
+      "bytes": 1790,
+      "sha256": "7fe5ea475a51383016c0acf8052febb46ac8ad5a943217acf8083787addc6cc8"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/html-in-canvas.md",
+      "bytes": 3807,
+      "sha256": "f218a758fdc9b1ab388746f479743908954c1209f3c67275dd5b042060d7c9f7"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/images.md",
+      "bytes": 1539,
+      "sha256": "815ff21943ce1bfb1efb82d0fd01b94874f4f1fb21af4bbc076cb64948b2df35"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/light-leaks.md",
+      "bytes": 3318,
+      "sha256": "877b38fc29da2164c6024ab4a8061827b66c55892375e53cff8d8008af10dc6d"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/local-fonts.md",
+      "bytes": 1602,
+      "sha256": "281ab53eecbbd18f6977c4eb26707a009d762de13987f67524688430e4f55c76"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/lottie.md",
+      "bytes": 1879,
+      "sha256": "2f93ee403d4b03bf4616b19d0cf1eb4f71c52858ad1c15f1bc7e7186f8d3b790"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/measuring-dom-nodes.md",
+      "bytes": 1033,
+      "sha256": "e093812aa55935fe9487462c8044ac09338ca5256643f4340faeff8c1e810df6"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/measuring-text.md",
+      "bytes": 2947,
+      "sha256": "fa36a45e193b1ffc5930dac6b5e7cb8f0e858da5352127a340f0258f05842777"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/multi-scene-video.md",
+      "bytes": 2113,
+      "sha256": "6703cf15050b6da3f2b61f6c3b8886d031fdd771972effedfda9a5457534dab4"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/parameters.md",
+      "bytes": 2514,
+      "sha256": "5955b1e509c8527372f7210911aab8c550c0ce38ecdbd1eeb85565ea25165b7a"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/REFERENCE.md",
+      "bytes": 11166,
+      "sha256": "f740978ff58d0db3e5d296ff72bf7902d2c23fbbb899bbc26b99e9b6d0789096"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/agents/openai.yaml",
+      "bytes": 300,
+      "sha256": "874866bbf8e09ef09ce9c6e10a8d5e9ea9e4220dffb19ef60cdb8fb60d7b21f2"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/REFERENCE.md",
+      "bytes": 1066,
+      "sha256": "f15ff6a8dc8c72f996b436c878e4576b901cc34bd65210cf8371b3cbe6844837"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/cesium/assets/cesium-path.json",
+      "bytes": 12628,
+      "sha256": "dc7d5b6de13523d2906dd8fc2e2bf8eb38fe9150f93e4fd1add959e1cfcb4d90"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/cesium/assets/city-path.json",
+      "bytes": 235,
+      "sha256": "875cf47dd5aa1e6406fdafd313f961857bca615408e397d5f4d37cce13b562ce"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/cesium/assets/flight-path.ts",
+      "bytes": 1275,
+      "sha256": "769e10a3652fba4dccf6cb7120800b7bc59c8d8c27ca2d413b4785b66fd628ff"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/cesium/assets/sample-river.geojson",
+      "bytes": 6624,
+      "sha256": "ba9c594935a89ddc2dcb5daadc219b6493cd37b002e4b62739f4ffb613ced5bd"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/cesium/references/3d-data-sources.md",
+      "bytes": 1494,
+      "sha256": "a48e9e361a2e52c3e0a714c3d9c49027fe430a9fe53e31f5caebd8503a6a2d85"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/cesium/references/3d-flyover-architecture.md",
+      "bytes": 8015,
+      "sha256": "67717e5cc0c25577c7c1abe4f4af6b6b4b717473e7c3ff68bd56ad018dda3e9e"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/cesium/references/3d-troubleshooting.md",
+      "bytes": 6798,
+      "sha256": "35b53fe40237899cf6f397b457a20be1b3902dbe404a7be047224589275a8d03"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/cesium/scripts/prep-cesium-path.mjs",
+      "bytes": 5722,
+      "sha256": "276296ec14ecf5b5c1f1694e2a5950a3df2174dd7768c44d55a3dbb41bddef45"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/cesium/TECHNIQUE.md",
+      "bytes": 3998,
+      "sha256": "74dfab6e9510ca021384ebfb9e995eaf5f2a372b0abb0ab9039bb0d678307e51"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/mapbox/references/render-stability.md",
+      "bytes": 3703,
+      "sha256": "7fc711afa379f7afc3401ffa98660e53a372e026d7090c0447194f892622ccbd"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/mapbox/TECHNIQUE.md",
+      "bytes": 13615,
+      "sha256": "144fa950811eca48afd4a3c46c6c2f6397f6eb6d941d7ece90ce49c70815e2c8"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/maplibre/references/render-stability.md",
+      "bytes": 3703,
+      "sha256": "7fc711afa379f7afc3401ffa98660e53a372e026d7090c0447194f892622ccbd"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/maplibre/TECHNIQUE.md",
+      "bytes": 13868,
+      "sha256": "edf65c0b966310db6bd69ac35d29aa2e776945bbf3f027b3bb24fd7de73d3f75"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/maptiler/assets/MapTilerVectorElement.ts",
+      "bytes": 2263,
+      "sha256": "8459596fd521f0a24e7645359e3abac158754d1a02189901ba3e64abc6d82379"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/maptiler/assets/sample-data/country-meta.json",
+      "bytes": 340669,
+      "sha256": "4d5839ef77492bb22ce432fe7138d13a3dc4f4db454539131a21c2bb3710a21a"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/maptiler/assets/sample-data/yarlung-flow.json",
+      "bytes": 13687,
+      "sha256": "6448cd1a1990d7fa61305371928cfa097b218f730d0d8ec6a3072ee97866a4fa"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/maptiler/assets/tokens.ts",
+      "bytes": 1290,
+      "sha256": "59544b61a8d00852a1865cd18dd9d5e2e77449c47a63f3dde6d35cd6b8efbfa8"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/maptiler/references/map-data-sources.md",
+      "bytes": 4889,
+      "sha256": "b11425a03e0ac423f82cad655eb35481adb41c7de0581bef0d82ebb59bcb6f7f"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/maptiler/references/map-explainer-architecture.md",
+      "bytes": 7000,
+      "sha256": "f12c26d2055ff8ed8756e8899af957b55f17504c94a26fee56ff821b2726996f"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/maptiler/references/map-geo-prep.md",
+      "bytes": 4183,
+      "sha256": "7b36cdcc3137c48657339ac9667802ef2e6079ede75f1b9beca9a906e6ce08aa"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/maptiler/references/render-stability.md",
+      "bytes": 3703,
+      "sha256": "7fc711afa379f7afc3401ffa98660e53a372e026d7090c0447194f892622ccbd"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/maptiler/scripts/prep-geo.mjs",
+      "bytes": 7755,
+      "sha256": "2affc2230115fd518c6483ef6f7f2b0516bc1224226a8eb9e62b3a8e66769f21"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/maptiler/TECHNIQUE.md",
+      "bytes": 4594,
+      "sha256": "a95f1e99ad7b2764555b9187f9c13301a383790f308f872f21a31448af2fa1f2"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/remotion-maps/techniques/static-map/TECHNIQUE.md",
+      "bytes": 1167,
+      "sha256": "287215d47674faa62846df21250a93253b2a1fabe71aa0bf12d1a5496c32fca4"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/sequencing.md",
+      "bytes": 3992,
+      "sha256": "9a4b6dedbf275004834c9e8abd1d554027b0ed3a6940a08d40a513903af85ecf"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/sfx.md",
+      "bytes": 1857,
+      "sha256": "f1da32a162c72a275ebe93c3345d617ca67d94082196929d9c7b7881fc06bade"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/silence-detection.md",
+      "bytes": 2619,
+      "sha256": "d772d5f2e1e4030da52b7b8f258219ba3523d9fcf2d3cc0968e09fa9dce88c4f"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/text-highlights.md",
+      "bytes": 1907,
+      "sha256": "e95c45db85aec639b8b9014d405eb4b9cc60e2100aed55a78544fbee925191d0"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/timing.md",
+      "bytes": 3421,
+      "sha256": "ded7e2fbf528fe19cdfda5c3eeef983f1bfc8409bb819c0ecd176afd7ba7619c"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/transitions.md",
+      "bytes": 7121,
+      "sha256": "2af74184c2bde1be094f1154c5d43561e1f9daae6242b2067f20e110c231a1c5"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/video-editing.md",
+      "bytes": 3494,
+      "sha256": "50ed471194a5027a997085c419f79a7b41be0392989e15ae041ba07dd14fde34"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-markup/voiceover.md",
+      "bytes": 3441,
+      "sha256": "abbd9b20ca6ede9d928a187bb53e9aad6b4a65290f3901731e43d6c115512a2c"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-multimedia/agents/openai.yaml",
+      "bytes": 324,
+      "sha256": "82282338fb5770af01e51c0d30f021586d5c31c80910d7f74c951a77d770847d"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-multimedia/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-multimedia/get-audio-duration.md",
+      "bytes": 1415,
+      "sha256": "04a1e12146554e6eaae4bacf64a90c37abb2ce09c0f8e25cfd0a910f998d26f5"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-multimedia/get-video-dimensions.md",
+      "bytes": 1694,
+      "sha256": "7e69da749a5682a9aee902d1d99496e883ef6f3349501b792a77e3ec21a16c75"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-multimedia/get-video-duration.md",
+      "bytes": 1437,
+      "sha256": "caf1f4400541a40c022b5ddaee570ceda25b427b8644cdc798472f1594963c83"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-multimedia/REFERENCE.md",
+      "bytes": 725,
+      "sha256": "3646cc6ea3b573ae363984f82f4d599b01c2e206edb5e741fda4b664089aa09c"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-render/agents/openai.yaml",
+      "bytes": 293,
+      "sha256": "7a90154102baf24497ba76f42197d0d4af743f030fa63b91174752919ff0f6ed"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-render/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-render/REFERENCE.md",
+      "bytes": 497,
+      "sha256": "0dbcd23fe8ea5ed3681668bf0d728c0bd52635f57222025c53f94c9bc09ce235"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-render/transparent-videos.md",
+      "bytes": 2373,
+      "sha256": "605d2e7ec91d17eec7ccdc9630edd0cae694b11494e6ecdddc9bec6ab3ae841a"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-saas/agents/openai.yaml",
+      "bytes": 290,
+      "sha256": "e868919ff25514a0e4a477f53988f71153f4215b92876be00e73b8b2404ec325"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-saas/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-saas/framework.md",
+      "bytes": 1209,
+      "sha256": "a4930939c701d5355500bb3aee0229baed2cff77ab99440765e68b9f74641405"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-saas/player.md",
+      "bytes": 975,
+      "sha256": "44e4bd7612b509e0a1324448abf82a86e4346340722574cada6e77e7e712d1fb"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-saas/REFERENCE.md",
+      "bytes": 1084,
+      "sha256": "69aefa49a2760498da9a0778378c361ff5bb5415933b4ed12fc1b1e11f3523a4"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-saas/rendering.md",
+      "bytes": 3410,
+      "sha256": "67e78587587c78b1c48aa0f9410e545ce6685b426643958120bb2429e7920352"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-studio/agents/openai.yaml",
+      "bytes": 244,
+      "sha256": "1e6fc5bc17e2544ed92a73e806530a35005993d4a79d258431f880371b7a1a4f"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-studio/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-studio/REFERENCE.md",
+      "bytes": 982,
+      "sha256": "93c237309b9a38f62767e546fe2e9bac0bfe9879c3ccb9f1a1bb2164d011509c"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-upgrade/agents/openai.yaml",
+      "bytes": 289,
+      "sha256": "b9f4169b00cffc0f3d5b2251c67b1fc49f63427436a1e63de7f1fa0390cdf293"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-upgrade/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/remotion-upgrade/REFERENCE.md",
+      "bytes": 1911,
+      "sha256": "b4f7784165d0284e02a019cd4531a4660163fc6b3c6d917723b4f295d352e188"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-best-practices/SKILL.md",
+      "bytes": 3009,
+      "sha256": "172058b34246c55828cf4add00ba9976b8301d0d338235cfe11ddbe6567f0bf8"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-captions/agents/openai.yaml",
+      "bytes": 312,
+      "sha256": "8552f8c6909d2e245fa121975a54c21d9840f2967cd63ee0c9dd4000adc0d240"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-captions/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-captions/display-captions.md",
+      "bytes": 5677,
+      "sha256": "3bb4dd58ef7cecf03090095bf5c65a7c299e4bcff232d1fcb56e53cfc83efbb6"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-captions/import-srt-captions.md",
+      "bytes": 2342,
+      "sha256": "d87f42376221d4802b84ad2f81906a568b9ebb81525ccd1698dc434cea3eaa5c"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-captions/SKILL.md",
+      "bytes": 989,
+      "sha256": "33a50533689e0a3bf909398f3b1358d7d69c96ec6d80cf47c11cc332e21bfbd2"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-captions/transcribe-captions.md",
+      "bytes": 1967,
+      "sha256": "c28bc6bb42ea61e8021019839df8f9eabaab91da85950f098c9bf3f2f4b65505"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-create/agents/openai.yaml",
+      "bytes": 317,
+      "sha256": "5ca21a8c94be887127958febe84535cd6e01d7a9387c74b6cae01147ff7a708c"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-create/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-create/SKILL.md",
+      "bytes": 2277,
+      "sha256": "9ebd4ce02acf4705b8f3552a0a0b95168e27d56e155f887027217cc0aca4b2d4"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-create/tailwind.md",
+      "bytes": 397,
+      "sha256": "227275d9eb773b4f6767c7a4c0c309ede2eab144a7eb7827de8ecb486df05c63"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-create/video-layout.md",
+      "bytes": 507,
+      "sha256": "201aa71c368999290047fffc292d0263dbe1260081528da726830ea64b4d011c"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-docs/agents/openai.yaml",
+      "bytes": 314,
+      "sha256": "9e425fee1b8274ee824c24431c96024f8a5c9fffbb4ddd05073b403777e33f6e"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-docs/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-docs/SKILL.md",
+      "bytes": 1425,
+      "sha256": "77fd788c760ed7824cf9727b69515db84e95cce0df3e13d8efd9cf8da7e1dd2c"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-interactivity/agents/openai.yaml",
+      "bytes": 327,
+      "sha256": "ea70409b8efb730ff2d29d3531ce2bca6bffd164dcf32162a75acec3201e8633"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-interactivity/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-interactivity/SKILL.md",
+      "bytes": 7688,
+      "sha256": "d6b326a18cf7cdc2c4763b5ce6ebbd935ad1dd472cb2879e6531d5a3fa5e93a5"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/agents/openai.yaml",
+      "bytes": 300,
+      "sha256": "874866bbf8e09ef09ce9c6e10a8d5e9ea9e4220dffb19ef60cdb8fb60d7b21f2"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/SKILL.md",
+      "bytes": 1066,
+      "sha256": "f15ff6a8dc8c72f996b436c878e4576b901cc34bd65210cf8371b3cbe6844837"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/cesium/assets/cesium-path.json",
+      "bytes": 12628,
+      "sha256": "dc7d5b6de13523d2906dd8fc2e2bf8eb38fe9150f93e4fd1add959e1cfcb4d90"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/cesium/assets/city-path.json",
+      "bytes": 235,
+      "sha256": "875cf47dd5aa1e6406fdafd313f961857bca615408e397d5f4d37cce13b562ce"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/cesium/assets/flight-path.ts",
+      "bytes": 1275,
+      "sha256": "769e10a3652fba4dccf6cb7120800b7bc59c8d8c27ca2d413b4785b66fd628ff"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/cesium/assets/sample-river.geojson",
+      "bytes": 6624,
+      "sha256": "ba9c594935a89ddc2dcb5daadc219b6493cd37b002e4b62739f4ffb613ced5bd"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/cesium/references/3d-data-sources.md",
+      "bytes": 1494,
+      "sha256": "a48e9e361a2e52c3e0a714c3d9c49027fe430a9fe53e31f5caebd8503a6a2d85"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/cesium/references/3d-flyover-architecture.md",
+      "bytes": 8015,
+      "sha256": "67717e5cc0c25577c7c1abe4f4af6b6b4b717473e7c3ff68bd56ad018dda3e9e"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/cesium/references/3d-troubleshooting.md",
+      "bytes": 6798,
+      "sha256": "35b53fe40237899cf6f397b457a20be1b3902dbe404a7be047224589275a8d03"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/cesium/scripts/prep-cesium-path.mjs",
+      "bytes": 5722,
+      "sha256": "276296ec14ecf5b5c1f1694e2a5950a3df2174dd7768c44d55a3dbb41bddef45"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/cesium/TECHNIQUE.md",
+      "bytes": 3998,
+      "sha256": "74dfab6e9510ca021384ebfb9e995eaf5f2a372b0abb0ab9039bb0d678307e51"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/mapbox/references/render-stability.md",
+      "bytes": 3703,
+      "sha256": "7fc711afa379f7afc3401ffa98660e53a372e026d7090c0447194f892622ccbd"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/mapbox/TECHNIQUE.md",
+      "bytes": 13615,
+      "sha256": "144fa950811eca48afd4a3c46c6c2f6397f6eb6d941d7ece90ce49c70815e2c8"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/maplibre/references/render-stability.md",
+      "bytes": 3703,
+      "sha256": "7fc711afa379f7afc3401ffa98660e53a372e026d7090c0447194f892622ccbd"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/maplibre/TECHNIQUE.md",
+      "bytes": 13868,
+      "sha256": "edf65c0b966310db6bd69ac35d29aa2e776945bbf3f027b3bb24fd7de73d3f75"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/maptiler/assets/MapTilerVectorElement.ts",
+      "bytes": 2263,
+      "sha256": "8459596fd521f0a24e7645359e3abac158754d1a02189901ba3e64abc6d82379"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/maptiler/assets/sample-data/country-meta.json",
+      "bytes": 340669,
+      "sha256": "4d5839ef77492bb22ce432fe7138d13a3dc4f4db454539131a21c2bb3710a21a"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/maptiler/assets/sample-data/yarlung-flow.json",
+      "bytes": 13687,
+      "sha256": "6448cd1a1990d7fa61305371928cfa097b218f730d0d8ec6a3072ee97866a4fa"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/maptiler/assets/tokens.ts",
+      "bytes": 1290,
+      "sha256": "59544b61a8d00852a1865cd18dd9d5e2e77449c47a63f3dde6d35cd6b8efbfa8"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/maptiler/references/map-data-sources.md",
+      "bytes": 4889,
+      "sha256": "b11425a03e0ac423f82cad655eb35481adb41c7de0581bef0d82ebb59bcb6f7f"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/maptiler/references/map-explainer-architecture.md",
+      "bytes": 7000,
+      "sha256": "f12c26d2055ff8ed8756e8899af957b55f17504c94a26fee56ff821b2726996f"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/maptiler/references/map-geo-prep.md",
+      "bytes": 4183,
+      "sha256": "7b36cdcc3137c48657339ac9667802ef2e6079ede75f1b9beca9a906e6ce08aa"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/maptiler/references/render-stability.md",
+      "bytes": 3703,
+      "sha256": "7fc711afa379f7afc3401ffa98660e53a372e026d7090c0447194f892622ccbd"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/maptiler/scripts/prep-geo.mjs",
+      "bytes": 7755,
+      "sha256": "2affc2230115fd518c6483ef6f7f2b0516bc1224226a8eb9e62b3a8e66769f21"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/maptiler/TECHNIQUE.md",
+      "bytes": 4594,
+      "sha256": "a95f1e99ad7b2764555b9187f9c13301a383790f308f872f21a31448af2fa1f2"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-maps/techniques/static-map/TECHNIQUE.md",
+      "bytes": 1172,
+      "sha256": "258395bfe7cbe3799eeed7b1337f0ccaca68c1cbf0b5a08e0fee3cdad3037cbc"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/3d.md",
+      "bytes": 2368,
+      "sha256": "404c7def5e260d6b76c5d9e6bc7f9059113b00b60e82016f222f79e17c192bd7"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/agents/openai.yaml",
+      "bytes": 317,
+      "sha256": "9ea275e94ea0f1bc8fb0f0908f0729ff37883c265fe43811de3d352b874cfad1"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/audio-visualization.md",
+      "bytes": 5090,
+      "sha256": "ddb4440fdd236484a06fb39c81b532c48caa4365505b3b12438224832cb2857f"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/audio.md",
+      "bytes": 3786,
+      "sha256": "6c49c2bebcc75adf01f81156973f9bbe5601e2a1c2512a954ce7ea11928066e4"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/calculate-metadata.md",
+      "bytes": 3634,
+      "sha256": "047b544808442f146b9bc62589a899369567ed8ea739c920113899063b8fbcb8"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/compositions.md",
+      "bytes": 3307,
+      "sha256": "71d317ef83f28779640bc50634845807cd399bfa26597ba64758cf8af44d7147"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/cropping.md",
+      "bytes": 1132,
+      "sha256": "9c13a0ec993729e862d6868ec0954cc95f3e38bb156dd6d5b6fcf34d5e7b5ff1"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/effects.md",
+      "bytes": 9155,
+      "sha256": "630b28f25dc4787e757ee77c136ead3dba191ab42545fad6193e0d4832d4b458"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/embedding-videos.md",
+      "bytes": 3676,
+      "sha256": "af5ff7ebc0ef8054b17fab80f4e49ea2c0db7aa03da05c0b4bcefab810e3c8a0"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/ffmpeg.md",
+      "bytes": 1137,
+      "sha256": "60f34e4aca7976774872fa1b0cfda4a049c44bc1e8838d5b35bdb7270aa2cf6c"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/gifs.md",
+      "bytes": 3970,
+      "sha256": "ed6a4a3952d4c04d744aa8289477b162939940c5bae4239494731c8a66da7a51"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/google-fonts.md",
+      "bytes": 1790,
+      "sha256": "7fe5ea475a51383016c0acf8052febb46ac8ad5a943217acf8083787addc6cc8"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/html-in-canvas.md",
+      "bytes": 3807,
+      "sha256": "f218a758fdc9b1ab388746f479743908954c1209f3c67275dd5b042060d7c9f7"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/images.md",
+      "bytes": 1539,
+      "sha256": "815ff21943ce1bfb1efb82d0fd01b94874f4f1fb21af4bbc076cb64948b2df35"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/light-leaks.md",
+      "bytes": 3318,
+      "sha256": "877b38fc29da2164c6024ab4a8061827b66c55892375e53cff8d8008af10dc6d"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/local-fonts.md",
+      "bytes": 1602,
+      "sha256": "281ab53eecbbd18f6977c4eb26707a009d762de13987f67524688430e4f55c76"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/lottie.md",
+      "bytes": 1877,
+      "sha256": "414b68bf981dc92c9a088c6dec50a3cd9e000e91cca59400dbf01272ebe90db9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/measuring-dom-nodes.md",
+      "bytes": 1033,
+      "sha256": "e093812aa55935fe9487462c8044ac09338ca5256643f4340faeff8c1e810df6"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/measuring-text.md",
+      "bytes": 2947,
+      "sha256": "fa36a45e193b1ffc5930dac6b5e7cb8f0e858da5352127a340f0258f05842777"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/multi-scene-video.md",
+      "bytes": 2113,
+      "sha256": "6703cf15050b6da3f2b61f6c3b8886d031fdd771972effedfda9a5457534dab4"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/parameters.md",
+      "bytes": 2514,
+      "sha256": "5955b1e509c8527372f7210911aab8c550c0ce38ecdbd1eeb85565ea25165b7a"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/agents/openai.yaml",
+      "bytes": 300,
+      "sha256": "874866bbf8e09ef09ce9c6e10a8d5e9ea9e4220dffb19ef60cdb8fb60d7b21f2"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/REFERENCE.md",
+      "bytes": 1066,
+      "sha256": "f15ff6a8dc8c72f996b436c878e4576b901cc34bd65210cf8371b3cbe6844837"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/cesium/assets/cesium-path.json",
+      "bytes": 12628,
+      "sha256": "dc7d5b6de13523d2906dd8fc2e2bf8eb38fe9150f93e4fd1add959e1cfcb4d90"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/cesium/assets/city-path.json",
+      "bytes": 235,
+      "sha256": "875cf47dd5aa1e6406fdafd313f961857bca615408e397d5f4d37cce13b562ce"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/cesium/assets/flight-path.ts",
+      "bytes": 1275,
+      "sha256": "769e10a3652fba4dccf6cb7120800b7bc59c8d8c27ca2d413b4785b66fd628ff"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/cesium/assets/sample-river.geojson",
+      "bytes": 6624,
+      "sha256": "ba9c594935a89ddc2dcb5daadc219b6493cd37b002e4b62739f4ffb613ced5bd"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/cesium/references/3d-data-sources.md",
+      "bytes": 1494,
+      "sha256": "a48e9e361a2e52c3e0a714c3d9c49027fe430a9fe53e31f5caebd8503a6a2d85"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/cesium/references/3d-flyover-architecture.md",
+      "bytes": 8015,
+      "sha256": "67717e5cc0c25577c7c1abe4f4af6b6b4b717473e7c3ff68bd56ad018dda3e9e"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/cesium/references/3d-troubleshooting.md",
+      "bytes": 6798,
+      "sha256": "35b53fe40237899cf6f397b457a20be1b3902dbe404a7be047224589275a8d03"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/cesium/scripts/prep-cesium-path.mjs",
+      "bytes": 5722,
+      "sha256": "276296ec14ecf5b5c1f1694e2a5950a3df2174dd7768c44d55a3dbb41bddef45"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/cesium/TECHNIQUE.md",
+      "bytes": 3998,
+      "sha256": "74dfab6e9510ca021384ebfb9e995eaf5f2a372b0abb0ab9039bb0d678307e51"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/mapbox/references/render-stability.md",
+      "bytes": 3703,
+      "sha256": "7fc711afa379f7afc3401ffa98660e53a372e026d7090c0447194f892622ccbd"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/mapbox/TECHNIQUE.md",
+      "bytes": 13615,
+      "sha256": "144fa950811eca48afd4a3c46c6c2f6397f6eb6d941d7ece90ce49c70815e2c8"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/maplibre/references/render-stability.md",
+      "bytes": 3703,
+      "sha256": "7fc711afa379f7afc3401ffa98660e53a372e026d7090c0447194f892622ccbd"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/maplibre/TECHNIQUE.md",
+      "bytes": 13868,
+      "sha256": "edf65c0b966310db6bd69ac35d29aa2e776945bbf3f027b3bb24fd7de73d3f75"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/maptiler/assets/MapTilerVectorElement.ts",
+      "bytes": 2263,
+      "sha256": "8459596fd521f0a24e7645359e3abac158754d1a02189901ba3e64abc6d82379"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/maptiler/assets/sample-data/country-meta.json",
+      "bytes": 340669,
+      "sha256": "4d5839ef77492bb22ce432fe7138d13a3dc4f4db454539131a21c2bb3710a21a"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/maptiler/assets/sample-data/yarlung-flow.json",
+      "bytes": 13687,
+      "sha256": "6448cd1a1990d7fa61305371928cfa097b218f730d0d8ec6a3072ee97866a4fa"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/maptiler/assets/tokens.ts",
+      "bytes": 1290,
+      "sha256": "59544b61a8d00852a1865cd18dd9d5e2e77449c47a63f3dde6d35cd6b8efbfa8"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/maptiler/references/map-data-sources.md",
+      "bytes": 4889,
+      "sha256": "b11425a03e0ac423f82cad655eb35481adb41c7de0581bef0d82ebb59bcb6f7f"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/maptiler/references/map-explainer-architecture.md",
+      "bytes": 7000,
+      "sha256": "f12c26d2055ff8ed8756e8899af957b55f17504c94a26fee56ff821b2726996f"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/maptiler/references/map-geo-prep.md",
+      "bytes": 4183,
+      "sha256": "7b36cdcc3137c48657339ac9667802ef2e6079ede75f1b9beca9a906e6ce08aa"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/maptiler/references/render-stability.md",
+      "bytes": 3703,
+      "sha256": "7fc711afa379f7afc3401ffa98660e53a372e026d7090c0447194f892622ccbd"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/maptiler/scripts/prep-geo.mjs",
+      "bytes": 7755,
+      "sha256": "2affc2230115fd518c6483ef6f7f2b0516bc1224226a8eb9e62b3a8e66769f21"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/maptiler/TECHNIQUE.md",
+      "bytes": 4594,
+      "sha256": "a95f1e99ad7b2764555b9187f9c13301a383790f308f872f21a31448af2fa1f2"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/remotion-maps/techniques/static-map/TECHNIQUE.md",
+      "bytes": 1159,
+      "sha256": "1cbf74543e61fe4dcef574cec3a904b6dd2c07aa10ad5d40e1f0fde1470f2c40"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/sequencing.md",
+      "bytes": 3992,
+      "sha256": "9a4b6dedbf275004834c9e8abd1d554027b0ed3a6940a08d40a513903af85ecf"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/sfx.md",
+      "bytes": 1857,
+      "sha256": "f1da32a162c72a275ebe93c3345d617ca67d94082196929d9c7b7881fc06bade"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/silence-detection.md",
+      "bytes": 2619,
+      "sha256": "d772d5f2e1e4030da52b7b8f258219ba3523d9fcf2d3cc0968e09fa9dce88c4f"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/SKILL.md",
+      "bytes": 11182,
+      "sha256": "ee9c944f09d17d807c518d65dd3eb947044d640b40c8db218a0d6c18321943dc"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/text-highlights.md",
+      "bytes": 1903,
+      "sha256": "a4875cc779a357e11d7d8add56245ecee921954fc86c36ade2a58b8ce4f2864c"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/timing.md",
+      "bytes": 3421,
+      "sha256": "ded7e2fbf528fe19cdfda5c3eeef983f1bfc8409bb819c0ecd176afd7ba7619c"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/transitions.md",
+      "bytes": 7121,
+      "sha256": "2af74184c2bde1be094f1154c5d43561e1f9daae6242b2067f20e110c231a1c5"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/video-editing.md",
+      "bytes": 3494,
+      "sha256": "50ed471194a5027a997085c419f79a7b41be0392989e15ae041ba07dd14fde34"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-markup/voiceover.md",
+      "bytes": 3441,
+      "sha256": "abbd9b20ca6ede9d928a187bb53e9aad6b4a65290f3901731e43d6c115512a2c"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-multimedia/agents/openai.yaml",
+      "bytes": 324,
+      "sha256": "82282338fb5770af01e51c0d30f021586d5c31c80910d7f74c951a77d770847d"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-multimedia/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-multimedia/get-audio-duration.md",
+      "bytes": 1415,
+      "sha256": "04a1e12146554e6eaae4bacf64a90c37abb2ce09c0f8e25cfd0a910f998d26f5"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-multimedia/get-video-dimensions.md",
+      "bytes": 1694,
+      "sha256": "7e69da749a5682a9aee902d1d99496e883ef6f3349501b792a77e3ec21a16c75"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-multimedia/get-video-duration.md",
+      "bytes": 1437,
+      "sha256": "caf1f4400541a40c022b5ddaee570ceda25b427b8644cdc798472f1594963c83"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-multimedia/SKILL.md",
+      "bytes": 725,
+      "sha256": "3646cc6ea3b573ae363984f82f4d599b01c2e206edb5e741fda4b664089aa09c"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-render/agents/openai.yaml",
+      "bytes": 293,
+      "sha256": "7a90154102baf24497ba76f42197d0d4af743f030fa63b91174752919ff0f6ed"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-render/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-render/SKILL.md",
+      "bytes": 497,
+      "sha256": "0dbcd23fe8ea5ed3681668bf0d728c0bd52635f57222025c53f94c9bc09ce235"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-render/transparent-videos.md",
+      "bytes": 2373,
+      "sha256": "605d2e7ec91d17eec7ccdc9630edd0cae694b11494e6ecdddc9bec6ab3ae841a"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-saas/agents/openai.yaml",
+      "bytes": 290,
+      "sha256": "e868919ff25514a0e4a477f53988f71153f4215b92876be00e73b8b2404ec325"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-saas/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-saas/framework.md",
+      "bytes": 1209,
+      "sha256": "a4930939c701d5355500bb3aee0229baed2cff77ab99440765e68b9f74641405"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-saas/player.md",
+      "bytes": 975,
+      "sha256": "44e4bd7612b509e0a1324448abf82a86e4346340722574cada6e77e7e712d1fb"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-saas/rendering.md",
+      "bytes": 3410,
+      "sha256": "67e78587587c78b1c48aa0f9410e545ce6685b426643958120bb2429e7920352"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-saas/SKILL.md",
+      "bytes": 1084,
+      "sha256": "69aefa49a2760498da9a0778378c361ff5bb5415933b4ed12fc1b1e11f3523a4"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-studio/agents/openai.yaml",
+      "bytes": 244,
+      "sha256": "1e6fc5bc17e2544ed92a73e806530a35005993d4a79d258431f880371b7a1a4f"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-studio/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-studio/SKILL.md",
+      "bytes": 982,
+      "sha256": "93c237309b9a38f62767e546fe2e9bac0bfe9879c3ccb9f1a1bb2164d011509c"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-upgrade/agents/openai.yaml",
+      "bytes": 289,
+      "sha256": "b9f4169b00cffc0f3d5b2251c67b1fc49f63427436a1e63de7f1fa0390cdf293"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-upgrade/assets/remotion-icon.png",
+      "bytes": 1286,
+      "sha256": "662a084d72d99ab91b47c7a566dd0631f0ce0e4f0bf6032708c9200b0db09fd9"
+    },
+    {
+      "path": "plugins/remotion/skills/remotion-upgrade/SKILL.md",
+      "bytes": 1911,
+      "sha256": "b4f7784165d0284e02a019cd4531a4660163fc6b3c6d917723b4f295d352e188"
+    },
+    {
+      "path": "plugins/remotion/THIRD-PARTY-NOTICE.md",
+      "bytes": 230,
+      "sha256": "6df690c63b581be3d49e8a6d78649a70930a63a15f8482646a413f34ac6b4b0d"
+    },
+    {
+      "path": "react/index.html",
+      "bytes": 308,
+      "sha256": "65582b510ff09d67d7ca3c8fdbb946e6dcb3c3d8005a2a18a950da2b81386290"
+    },
+    {
+      "path": "react/public/branding/logo.png",
+      "bytes": 1481413,
+      "sha256": "7b3125d60a795dbf1bbdac54d92f74c0a1e6e2a73b9a4bbeb7556f77a9a573f8"
+    },
+    {
+      "path": "react/src/ConversationAvatar.jsx",
+      "bytes": 475,
+      "sha256": "6fb2ca4570986d6b78d65102958012a72df26b15ed19e9f7608957534a9dc3ca"
+    },
+    {
+      "path": "react/src/entry.jsx",
+      "bytes": 88,
+      "sha256": "4363c1f1a683d0fc02fd77d26fe9470eb214bf2f796758687a4f1f29bfe9d544"
+    },
+    {
+      "path": "react/src/expert-library.css",
+      "bytes": 9386,
+      "sha256": "9d18e34c83ba746fecbc4d74e109500bdd87c645ecc2cff78dbf4f390bf6ecbc"
+    },
+    {
+      "path": "react/src/ExpertSkillLibrary.jsx",
+      "bytes": 15589,
+      "sha256": "66dfc6bd17fee9e576843202439109eb1fc4b4165e3e62f9720998524fb9b465"
+    },
+    {
+      "path": "react/src/main.jsx",
+      "bytes": 145219,
+      "sha256": "698ca9b3c8784d63cf2284d3ac5215f182d436b04ad72f5406abd0b9bfa8e5e7"
+    },
+    {
+      "path": "react/src/style.css",
+      "bytes": 113011,
+      "sha256": "aafb2a7b420f741201a2ffad57689ffa6fa68ded88501089be5c8022e72ded37"
+    },
+    {
+      "path": "react/src/terminal-session.mjs",
+      "bytes": 1472,
+      "sha256": "c5a8488b8f207e487edb4f1a26ef3fda82b3a51b62ba2ebed439d31eff7dbb6f"
+    },
+    {
+      "path": "react/src/TerminalWorkspace.jsx",
+      "bytes": 6787,
+      "sha256": "def508394ad2aeb29666eb5f34b66319600633c0ac6fdd9dd127e7556da4a179"
+    },
+    {
+      "path": "README.md",
+      "bytes": 14068,
+      "sha256": "2a18fbe3953cd1b193bdf65453571a514a8fdbcf1bc19f22fb4edf813a1eb9b7"
+    },
+    {
+      "path": "scripts/check.mjs",
+      "bytes": 19929,
+      "sha256": "5370a507cc79beffe828c93257fffe2489ebf23b339e7071b9747ca4ade55640"
+    },
+    {
+      "path": "scripts/clean-release.mjs",
+      "bytes": 3309,
+      "sha256": "da25502e1d75ba85d3812151d04ae3f40b25b94c4803bee417d3cc8ecdb00961"
+    },
+    {
+      "path": "scripts/export-client.mjs",
+      "bytes": 7987,
+      "sha256": "675efae76cc34afc6159655a4cb13f0620c34cd5312864032feaf4eeae26480a"
+    },
+    {
+      "path": "scripts/package-win.mjs",
+      "bytes": 13664,
+      "sha256": "3dbbf3c430e3d0e2327e73b2d4d0d1b7bdbe27832e99e53da4aca3ebd58f9092"
+    },
+    {
+      "path": "scripts/verify-win.mjs",
+      "bytes": 8067,
+      "sha256": "f56317c2546bc663e4122fc5748022489adc5f13891ae88ef46c791f67c54dc4"
+    },
+    {
+      "path": "server.mjs",
+      "bytes": 35338,
+      "sha256": "0b85ec1075f29a984e9e8041a85dc49dcd3c2d88f1bd5c13fdef057ab68ab2c9"
+    },
+    {
+      "path": "test/account.test.mjs",
+      "bytes": 4929,
+      "sha256": "e3ad2c4d4e7e1f510b829b7e1fe291c66a771e9bd1f3f094d6c73b6ca5cfb097"
+    },
+    {
+      "path": "test/agent-workflow.test.mjs",
+      "bytes": 8507,
+      "sha256": "7a5dab3a56298256031502c2635ca6d0b225a69717bfe47e2aa4c2c682c17bc2"
+    },
+    {
+      "path": "test/client-env.test.mjs",
+      "bytes": 7412,
+      "sha256": "5e1c2f48b2450d9a5ca836f2963fc78e06507c8ba256863a3e6cf0fcf74770be"
+    },
+    {
+      "path": "test/conversation-avatar.test.mjs",
+      "bytes": 4477,
+      "sha256": "5b7557f5871bddc4121244ebedcf5e2a79d34812d0a825687f8261ffe20d44c1"
+    },
+    {
+      "path": "test/electron-package.test.mjs",
+      "bytes": 16428,
+      "sha256": "edb0eef74397e2b4a8fac9ec2e74159768dba25a1cb4fbbed9609f8bd8e37601"
+    },
+    {
+      "path": "test/export-client.test.mjs",
+      "bytes": 8516,
+      "sha256": "1dae9d302e5337389d83ba8f24c36ef92503ee7dc25d7bb3218d8cb85ea0a53a"
+    },
+    {
+      "path": "test/local-library.test.mjs",
+      "bytes": 1441,
+      "sha256": "f106352f5753c393a8b5a3770ffd944370478cad389776c3468983cc48a5aa43"
+    },
+    {
+      "path": "test/provider-settings.test.mjs",
+      "bytes": 2192,
+      "sha256": "e57d4e05267e87bd2ed8da7843967e6667c42267374f432ac4da1cba20767938"
+    },
+    {
+      "path": "test/session-compat.test.mjs",
+      "bytes": 1461,
+      "sha256": "c4072df654b60ea4d812bb65f9270a2a9378162574d5b0d88676403556d3d173"
+    },
+    {
+      "path": "test/session-queue.test.mjs",
+      "bytes": 1329,
+      "sha256": "3dfdde3e84f6eb60468862f388e1da2c94b01ca4423c1e5e85babe7833546294"
+    },
+    {
+      "path": "test/session-tool-replay.test.mjs",
+      "bytes": 1611,
+      "sha256": "72c36cd16451f046e4537f07f336fba92f447aaf4bb334cd03949ee00627fd49"
+    },
+    {
+      "path": "test/terminal-ui.test.mjs",
+      "bytes": 5944,
+      "sha256": "3289f803d23aacf2d6c6b47877ed4dfe67d536ec1770157bd680c487f0b92e72"
+    },
+    {
+      "path": "vite.config.js",
+      "bytes": 377,
+      "sha256": "8a0ad34978ea9910dd02c7c2c8fa2399c6535123fd79fc0a8e2b666e71db6449"
+    }
+  ],
+  "warnings": [
+    "基础凭据扫描不是完整安全或许可证审核；发布前人工检查源文件与第三方素材。"
+  ]
+}

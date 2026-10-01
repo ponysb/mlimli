@@ -1,0 +1,18 @@
+{
+  "name": "ffmpeg",
+  "version": "1.0.0",
+  "description": "工作区内的视频和音频处理：探测、转码、裁剪、拼接、提取音频和生成缩略图。",
+  "author": { "name": "MLI Agent" },
+  "license": "MIT",
+  "keywords": ["ffmpeg", "video", "audio", "media"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "FFmpeg 媒体处理",
+    "shortDescription": "在工作区内剪辑和转换音视频",
+    "longDescription": "使用本机 FFmpeg 处理工作区内的音频和视频文件。",
+    "developerName": "MLI Agent",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "defaultPrompt": ["探测这个视频的格式和时长", "把这段视频裁剪成适合发布的片段", "从视频中提取音频"]
+  }
+}

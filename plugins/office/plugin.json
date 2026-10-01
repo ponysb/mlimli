@@ -1,0 +1,7 @@
+{
+  "name": "office",
+  "version": "1.0.0",
+  "description": "Office 文档操作：docx/xlsx/pptx 读取与编辑（纯原生 OOXML），格式转换（COM / LibreOffice）",
+  "permissions": ["workspace-write", "com"],
+  "capabilities": []
+}

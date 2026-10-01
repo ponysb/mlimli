@@ -1,0 +1,26 @@
+# Provider credentials are local-only. Never commit these files.
+skills/**/.env
+skills/**/.env.*
+!skills/**/.env.example
+media-secrets/
+# Local credentials and execution data
+.env
+.env.*
+!.env.example
+config.json
+**/.agent/
+**/.agents/
+**/account-session.json
+node_modules/
+dist/
+dist-legacy/
+logs/
+workspace/
+release/
+*.log
+*.pem
+*.key
+
+# Private services are never part of the public client repository
+/server/
+/website/

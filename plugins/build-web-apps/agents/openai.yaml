@@ -1,0 +1,6 @@
+interface:
+  display_name: "Build Web Apps"
+  short_description: "Build frontend-focused web apps"
+  icon_small: "./assets/build-web-apps-small.svg"
+  icon_large: "./assets/app-icon.png"
+  default_prompt: "Build a high-quality frontend app with a polished user experience."

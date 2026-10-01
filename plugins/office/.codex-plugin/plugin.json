@@ -1,0 +1,18 @@
+{
+  "name": "office",
+  "version": "1.0.0",
+  "description": "读取和编辑 DOCX、XLSX、PPTX 文档，并支持格式转换。",
+  "author": { "name": "MLI Agent" },
+  "license": "MIT",
+  "keywords": ["office", "docx", "xlsx", "pptx"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Office 文档",
+    "shortDescription": "读取和编辑 Office 文档",
+    "longDescription": "使用原生 OOXML 读写 Office 文件，并在本机可用时调用 COM 或 LibreOffice 转换。",
+    "developerName": "MLI Agent",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "defaultPrompt": ["读取这个文档的内容", "修改文档中的指定内容", "把这个 Office 文件转换成 PDF"]
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "server": {
+    "port": 3000,
+    "host": "127.0.0.1"
+  },
+  "providers": [
+    {
+      "id": "demo-provider",
+      "name": "本地演示（mock）",
+      "protocol": "mock",
+      "baseUrl": "http://127.0.0.1",
+      "apiKey": ""
+    }
+  ],
+  "models": [
+    {
+      "id": "demo-model",
+      "providerId": "demo-provider",
+      "name": "演示模型（非真实 AI）",
+      "model": "mock",
+      "contextWindow": 128000,
+      "pricing": {
+        "inputPer1M": 0,
+        "outputPer1M": 0,
+        "cacheReadPer1M": 0,
+        "cacheCreationPer1M": 0,
+        "currency": "USD"
+      }
+    }
+  ],
+  "activeModelId": "demo-model",
+  "agent": {
+    "compactAtPercent": 75,
+    "toolTimeoutMs": 60000
+  },
+  "security": {
+    "workspaceRoot": "./workspace",
+    "permissionTimeoutMs": 300000
+  },
+  "account": {
+    "enabled": false,
+    "billing": {
+      "magicValuePerCurrencyUnit": 0,
+      "currency": "CNY"
+    }
+  },
+  "mcp": {
+    "servers": []
+  }
+}
