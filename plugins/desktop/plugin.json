@@ -1,6 +1,6 @@
 {
   "name": "desktop",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "桌面操作（仅 Windows）：截图、读窗口、聚焦、鼠标点击、键入文本、UIA 控件树。全部为 L3 敏感操作，需在会话中开启「桌面会话」。",
   "permissions": ["desktop"],
   "capabilities": ["desktop"]

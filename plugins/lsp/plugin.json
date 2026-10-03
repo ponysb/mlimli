@@ -1,0 +1,7 @@
+{
+  "name": "lsp",
+  "version": "0.2.0",
+  "description": "代码语言服务：按项目自动选择 TypeScript/JavaScript 或 Python LSP，提供诊断与代码导航。",
+  "permissions": ["workspace-read"],
+  "capabilities": ["lsp"]
+}

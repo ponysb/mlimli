@@ -1,28 +1,41 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { startRuntime } = require('./runtime.cjs');
+const smokeArgument = process.argv.find(argument => argument.startsWith('--mli-smoke-report='));
+function smokeStage(stage) {
+  if (smokeArgument) fs.appendFileSync(`${path.resolve(smokeArgument.slice('--mli-smoke-report='.length))}.startup.log`, `${stage}\n`);
+}
+smokeStage('entry');
+const { app, BrowserWindow, dialog, ipcMain, Menu, Notification, shell } = require('electron');
+smokeStage('electron');
+const { acquireRuntime } = require('./runtime.cjs');
+const { registerDebugConsole, observeDebugConsole } = require('./debug-console.cjs');
+const { userDataRoot } = require('../core/user-data.cjs');
 require('./compat.cjs').installCompatibility();
+smokeStage('modules');
 let server;
 let serverUrl;
 let mainWindow;
 let quitting = false;
+let runtimeConnection;
 const appIcon = path.join(__dirname, 'assets', 'icon.png');
 const dataArgument = process.argv.find(argument => argument.startsWith('--mli-data-dir='));
 const legacyRuntime = Number(process.versions.electron.split('.')[0]) <= 22;
-const dataRoot = dataArgument ? path.resolve(dataArgument.slice('--mli-data-dir='.length)) : path.join(app.getPath('appData'), legacyRuntime ? 'MoliCreationLegacy' : 'MoliCreation');
+const dataRoot = dataArgument ? path.resolve(dataArgument.slice('--mli-data-dir='.length)) : userDataRoot({ legacy: legacyRuntime });
+fs.mkdirSync(dataRoot, { recursive: true });
 app.setPath('userData', dataRoot);
 const ownsInstance = app.requestSingleInstanceLock();
+smokeStage(`instance:${ownsInstance}`);
 if (!ownsInstance) app.quit();
 app.on('second-instance', () => { if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.show(); mainWindow.focus(); } });
 async function createWindow() {
   const win = new BrowserWindow({ width: 1440, height: 920, minWidth: 1024, minHeight: 680, backgroundColor: '#ffffff', icon: appIcon, autoHideMenuBar: true, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false } });
   mainWindow = win;
+  observeDebugConsole(win.webContents);
   if (process.platform === 'win32' && fs.existsSync(appIcon)) win.setIcon(appIcon);
   win.setMenuBarVisibility(false);
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (event, url) => { if (new URL(url).origin !== serverUrl) event.preventDefault(); });
-  win.on('closed', () => { mainWindow = null; });
+  win.on('closed', () => { smokeStage('window-closed'); mainWindow = null; });
   await win.loadURL(serverUrl);
   const reportArgument = process.argv.find(argument => argument.startsWith('--mli-smoke-report='));
   if (reportArgument) {
@@ -35,16 +48,31 @@ async function createWindow() {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     if (!rendererText.includes('工作台')) throw new Error('前端工作台未成功渲染');
-    const report = { url: serverUrl, serverPid: server.pid, appPid: process.pid, dataRoot, packaged: app.isPackaged, title: win.getTitle(), arch: process.arch, electron: process.versions.electron, node: process.versions.node, chrome: process.versions.chrome, renderer: 'passed' };
+    const report = { url: serverUrl, serverPid: runtimeConnection.pid, appPid: process.pid, dataRoot, packaged: app.isPackaged, title: win.getTitle(), arch: process.arch, electron: process.versions.electron, node: process.versions.node, chrome: process.versions.chrome, renderer: 'passed' };
     fs.writeFileSync(reportFile, JSON.stringify(report, null, 2));
     const closeFile = `${reportFile}.close`;
     fs.watchFile(closeFile, { interval: 100 }, current => { if (current.mtimeMs > 0 && !win.isDestroyed()) win.close(); });
     win.on('closed', () => fs.unwatchFile(closeFile));
   }
 }
+registerDebugConsole(ipcMain, () => mainWindow);
 ipcMain.handle('choose-directory', async () => {
   const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] });
   return result.canceled ? null : result.filePaths[0];
+});
+ipcMain.handle('show-notification', async (_event, payload = {}) => {
+  if (!Notification.isSupported()) return false;
+  const title = String(payload.title || '魔力工作台').slice(0, 120);
+  const body = String(payload.body || '').slice(0, 500);
+  const notification = new Notification({ title, body, silent: false });
+  notification.on('click', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  });
+  notification.show();
+  return true;
 });
 ipcMain.handle('choose-media-files', async () => {
   const result = await dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'], filters: [{ name: '媒体资源', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'mp4', 'webm', 'mov', 'mp3', 'wav', 'ogg'] }] });
@@ -81,23 +109,32 @@ ipcMain.handle('open-workspace-file', async (_event, relativePath) => {
   return true;
 });
 if (ownsInstance) app.whenReady().then(async () => {
+  smokeStage('ready');
   app.setAppUserModelId(legacyRuntime ? 'com.molichuangzuo.app.legacy' : 'com.molichuangzuo.app');
   Menu.setApplicationMenu(null);
   const runtimeRoot = app.isPackaged ? path.join(process.resourcesPath, 'client') : path.join(__dirname, '..');
-  const runtime = startRuntime({ executable: process.execPath, runtimeRoot, dataRoot, packaged: app.isPackaged });
+  const runtime = await acquireRuntime({ executable: process.execPath, runtimeRoot, dataRoot, packaged: app.isPackaged });
+  runtimeConnection = runtime;
+  smokeStage('runtime');
   server = runtime.child;
-  const address = await runtime.ready;
-  serverUrl = address.url;
-  server.on('error', error => { if (!quitting) { dialog.showErrorBox('本地服务出错', error.message); app.quit(); } });
-  server.on('exit', () => { if (!quitting) { dialog.showErrorBox('本地服务已停止', `请重新打开应用。启动日志：${runtime.logFile}`); app.quit(); } });
+  serverUrl = runtime.url;
+  server?.on('error', error => { if (!quitting) { dialog.showErrorBox('本地服务出错', error.message); app.quit(); } });
+  server?.on('exit', () => { if (!quitting) { dialog.showErrorBox('本地服务已停止', `请重新打开应用。启动日志：${runtime.logFile}`); app.quit(); } });
   await createWindow();
   app.on('activate', () => { if (!mainWindow) createWindow().catch(error => dialog.showErrorBox('窗口启动失败', error.message)); });
-}).catch(error => {
+}).catch(async error => {
   quitting = true;
-  if (server) server.kill();
+  if (runtimeConnection) await runtimeConnection.release();
   if (process.argv.some(argument => argument.startsWith('--mli-smoke-report='))) console.error(error);
   else dialog.showErrorBox('魔力工作台启动失败', `${error.message}\n日志目录：${dataRoot}`);
   app.exit(1);
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-app.on('before-quit', () => { quitting = true; if (server) server.kill(); });
+app.on('before-quit', event => {
+  smokeStage(`before-quit:${quitting}`);
+  if (quitting || !runtimeConnection) return;
+  event.preventDefault();
+  quitting = true;
+  runtimeConnection.release().finally(() => { smokeStage('runtime-released'); app.quit(); });
+});
+app.on('will-quit', () => smokeStage('will-quit'));

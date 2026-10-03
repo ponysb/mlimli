@@ -37,3 +37,15 @@ test('new providers use direct API keys without creating an environment-variable
   assert.equal(result.provider.hasKey, true);
   assert.ok(!JSON.stringify(publicSettings()).includes('fixture-secret'));
 });
+
+test('model input capabilities survive saving and partial edits', () => {
+  const config = JSON.parse(example), model = config.models[0];
+  model.capabilities = { image: true, thinking: true };
+  setConfig(config);
+  const saved = applyCatalogPatch({ action: 'save_model', model: { ...model, capabilities: { file: true, pdf: true, audio: false } } }).model;
+  assert.deepEqual(saved.capabilities, { image: true, thinking: true, file: true, pdf: true, audio: false });
+  const edited = applyCatalogPatch({ action: 'save_model', model: { ...saved, capabilities: { file: false } } }).model;
+  assert.equal(edited.capabilities.file, false);
+  assert.equal(edited.capabilities.pdf, true);
+  assert.equal(edited.capabilities.image, true);
+});

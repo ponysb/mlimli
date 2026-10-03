@@ -8,12 +8,15 @@ import { buildSystemPrompt } from './prompts.mjs';
 import { authorize } from './permissions.mjs';
 import { maybeCompact } from './compact.mjs';
 import { discoverArtifacts, summarizeChanges, workspaceSnapshot } from './task-summary.mjs';
+import { primaryTaskArtifact } from './task-artifacts.mjs';
 import crypto from 'node:crypto';
 
 let cfg = { agent: {}, security: {} };
 export function setLoopConfig(c) { cfg = c; }
 
 const aborts = new Map();
+const activeSteps = new Map();
+export function runningStep(sessionId) { return activeSteps.get(sessionId) || null; }
 
 function clip(value, max = 12000) {
   const text = String(value ?? '');
@@ -54,7 +57,7 @@ export async function runTurn(session, userText, attachments = [], { clientMessa
   if (isRunning(sessionId)) { emit('error', { sessionId, message: '该会话正在运行中' }); return; }
 
   const slash = expandSlash(userText);
-  if (slash.kind === 'help') {
+  if (slash.kind === 'help' && !attachments.length && !queuedAttachments?.length) {
     const entry = session.append({ type: 'message', role: 'user', content: userText, clientMessageId: String(clientMessageId || '').slice(0, 80) || undefined });
     session.touchIndex();
     emit('user_message', { sessionId, text: userText, entry });
@@ -90,11 +93,13 @@ export async function runTurn(session, userText, attachments = [], { clientMessa
         status: reason === 'done' ? 'ok' : reason,
       });
       activeStep = null;
+      activeSteps.delete(sessionId);
     }
     const finishedAt = Date.now();
     const afterFiles = workspaceSnapshot();
     const files = summarizeChanges(beforeFiles, afterFiles);
     const artifacts = discoverArtifacts(afterFiles, lastAssistantText, files);
+    const primaryArtifact = reason === 'done' ? primaryTaskArtifact({ files, artifacts, summaryText: lastAssistantText, promptText }) : null;
     const durationMs = finishedAt - turnStartedAt;
     session.append({
       type: 'turn_end', turnId, reason, startedAt: turnStartedAt, finishedAt,
@@ -102,7 +107,7 @@ export async function runTurn(session, userText, attachments = [], { clientMessa
       errorDetails: turnErrorDetails || undefined,
     });
     const summary = session.append({
-      type: 'task_summary', turnId, reason, files, artifacts, title: summaryTitle(reason),
+      type: 'task_summary', turnId, reason, files, artifacts, primaryArtifact, title: summaryTitle(reason),
       durationMs, stepCount, toolCount, error: turnError || undefined,
       errorDetails: turnErrorDetails || undefined,
       summaryText: lastAssistantText.trim(),
@@ -150,7 +155,8 @@ export async function runTurn(session, userText, attachments = [], { clientMessa
 
       const stepStartedAt = Date.now();
       stepCount += 1;
-      activeStep = { step, startedAt: stepStartedAt, text: '', thinking: '' };
+      activeStep = { turnId, step, startedAt: stepStartedAt, text: '', thinking: '' };
+      activeSteps.set(sessionId, activeStep);
       session.append({ type: 'step_start', turnId, step, startedAt: stepStartedAt });
       session.touchIndex();
       emit('message_start', { sessionId, turnId, step, startedAt: stepStartedAt });
@@ -180,6 +186,7 @@ export async function runTurn(session, userText, attachments = [], { clientMessa
           startedAt: stepStartedAt, finishedAt: Date.now(), durationMs: Date.now() - stepStartedAt, status: 'ok',
         });
         activeStep = null;
+        activeSteps.delete(sessionId);
         if (injectAdjustments()) continue;
         finish('done');
         return;
@@ -234,7 +241,7 @@ export async function runTurn(session, userText, attachments = [], { clientMessa
             timeoutMs: cfg.agent?.toolTimeoutMs ?? 60000,
           });
           for (const h of getHooks().process_tool_result) {
-            try { result = (await h({ session, tool, args: call.args, result })) ?? result; } catch { /* 钩子异常不影响结果 */ }
+            try { result = (await h({ session, tool, args: call.args, result, signal })) ?? result; } catch { /* 钩子异常不影响结果 */ }
           }
         } catch (err) {
           result = { content: `[工具异常] ${err.message}`, status: 'error', errorDetails: { stage: 'tool_execution', name: err.name || 'Error', message: err.message, code: err.code || err.cause?.code || '', cause: err.cause?.message || '', tool: call.name, args: call.args } };
@@ -270,6 +277,7 @@ export async function runTurn(session, userText, attachments = [], { clientMessa
         status: signal.aborted ? 'aborted' : 'ok',
       });
       activeStep = null;
+      activeSteps.delete(sessionId);
     }
     finish('aborted');
   } catch (err) {
@@ -282,6 +290,7 @@ export async function runTurn(session, userText, attachments = [], { clientMessa
     }
   } finally {
     aborts.delete(sessionId);
+    activeSteps.delete(sessionId);
     if (!ended) finish(signal.aborted ? 'aborted' : 'done');
   }
 }

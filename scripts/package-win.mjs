@@ -7,6 +7,8 @@ import { createRequire } from 'node:module';
 import crypto from 'node:crypto';
 import { planClientExport } from './export-client.mjs';
 import clientEnvironment from '../core/client-env.cjs';
+import { copyTerminalDependencies, installNodeRuntime } from './terminal-package.mjs';
+import { buildTui } from './build-tui.mjs';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -58,9 +60,11 @@ export function stageWindowsClient({ root = ROOT, output, legacy = false } = {})
   }
   for (const entry of plan.entries) {
     if (entry.path.startsWith('electron/')) write(appDirectory, entry.path, entry.data);
-    else if (['server.mjs', 'config.example.json', 'LICENSE'].includes(entry.path) || /^(core|plugins)\//.test(entry.path)) write(runtimeDirectory, entry.path, entry.data);
+    else if (['server.mjs', 'config.example.json', 'LICENSE'].includes(entry.path) || /^(core|plugins|cli)\//.test(entry.path)) write(runtimeDirectory, entry.path, entry.data);
   }
+  for (const name of ['user-data.cjs', 'runtime-host.cjs']) write(appDirectory, `core/${name}`, fs.readFileSync(path.join(root, 'core', name)));
   write(runtimeDirectory, 'electron/compat.cjs', plan.entries.find(entry => entry.path === 'electron/compat.cjs').data);
+  write(runtimeDirectory, 'electron/runtime.cjs', plan.entries.find(entry => entry.path === 'electron/runtime.cjs').data);
   write(runtimeDirectory, 'client-defaults.env', Buffer.from(publicEnvironment));
   function copyAssets(directory, relative = 'dist') {
     if (fs.lstatSync(directory).isSymbolicLink()) throw new Error('前端构建目录不能包含符号链接');
@@ -77,11 +81,12 @@ export function stageWindowsClient({ root = ROOT, output, legacy = false } = {})
   copyAssets(path.join(root, frontend));
   const appManifest = { name: legacy ? `${manifest.name}-legacy` : manifest.name, version: manifest.version, description: manifest.description, main: 'electron/main.cjs', license: manifest.license, private: true };
   write(appDirectory, 'package.json', JSON.stringify(appManifest, null, 2));
-  write(runtimeDirectory, 'package.json', JSON.stringify({ name: 'mli-agent-runtime', private: true, type: 'module' }, null, 2));
+  write(runtimeDirectory, 'package.json', JSON.stringify({ name: 'mli-agent-runtime', version: manifest.version, private: true, type: 'module' }, null, 2));
+  const terminalDependencies = copyTerminalDependencies(runtimeDirectory);
   for (const dependency of ['core-js', 'undici', '@fastify/busboy', 'dotenv']) {
     write(runtimeDirectory, `licenses/${dependency.replace('/', '-')}.txt`, fs.readFileSync(path.join(ROOT, 'node_modules', dependency, 'LICENSE')));
   }
-  fs.writeFileSync(path.join(destination, 'PACKAGE-MANIFEST.json'), JSON.stringify({ scope: 'client-only', variant: legacy ? 'legacy-ia32' : 'modern-x64', version: manifest.version, files: records, warnings: plan.warnings }, null, 2));
+  fs.writeFileSync(path.join(destination, 'PACKAGE-MANIFEST.json'), JSON.stringify({ scope: 'client-only', variant: legacy ? 'legacy-ia32' : 'modern-x64', version: manifest.version, terminalDependencies, files: records, warnings: plan.warnings }, null, 2));
   return { destination, appDirectory, runtimeDirectory, manifest, legacy };
 }
 
@@ -131,8 +136,9 @@ export function windowsBuildConfig(stage, electronDist = path.join(ROOT, 'node_m
     productName: legacy ? '魔力工作台（兼容版）' : '魔力工作台',
     executableName: legacy ? 'MoliCreationLegacy' : 'MoliCreation',
     directories: { app: stage.appDirectory, output: path.join(stage.destination, 'artifacts') },
-    files: ['package.json', 'electron/**/*'],
-    extraResources: [{ from: stage.runtimeDirectory, to: 'client', filter: ['**/*'] }],
+    files: ['package.json', 'electron/**/*', 'core/**/*'],
+    extraResources: [{ from: stage.runtimeDirectory, to: 'client', filter: ['**/*'] }, ...(fs.existsSync(path.join(stage.destination, 'stage', 'node')) ? [{ from: path.join(stage.destination, 'stage', 'node'), to: 'node', filter: ['**/*'] }] : [])],
+    extraFiles: [{ from: path.join(stage.runtimeDirectory, 'cli', 'launchers', 'mli.cmd'), to: 'mli.cmd' }],
     asar: true,
     npmRebuild: false,
     electronVersion: legacy ? stage.manifest.devDependencies['electron-legacy'].split('@').at(-1) : stage.manifest.devDependencies.electron,
@@ -147,6 +153,7 @@ export function windowsBuildConfig(stage, electronDist = path.join(ROOT, 'node_m
       createStartMenuShortcut: true,
       shortcutName: legacy ? '魔力工作台（兼容版）' : '魔力工作台',
       deleteAppDataOnUninstall: false,
+      include: path.join(ROOT, 'electron', 'terminal-path.nsh'),
       artifactName: `MoliCreation-${legacy ? 'Legacy-Win7' : 'Modern'}-Setup-\${version}-\${arch}.\${ext}`,
     },
     portable: { artifactName: `MoliCreation-${legacy ? 'Legacy-Win7' : 'Modern'}-Portable-\${version}-\${arch}.\${ext}` },
@@ -175,6 +182,8 @@ async function main() {
       const electronDist = await ensureElectronDistribution(legacy);
       const stage = stageWindowsClient({ legacy, output: path.join(working, variant) });
       await bundleCompatibility(stage);
+      if (!legacy) await buildTui({ platform: 'win32', arch: 'x64', output: path.join(stage.runtimeDirectory, 'cli', 'bin') });
+      if (!legacy) await installNodeRuntime(path.join(stage.destination, 'stage', 'node'), { platform: 'win32', arch: 'x64' });
       const targets = args.includes('--dir') ? ['dir'] : args.includes('--portable') ? ['nsis', 'portable'] : ['nsis'];
       const config = windowsBuildConfig(stage, electronDist);
       config.win.target = targets;

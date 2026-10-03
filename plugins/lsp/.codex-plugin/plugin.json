@@ -1,0 +1,16 @@
+{
+  "name": "lsp",
+  "version": "0.2.0",
+  "description": "为 Agent 提供按需启动的 TypeScript/JavaScript 与 Python 语言服务。",
+  "author": { "name": "MLI Agent" },
+  "license": "MIT",
+  "keywords": ["lsp", "typescript", "javascript", "python", "code-intelligence"],
+  "interface": {
+    "displayName": "代码语言服务",
+    "shortDescription": "自动安装并使用项目语言服务器",
+    "longDescription": "按项目语言启动 LSP，向 Agent 提供诊断、定义、引用、类型和符号信息。",
+    "developerName": "MLI Agent",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Code Intelligence", "lsp"]
+  }
+}

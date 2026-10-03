@@ -12,7 +12,7 @@ export function estimateTokens(messages) {
     else if (Array.isArray(m.content)) {
       for (const p of m.content) {
         if (p.type === 'image') chars += IMAGE_TOKENS * 4;
-        else chars += (p.text ?? '').length;
+        else chars += (p.text ?? p.fallbackText ?? '').length;
       }
     }
     if (m.text) chars += m.text.length;
@@ -48,7 +48,7 @@ export async function maybeCompact(session, cfg, { force = false } = {}) {
   const res = await completeOnce({
     sessionId: session.id,
     messages: [
-      { role: 'user', content: `${SUMMARY_PROMPT}\n\n<对话历史>\n${JSON.stringify(messages, null, 1).slice(0, 60000)}\n</对话历史>` },
+      { role: 'user', content: `${SUMMARY_PROMPT}\n\n<对话历史>\n${JSON.stringify(messages, (key, value) => key === 'dataUrl' ? '[原始附件保存在会话中]' : value, 1).slice(0, 60000)}\n</对话历史>` },
     ],
   });
   session.append({ type: 'compaction', summary: res });

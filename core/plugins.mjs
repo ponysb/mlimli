@@ -12,6 +12,8 @@ import { mcpTool } from './mcp.mjs';
 import { getConfig } from './llm.mjs';
 import { getWorkspaceRoot } from './paths.mjs';
 import { listLocalSkills } from './local-skills.mjs';
+import { registerLanguageServer, resetLanguageServers } from './lsp.mjs';
+import { registerChannelAdapter } from './channels.mjs';
 
 export const PLUGINS_DIR = path.join(APP_ROOT, 'plugins');
 if (DATA_ROOT !== APP_ROOT && moduleRuntime.register) moduleRuntime.register('./plugin-resolver.mjs', import.meta.url, { data: { appRoot: APP_ROOT, dataRoot: DATA_ROOT, pluginsRoot: USER_PLUGINS_DIR } });
@@ -20,6 +22,7 @@ const state = {
   tools: new Map(),
   commands: new Map(), // '/report' → {description, template, plugin}
   hooks: { authorize_tool_call: [], process_tool_result: [], on_event: [] },
+  cleanups: new Set(),
   skills: [],
   loaded: [],
 };
@@ -42,21 +45,42 @@ const UI_DEFAULTS = {
 export async function uiRequest(session, kind, payload, timeoutMs = 120000) {
   if (!session?.id) return UI_DEFAULTS[kind] ?? null;
   const reqId = crypto.randomUUID().slice(0, 12);
-  emit('ui_request', { sessionId: session.id, request: { reqId, kind, ...payload } });
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
       uiPending.delete(reqId);
+      emit('ui_resolved', { sessionId: session.id, reqId });
       resolve(UI_DEFAULTS[kind] ?? null);
     }, timeoutMs);
-    uiPending.set(reqId, { resolve, timer });
+    const request = { reqId, kind, ...payload };
+    uiPending.set(reqId, { resolve, timer, sessionId: session.id, request });
+    emit('ui_request', { sessionId: session.id, request });
   });
 }
 
-export function resolveUiRequest(reqId, value) {
+export function pendingUiRequests(sessionId) {
+  return [...uiPending.values()].filter(item => item.sessionId === sessionId).map(item => item.request);
+}
+
+export function cancelUiRequests(sessionId) {
+  for (const [id, item] of uiPending) {
+    if (sessionId && item.sessionId !== sessionId) continue;
+    clearTimeout(item.timer);
+    uiPending.delete(id);
+    emit('ui_resolved', { sessionId: item.sessionId, reqId: id });
+    item.resolve(UI_DEFAULTS[item.request.kind] ?? null);
+  }
+}
+
+export function requestPluginUi(session, kind, payload, timeoutMs = 120000) {
+  return uiRequest(session, kind, payload, timeoutMs);
+}
+
+export function resolveUiRequest(reqId, value, sessionId) {
   const p = uiPending.get(reqId);
-  if (!p) return false;
+  if (!p || (sessionId && p.sessionId !== sessionId)) return false;
   clearTimeout(p.timer);
   uiPending.delete(reqId);
+  emit('ui_resolved', { sessionId: p.sessionId, reqId });
   p.resolve(value);
   return true;
 }
@@ -157,7 +181,14 @@ function makeSetupCtx(manifest) {
     pluginName: manifest.name,
     log: (...a) => console.log(`[plugin:${manifest.name}]`, ...a),
     ui: makeUi(null),
+    requestUi: (session, kind, payload, timeoutMs) => uiRequest(session, kind, payload, timeoutMs),
     registerTool(def) { registerToolDef(def, manifest.name, manifest); },
+    registerLanguageServer(def) { registerLanguageServer(def); },
+    registerChannelAdapter(def) { return registerChannelAdapter(def); },
+    registerCleanup(fn) {
+      if (typeof fn !== 'function') throw new Error('registerCleanup 需要函数');
+      state.cleanups.add(fn);
+    },
     registerCommand(name, spec) {
       const key = name.startsWith('/') ? name : `/${name}`;
       state.commands.set(key, { ...spec, plugin: manifest.name, name: key });
@@ -168,6 +199,15 @@ function makeSetupCtx(manifest) {
     },
     APP_ROOT,
   };
+}
+
+export function disposePlugins() {
+  const cleanups = [...state.cleanups];
+  state.cleanups.clear();
+  for (const cleanup of cleanups) {
+    try { cleanup(); } catch (error) { console.error(`[plugins] 清理失败：${error.message}`); }
+  }
+  resetLanguageServers();
 }
 
 async function importPlugin(entryFile, bust) {
@@ -204,10 +244,12 @@ function registerCore() {
 
 /** 加载（或热重载）全部插件 */
 export async function loadAll({ reload = false } = {}) {
+  disposePlugins();
   const bust = reload ? Date.now() : null;
   state.tools.clear();
   state.commands.clear();
   state.hooks = { authorize_tool_call: [], process_tool_result: [], on_event: [] };
+  state.cleanups = new Set();
   state.skills = [];
   state.loaded = [];
   registerCore();
@@ -226,6 +268,7 @@ export async function loadAll({ reload = false } = {}) {
     if (!manifestFile) continue;
     try {
       const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+      if (process.platform !== 'win32' && manifest.permissions?.includes('desktop')) continue;
       if (fs.existsSync(entryFile)) {
         const exported = await importPlugin(entryFile, bust);
         const setup = typeof exported === 'function' ? exported : exported?.setup;
@@ -294,6 +337,7 @@ export function expandSlash(text) {
 
 /** 执行工具的统一入口（含超时与信号） */
 export async function executeTool(tool, args, { session, signal, timeoutMs }) {
+  if (signal?.aborted) throw new Error('任务已停止');
   const ctx = {
     signal,
     session,
@@ -303,12 +347,15 @@ export async function executeTool(tool, args, { session, signal, timeoutMs }) {
     ui: makeUi(session),
   };
   const ac = new AbortController();
-  const onAbort = () => ac.abort();
+  let rejectAbort;
+  const cancelled = new Promise((_, reject) => { rejectAbort = reject; });
+  const onAbort = () => { ac.abort(); rejectAbort(new Error('任务已停止')); };
   signal?.addEventListener('abort', onAbort);
   let timer;
   try {
     const run = tool.run ?? tool.execute;
     const result = await Promise.race([
+      cancelled,
       run(args ?? {}, { ...ctx, signal: ac.signal }),
       new Promise((_, rej) => {
         timer = setTimeout(() => {

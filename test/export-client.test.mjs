@@ -49,7 +49,7 @@ function write(root, relativePath, value) {
 test('客户端发布清单包含完整本地运行代码，不含后台、官网或私有运行数据', () => {
   const plan = planClientExport(actualRoot);
   const paths = new Set(plan.entries.map(entry => entry.path));
-  for (const required of ['server.mjs', 'core/loop.mjs', 'react/src/main.jsx', 'electron/main.cjs',
+  for (const required of ['README.md', 'README.en.md', 'server.mjs', 'core/loop.mjs', 'react/src/main.jsx', 'electron/main.cjs',
     'plugins/office/lib/ooxml.mjs', 'plugins/desktop/plugin.mjs', 'plugins/ffmpeg/plugin.mjs', 'config.example.json']) {
     assert.ok(paths.has(required), required);
   }
@@ -61,6 +61,7 @@ test('客户端发布清单包含完整本地运行代码，不含后台、官�
     assert.notEqual(relativePath, 'config.json');
     assert.notEqual(relativePath, '.env');
   }
+  assert.equal(paths.has('docs/OPEN-SOURCE.md'), false, '内部发布说明不进入公开客户端');
   const clientPackage = JSON.parse(plan.entries.find(entry => entry.path === 'package.json').data);
   assert.equal(clientPackage.scripts.website, undefined);
   assert.equal(clientPackage.scripts['start:backend'], undefined);

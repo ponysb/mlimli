@@ -11,6 +11,7 @@ import { usageNumbers } from '../core/llm.mjs';
 import { parseOpenAIStream } from '../core/stream.mjs';
 import { shouldCompact } from '../core/compact.mjs';
 import { appendApiLog, getApiLog, listApiLogs, queryApiLogs } from '../core/api-logs.mjs';
+import { coreTools } from '../core/tools.mjs';
 import { pptxRenderSlides } from '../plugins/office/lib/ooxml.mjs';
 import { writeZip } from '../plugins/office/lib/zip.mjs';
 
@@ -44,6 +45,25 @@ test('本任务允许只复用相同命令或同一文件路径', async () => {
     assert.equal((await authorize({ session, tool: write, args: { path: 'a.html', content: 'second' } })).decision, 'rule');
     await authorize({ session, tool: write, args: { path: 'b.html', content: 'different' } });
     assert.equal(prompts, 4);
+  } finally { unsubscribe(); }
+});
+
+test('完全访问自动执行只读网络查询但仍保护桌面能力', async () => {
+  const session = { id: `auto-all-${Date.now()}`, mode: 'auto-all', desktopEnabled: false };
+  let prompts = 0;
+  const unsubscribe = onEvent((event) => {
+    if (event.type === 'permission_request' && event.sessionId === session.id) prompts += 1;
+  });
+  try {
+    const webFetch = coreTools.find((tool) => tool.name === 'web_fetch');
+    assert.ok(webFetch, '核心工具必须注册 web_fetch');
+    assert.deepEqual(await authorize({ session, tool: webFetch, args: { url: 'https://example.com' } }), { ok: true, decision: 'auto' });
+
+    const desktop = { name: 'desktop_click', permission: 'L3', capability: 'desktop' };
+    const blocked = await authorize({ session, tool: desktop, args: { x: 10, y: 20 }, timeoutMs: 10 });
+    assert.equal(blocked.ok, false);
+    assert.equal(blocked.decision, 'blocked');
+    assert.equal(prompts, 0);
   } finally { unsubscribe(); }
 });
 

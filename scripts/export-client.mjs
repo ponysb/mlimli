@@ -4,19 +4,24 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 export const CLIENT_FILES = [
-  'README.md', '.gitignore', '.env.example', 'config.example.json', 'package.json', 'package-lock.json', 'build-windows.cmd',
-  'vite.config.js', 'server.mjs', 'PLUGIN-COMPATIBILITY.md', 'docs/OPEN-SOURCE.md',
+  'README.md', 'README.en.md', '.gitignore', '.env.example', 'config.example.json', 'package.json', 'package-lock.json', 'build-windows.cmd',
+  'vite.config.js', 'server.mjs', 'PLUGIN-COMPATIBILITY.md',
   'scripts/check.mjs', 'scripts/export-client.mjs', 'scripts/package-win.mjs', 'scripts/verify-win.mjs', 'scripts/clean-release.mjs', 'docs/WINDOWS-PACKAGING.md',
+  'scripts/terminal-package.mjs', 'scripts/package-linux.mjs', 'scripts/package-mac.mjs', 'docs/TERMINAL.md', 'test/cli.test.mjs',
+  'scripts/build-tui.mjs', 'scripts/compile-tui.ts', 'scripts/test-tui.mjs', 'test/modern-tui.test.mjs', 'test/tui/interaction.test.tsx',
   'test/account.test.mjs', 'test/agent-workflow.test.mjs', 'test/export-client.test.mjs',
   'test/local-library.test.mjs', 'test/session-compat.test.mjs', 'test/session-queue.test.mjs',
   'test/session-tool-replay.test.mjs', 'test/conversation-avatar.test.mjs', 'test/electron-package.test.mjs', 'test/terminal-ui.test.mjs', 'test/provider-settings.test.mjs', 'test/client-env.test.mjs',
+  'test/terminal-dependencies.test.mjs',
+  'test/attachments.test.mjs', 'test/attachments-http.test.mjs',
+  'test/lsp.test.mjs', 'test/task-artifacts.test.mjs', 'test/debug-console.test.mjs',
 ];
 export const CLIENT_TREES = [
-  'core', 'react', 'electron',
+  'core', 'react', 'electron', 'cli',
   ...['desktop', 'office', 'ffmpeg', 'remotion', 'notion', 'build-web-apps',
-    'build-web-data-visualization', 'linear', 'google-drive', 'github'].map(name => `plugins/${name}`),
+    'build-web-data-visualization', 'linear', 'google-drive', 'github', 'feishu', 'dingtalk', 'lsp'].map(name => `plugins/${name}`),
 ];
-const CLIENT_SCRIPTS = ['start', 'check', 'test', 'dev:web', 'build:web', 'build:web:legacy', 'preelectron', 'electron', 'export:client', 'pack:win', 'dist:win', 'dist:win:modern', 'dist:win:legacy', 'dist:win:all', 'verify:win'];
+const CLIENT_SCRIPTS = ['start', 'tui', 'cli', 'build:tui', 'test:tui', 'check', 'test', 'dev:web', 'build:web', 'build:web:legacy', 'preelectron', 'electron', 'export:client', 'pack:win', 'dist:win', 'dist:win:modern', 'dist:win:legacy', 'dist:win:all', 'verify:win', 'dist:mac', 'dist:linux'];
 const EXCLUDED_DIRECTORIES = new Set(['node_modules', '.git', '.agent', '.agents', 'logs', 'dist', 'dist-legacy', 'release', 'storage', 'media-secrets']);
 const SOURCE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 

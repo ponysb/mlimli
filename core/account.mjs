@@ -8,6 +8,7 @@ let config = {};
 let current = null;
 let billingBlocked = false;
 let accountSessionCookie = '';
+let captchaRequestQueue = Promise.resolve();
 
 function accountConfig() {
   const value = config.account || {};
@@ -55,7 +56,6 @@ async function request(pathname, { method = 'GET', body, token, appSecret } = {}
   if (body !== undefined) headers['content-type'] = 'application/json';
   if (token) headers.authorization = `Bearer ${token}`;
   if (appSecret) headers['x-app-secret'] = appSecret;
-  if (accountSessionCookie) headers.cookie = accountSessionCookie;
   let response;
   try {
     response = await fetch(`${cfg.baseUrl}${pathname}`, {
@@ -64,22 +64,20 @@ async function request(pathname, { method = 'GET', body, token, appSecret } = {}
   } catch (error) {
     throw new Error(`无法连接账户服务：${error.message}`);
   }
-  const setCookie = typeof response.headers.getSetCookie === 'function'
-    ? response.headers.getSetCookie()[0]
-    : response.headers.get('set-cookie');
-  if (setCookie) accountSessionCookie = String(setCookie).split(';', 1)[0];
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.success === false) {
     const error = new Error(payload.error?.message || payload.error || `账户服务 HTTP ${response.status}`);
     error.status = response.status;
-    error.code = payload.error?.code || 'ACCOUNT_REQUEST_FAILED';
+    error.code = payload.error?.code || payload.code || 'ACCOUNT_REQUEST_FAILED';
     throw error;
   }
   return payload.data ?? payload;
 }
 
 export function setAccountConfig(value) {
+  const previousUrl = accountConfig().baseUrl;
   config = value || {};
+  if (previousUrl !== accountConfig().baseUrl) accountSessionCookie = '';
   if (current === null) loadStoredSession();
 }
 
@@ -143,7 +141,13 @@ export async function loginAccount(email, password) {
   return publicAccountStatus();
 }
 
-async function accountCaptchaRequest(pathname, body) {
+function accountCaptchaRequest(pathname, body) {
+  const pending = captchaRequestQueue.then(() => performCaptchaRequest(pathname, body));
+  captchaRequestQueue = pending.catch(() => {});
+  return pending;
+}
+
+async function performCaptchaRequest(pathname, body) {
   const cfg = accountConfig();
   const headers = { accept: 'application/json' };
   if (body !== undefined) { headers['content-type'] = 'application/json'; }
@@ -158,26 +162,29 @@ async function accountCaptchaRequest(pathname, body) {
   } catch (error) {
     throw new Error(`无法连接账户服务：${error.message}`);
   }
-  const setCookie = typeof response.headers.getSetCookie === 'function'
-    ? response.headers.getSetCookie()[0]
-    : response.headers.get('set-cookie');
-  if (setCookie) accountSessionCookie = String(setCookie).split(';', 1)[0];
+  const cookies = typeof response.headers.getSetCookie === 'function'
+    ? response.headers.getSetCookie()
+    : [response.headers.get('set-cookie') || ''];
+  const sessionCookie = cookies.find(cookie => /^connect\.sid=/.test(cookie));
+  if (sessionCookie && cfg.baseUrl === accountConfig().baseUrl) accountSessionCookie = sessionCookie.split(';', 1)[0];
   if (pathname.endsWith('/captcha')) {
     const svg = await response.text();
-    if (!response.ok) throw Object.assign(new Error('生成验证码失败'), { status: response.status });
+    if (!response.ok || !svg.includes('<svg')) throw Object.assign(new Error('生成验证码失败'), { status: response.ok ? 502 : response.status });
+    if (!accountSessionCookie) throw Object.assign(new Error('账户服务未建立验证码会话，请更新账户后台或检查 HTTPS 代理配置'), { status: 502 });
     return { svg };
   }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.success === false) {
     const error = new Error(payload.error?.message || payload.error || `账户服务 HTTP ${response.status}`);
     error.status = response.status;
-    error.code = payload.error?.code || 'ACCOUNT_REQUEST_FAILED';
+    error.code = payload.error?.code || payload.code || 'ACCOUNT_REQUEST_FAILED';
     throw error;
   }
   return payload.data ?? payload;
 }
 
 export function getAccountCaptcha() { return accountCaptchaRequest('/api/auth/captcha'); }
+export function checkAccountEmail(email) { return request('/api/auth/check-email', { method: 'POST', body: { email } }); }
 export function verifyAccountCaptcha(code) { return accountCaptchaRequest('/api/auth/verify-captcha', { code }); }
 export function sendRegisterCode(email) { return accountCaptchaRequest('/api/auth/send-register-code', { email }); }
 export function registerAccount(email, password, code) { return accountCaptchaRequest('/api/auth/register', { email, password, code }); }

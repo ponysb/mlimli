@@ -1,7 +1,20 @@
 // core/mcp.mjs —— MCP 兜底桥：stdio JSON-RPC 客户端 + search/describe/call 代理工具
 import { spawn } from 'node:child_process';
+import { APP_VERSION } from './version.mjs';
 
 const sessions = new Map();
+
+export function closeMcp() {
+  for (const session of sessions.values()) {
+    for (const pending of session.pending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error('运行时已关闭'));
+    }
+    session.pending.clear();
+    session.child.kill();
+  }
+  sessions.clear();
+}
 
 function feedJsonRpc(sess, chunk) {
   sess.buf += chunk;
@@ -74,7 +87,7 @@ async function connect(server) {
   await rpc(sess, 'initialize', {
     protocolVersion: '2024-11-05',
     capabilities: {},
-    clientInfo: { name: 'mli-agent', version: '1.0.0' },
+    clientInfo: { name: 'mli-agent', version: APP_VERSION },
   });
   send(sess, { jsonrpc: '2.0', method: 'notifications/initialized' });
   const listed = await rpc(sess, 'tools/list', {});

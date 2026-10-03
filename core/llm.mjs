@@ -3,6 +3,7 @@ import { parseOpenAIStream, parseResponsesStream, parseAnthropicStream, mockStre
 import { PROTOCOLS, createId, defaultBaseUrl, keyHint, normalizeProtocol } from './providers.mjs';
 import { appendApiLog, createApiLogId } from './api-logs.mjs';
 import { accountServerUrl, accountToken, listManagedModels, refreshAccount, settleApiUsage } from './account.mjs';
+import { nativeAttachment } from './attachment-types.mjs';
 
 const MANAGED_PROVIDER_ID = 'mli-managed';
 let catalogRefreshedAt = 0;
@@ -129,6 +130,7 @@ export function applyCatalogPatch(patch = {}) {
     item.name = String(patch.model?.name || item.model).trim() || item.model;
     item.contextWindow = Math.max(1000, Math.floor(Number(patch.model?.contextWindow) || 128000));
     item.pricing = normalizePricing(patch.model?.pricing);
+    if (patch.model?.capabilities) item.capabilities = { ...(item.capabilities || {}), ...Object.fromEntries(['image', 'file', 'pdf', 'audio', 'video', 'thinking', 'webSearch'].filter(key => Object.hasOwn(patch.model.capabilities, key)).map(key => [key, patch.model.capabilities[key] === true])) };
     if (patch.activate !== false || !config.activeModelId) config.activeModelId = item.id;
     syncLegacyProvider();
     return { model: publicModel(item), settings: publicSettings() };
@@ -197,14 +199,28 @@ export async function testProvider({ providerId, baseUrl, model, apiKey: overrid
 function openAITools(tools) { return tools.map((t) => t?.type === 'function' && t.function ? t : ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters ?? { type: 'object', properties: {} } } })); }
 function responseTools(tools) { return openAITools(tools).map((t) => ({ type: 'function', name: t.function.name, description: t.function.description, parameters: t.function.parameters, strict: false })); }
 function anthropicTools(tools) { return openAITools(tools).map((t) => ({ name: t.function.name, description: t.function.description, input_schema: t.function.parameters })); }
-function openAIParts(content) { return Array.isArray(content) ? content.map((p) => p.type === 'image' ? ({ type: 'image_url', image_url: { url: p.dataUrl } }) : ({ type: 'text', text: p.text || '' })) : String(content ?? ''); }
-function anthropicParts(content) { return Array.isArray(content) ? content.map((p) => p.type === 'image' ? ({ type: 'image', source: dataSource(p.dataUrl) }) : ({ type: 'text', text: p.text || '' })) : String(content ?? ''); }
+export function prepareModelMessages(messages, model, protocol) {
+  return messages.map(message => {
+    if (!Array.isArray(message.content) || message.role === 'tool') return message;
+    const content = message.content.flatMap(part => {
+      if (part.type === 'text') return [part];
+      const mime = part.mime || part.dataUrl?.match(/^data:([^;]+)/)?.[1] || '';
+      const dataUrl = nativeAttachment(part.type, mime, part.name, model.capabilities || {}, protocol) ? part.dataUrl : null;
+      if (!dataUrl) return [{ type: 'text', text: part.fallbackText || part.reference || `附件 ${part.name || ''} 无法通过当前模型原生输入，请使用文件工具处理。` }];
+      return [...(part.reference ? [{ type: 'text', text: part.reference }] : []), { ...part, mime, dataUrl }];
+    });
+    return { ...message, content };
+  });
+}
+function openAIParts(content) { return Array.isArray(content) ? content.map(p => p.type === 'image' ? { type: 'image_url', image_url: { url: p.dataUrl } } : p.type === 'file' ? { type: 'file', file: { filename: p.name, file_data: p.dataUrl } } : p.type === 'audio' ? { type: 'input_audio', input_audio: { data: p.dataUrl.split(',')[1], format: p.mime === 'audio/wav' ? 'wav' : 'mp3' } } : { type: 'text', text: p.text || '' }) : String(content ?? ''); }
+function anthropicParts(content) { return Array.isArray(content) ? content.map(p => p.type === 'image' ? { type: 'image', source: dataSource(p.dataUrl) } : p.type === 'file' ? { type: 'document', source: dataSource(p.dataUrl), title: p.name } : { type: 'text', text: p.text || '' }) : String(content ?? ''); }
 function dataSource(url = '') { const m = String(url).match(/^data:([^;]+);base64,(.+)$/); return m ? { type: 'base64', media_type: m[1], data: m[2] } : { type: 'url', url }; }
 function toOpenAI(messages) { return messages.map((m) => m.role === 'assistant' ? ({ role: 'assistant', content: m.text || null, ...(m.toolCalls?.length ? { tool_calls: m.toolCalls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.args || {}) } })) } : {}) }) : m.role === 'tool' ? ({ role: 'tool', tool_call_id: m.toolCallId, content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }) : ({ role: m.role, content: openAIParts(m.content) })); }
-function responseParts(content) { return Array.isArray(content) ? content.map((p) => p.type === 'image' ? ({ type: 'input_image', image_url: p.dataUrl }) : ({ type: 'input_text', text: p.text || '' })) : String(content ?? ''); }
+function responseParts(content) { return Array.isArray(content) ? content.map(p => p.type === 'image' ? { type: 'input_image', image_url: p.dataUrl } : p.type === 'file' ? { type: 'input_file', filename: p.name, file_data: p.dataUrl } : { type: 'input_text', text: p.text || '' }) : String(content ?? ''); }
 function toResponses(messages) { const out = []; for (const m of messages) { if (m.role === 'assistant') { if (m.text) out.push({ role: 'assistant', content: m.text }); for (const c of m.toolCalls || []) out.push({ type: 'function_call', call_id: c.id, name: c.name, arguments: JSON.stringify(c.args || {}) }); } else if (m.role === 'tool') out.push({ type: 'function_call_output', call_id: m.toolCallId, output: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }); else out.push({ role: m.role, content: responseParts(m.content) }); } return out; }
 function toAnthropic(messages) { const out = []; for (const m of messages) { if (m.role === 'assistant') { const content = []; if (m.text) content.push({ type: 'text', text: m.text }); for (const c of m.toolCalls || []) content.push({ type: 'tool_use', id: c.id, name: c.name, input: c.args || {} }); out.push({ role: 'assistant', content }); } else if (m.role === 'tool') out.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: m.toolCallId, content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }] }); else out.push({ role: m.role === 'system' ? 'user' : m.role, content: anthropicParts(m.content) }); } return out; }
-function buildRequest(provider, model, messages, system, tools, stream) {
+export function buildRequest(provider, model, messages, system, tools, stream) {
+  messages = prepareModelMessages(messages, model, provider.protocol);
   if (provider.protocol === 'openai-responses') { const body = { model: model.model, input: toResponses(messages), instructions: system || undefined, stream, store: false }; if (tools.length) body.tools = responseTools(tools); return { url: `${provider.baseUrl}/responses`, body }; }
   if (provider.protocol === 'anthropic') { const body = { model: model.model, messages: toAnthropic(messages), system: system || undefined, max_tokens: 4096, stream }; if (tools.length) body.tools = anthropicTools(tools); return { url: `${provider.baseUrl}/messages`, body }; }
   const body = { model: model.model, messages: toOpenAI(system ? [{ role: 'system', content: system }, ...messages] : messages), stream }; if (tools.length) body.tools = openAITools(tools); if (stream) body.stream_options = { include_usage: true }; return { url: `${provider.baseUrl}/chat/completions`, body };
@@ -281,7 +297,7 @@ export async function* chat({ messages, system, tools = [], signal, sessionId, s
     if (provider.id === MANAGED_PROVIDER_ID && !row.metrics.error) await refreshAccount().catch(() => {});
     appendApiLog(row);
   };
-  if (provider.protocol === 'mock') { try { for await (const e of mockStream(toOpenAI(messages), openAITools(tools))) { collect(e); yield e; } } finally { await finish(); } return; }
+  if (provider.protocol === 'mock') { try { for await (const e of mockStream(request.body.messages, openAITools(tools))) { collect(e); yield e; } } finally { await finish(); } return; }
   const key = resolvedKey(provider);
   if (!key && !provider.baseUrl.includes('127.0.0.1') && !provider.baseUrl.includes('localhost')) { const e = { type: 'error', message: `服务商“${provider.name}”未配置 API Key` }; collect(e); yield e; await finish({ error: e.message }); return; }
   const maxAttempts = 5;

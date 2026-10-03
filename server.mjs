@@ -9,9 +9,9 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, getConfig, applyProviderPatch, saveConfigFile, publicSettings, listRemoteModels, testProvider, refreshManagedCatalog } from './core/llm.mjs';
-import { setLoopConfig, runTurn, abortRun, isRunning, runDevTool, runtimeInfo, Session } from './core/loop.mjs';
-import { onEvent, emit } from './core/events.mjs';
-import { setWorkspaceRoot, APP_ROOT, DATA_ROOT, getWorkspaceRoot } from './core/paths.mjs';
+import { setLoopConfig, runTurn, abortRun, isRunning, runningStep, runDevTool, runtimeInfo, Session } from './core/loop.mjs';
+import { onEvent, emit, eventSequence } from './core/events.mjs';
+import { setWorkspaceRoot, APP_ROOT, DATA_ROOT, getWorkspaceRoot, isWorkspaceRoot } from './core/paths.mjs';
 import { listWorkspaces, addWorkspace, setActiveWorkspace, removeWorkspace, ensureWorkspace } from './core/workspaces.mjs';
 import { loadAll, pluginsInfo, resolveUiRequest, getCommands, setPlatformSkills } from './core/plugins.mjs';
 import { resolveRequest, listPersistentRules, replacePersistentRules, pendingRequest } from './core/permissions.mjs';
@@ -19,38 +19,41 @@ import { maybeCompact } from './core/compact.mjs';
 import { getApiLog, queryApiLogs } from './core/api-logs.mjs';
 import { copyWorkspaceItem, createWorkspaceItem, deleteWorkspaceItem, listDirectory, moveWorkspaceItem, openWorkspaceItem, rawWorkspaceFile, readWorkspaceFile, renameWorkspaceItem, revealWorkspaceItem, writeWorkspaceFile } from './core/workspace-files.mjs';
 import { addAsset, addAssetFromFile, assetFile, deleteAsset, listAssets } from './core/assets.mjs';
-import { createPurchaseOrder, getAccountCaptcha, listPurchasePackages, listPlatformLibrary, listAccountPlugins, installAccountPlugin, loginAccount, logoutAccount, publicAccountStatus, queryPurchaseOrder, refreshAccount, registerAccount, requireAccount, resetAccountPassword, sendRegisterCode, sendResetCode, setAccountConfig, updateAccountNickname, verifyAccountCaptcha } from './core/account.mjs';
+import { checkAccountEmail, createPurchaseOrder, getAccountCaptcha, listPurchasePackages, listPlatformLibrary, listAccountPlugins, installAccountPlugin, loginAccount, logoutAccount, publicAccountStatus, queryPurchaseOrder, refreshAccount, registerAccount, requireAccount, resetAccountPassword, sendRegisterCode, sendResetCode, setAccountConfig, updateAccountNickname, verifyAccountCaptcha } from './core/account.mjs';
 import { DENY_PATTERNS } from './core/tools.mjs';
 import { listExperts, getExpert, saveExpert, deleteExpert, setPlatformExperts } from './core/experts.mjs';
 import { saveLocalSkill, deleteLocalSkill, listLocalSkills } from './core/local-skills.mjs';
 import { convertOfficeFile } from './plugins/office/plugin.mjs';
+import { CONFIG_FILE, initializeRuntime, activeSequences, runningSessions, runSequence, assertWorkspaceIdle, stopSession, shutdownRuntime, scheduler } from './core/runtime.mjs';
+import { pendingUiRequests } from './core/plugins.mjs';
+import { stopProcessTree } from './core/process-tree.mjs';
+import { listChannels, channelEvents, channelAdapters, upsertChannel, removeChannel, connectChannel, disconnectChannel, disconnectAll as disconnectChannels, handleIncoming, initializeChannels } from './core/channels.mjs';
 
-const CONFIG_FILE = path.join(DATA_ROOT, 'config.json');
-const cfg = loadConfig(CONFIG_FILE);
-setLoopConfig(cfg);
-setAccountConfig(cfg);
-const initialWorkspace = ensureWorkspace(path.resolve(DATA_ROOT, cfg.security?.workspaceRoot ?? '.'));
-setWorkspaceRoot(initialWorkspace.path);
-await loadAll();
+const cfg = await initializeRuntime();
 
 const PORT = Number(process.env.MLI_AGENT_PORT || cfg.server?.port || 3000);
 const HOST = process.env.MLI_AGENT_HOST || cfg.server?.host || '127.0.0.1';
 const terminalRuns = new Map();
-const activeSequences = new Set();
-const runningSessions = new Map();
-async function runSequence(session, text, attachments, options = {}) {
-  if (activeSequences.has(session.id)) return;
-  activeSequences.add(session.id);
-  runningSessions.set(session.id, session);
-  try {
-    await runTurn(session, text, attachments, options);
-    while (session.queued().length) {
-      const lastTurn = session.chain().findLast((entry) => entry.type === 'turn_end');
-      if (lastTurn?.reason !== 'done') break;
-      const next = session.queued()[0];
-      await runTurn(session, next.text, [], { queuedId: next.queueId, savedAttachments: next.attachments });
-    }
-  } finally { activeSequences.delete(session.id); runningSessions.delete(session.id); }
+const runtimeHost = globalThis.mliRuntimeHost;
+const leases = new Map();
+let shuttingDown = false;
+function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  shutdownRuntime();
+  for (const id of terminalRuns.keys()) stopTerminalRun(id);
+  for (const response of sseClients) response.end();
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 3000).unref();
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+if (runtimeHost) {
+  const started = Date.now();
+  setInterval(() => {
+    for (const [id, touched] of leases) if (Date.now() - touched > 90000) leases.delete(id);
+    if (!leases.size && Date.now() - started > 90000) shutdown();
+  }, 15000).unref();
 }
 let platformLibraryLoadedAt = 0;
 let platformLibraryRefresh = null;
@@ -87,7 +90,7 @@ function startTerminalRun(command) {
     const isWindows = process.platform === 'win32';
     const child = isWindows
       ? spawn('cmd.exe', ['/d', '/s', '/c', `"chcp 65001 >nul & ${value}"`], { cwd, windowsHide: true, windowsVerbatimArguments: true })
-      : spawn('/bin/sh', ['-lc', value], { cwd });
+      : spawn('/bin/sh', ['-lc', value], { cwd, detached: true });
     run.child = child;
     run.status = 'running';
     emit('terminal_started', { terminalId: id, command: value, cwd });
@@ -125,7 +128,8 @@ function stopTerminalRun(id) {
     killer.on('error', () => { try { run.child.kill(); } catch {} });
     return true;
   }
-  try { run.child.kill('SIGINT'); setTimeout(() => { try { run.child.kill('SIGKILL'); } catch {} }, 750); } catch {}
+  stopProcessTree(run.child, 'SIGINT');
+  setTimeout(() => stopProcessTree(run.child, 'SIGKILL'), 750).unref();
   return true;
 }
 
@@ -174,9 +178,18 @@ function getSessionOr400(res, id) {
   return s;
 }
 
+function registeredWorkspace(workspacePath) {
+  const target = path.resolve(workspacePath);
+  return listWorkspaces().some((item) => {
+    const candidate = path.resolve(item.path);
+    return process.platform === 'win32' ? candidate.toLowerCase() === target.toLowerCase() : candidate === target;
+  });
+}
+
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json',
+  '.woff2': 'font/woff2',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
 };
 
@@ -212,6 +225,23 @@ async function route(req, res, url) {
   const m = (re) => pathname.match(re);
   let match;
 
+  if (pathname === '/api/runtime') return json(res, 200, { pid: process.pid, instance: runtimeHost?.instance, dataRoot: DATA_ROOT, workspace: getWorkspaceRoot() });
+  if (pathname === '/api/runtime/lease' && req.method === 'POST') {
+    const body = await readBody(req);
+    if (!runtimeHost || body.instance !== runtimeHost.instance || !/^[\w-]{16,80}$/.test(body.id || '')) return json(res, 409, { error: '运行时标识不匹配' });
+    if (body.release) {
+      const existed = leases.delete(body.id);
+      json(res, 200, { ok: true, remaining: leases.size });
+      if (existed && !leases.size) setImmediate(() => { if (!leases.size) shutdown(); });
+      return;
+    }
+    if (shuttingDown) return json(res, 503, { error: '运行时正在关闭' });
+    leases.set(body.id, Date.now());
+    return json(res, 200, { ok: true });
+  }
+  const clientWorkspace = req.headers['x-mli-workspace'];
+  if (clientWorkspace && !isWorkspaceRoot(String(clientWorkspace))) return json(res, 409, { error: '工作目录已被其他客户端切换，请重新连接当前项目', code: 'WORKSPACE_CHANGED' });
+
   // SSE
   if (pathname === '/api/event') {
     res.writeHead(200, {
@@ -227,7 +257,30 @@ async function route(req, res, url) {
 
   if (pathname === '/api/info') {
     Promise.all([refreshManagedCatalog(), refreshPlatformLibrary()]).then(() => emit('catalog_updated', { ok: true })).catch(() => {});
-    return json(res, 200, { ...runtimeInfo(), ...publicSettings(), account: publicAccountStatus(), plugins: pluginsInfo(), commands: getCommands(), experts: listExperts(), localSkills: listLocalSkills(), workspace: getWorkspaceRoot(), workspaces: listWorkspaces() });
+    return json(res, 200, { ...runtimeInfo(), ...publicSettings(), account: publicAccountStatus(), plugins: pluginsInfo(), commands: getCommands(), experts: listExperts(), localSkills: listLocalSkills(), workspace: getWorkspaceRoot(), workspaces: listWorkspaces(), channels: listChannels(), channelAdapters: channelAdapters() });
+  }
+  if (pathname === '/api/channels' && req.method === 'GET') return json(res, 200, { channels: listChannels(), adapters: channelAdapters(), events: channelEvents() });
+  if (pathname === '/api/channels' && req.method === 'POST') {
+    try { const body = await readBody(req); return json(res, 201, { channel: upsertChannel(body) }); }
+    catch (error) { return badRequest(res, error.message); }
+  }
+  if ((match = m(/^\/api\/channels\/([\w-]+)$/)) && req.method === 'PATCH') {
+    try { const body = await readBody(req); await disconnectChannel(match[1]); return json(res, 200, { channel: upsertChannel({ ...body, id: match[1] }) }); }
+    catch (error) { return badRequest(res, error.message); }
+  }
+  if ((match = m(/^\/api\/channels\/([\w-]+)$/)) && req.method === 'DELETE') {
+    try { return json(res, 200, { ok: await removeChannel(match[1]) }); } catch (error) { return badRequest(res, error.message); }
+  }
+  if ((match = m(/^\/api\/channels\/([\w-]+)\/(connect|disconnect)$/)) && req.method === 'POST') {
+    try { const channel = match[2] === 'connect' ? await connectChannel(match[1]) : (await disconnectChannel(match[1]), listChannels().find((item) => item.id === match[1])); return json(res, 200, { channel }); }
+    catch (error) { return json(res, 502, { error: error.message }); }
+  }
+  if ((match = m(/^\/api\/channels\/([\w-]+)\/test$/)) && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const result = await handleIncoming(match[1], { id: `test-${crypto.randomUUID()}`, senderId: String(body.senderId || 'test-user'), chatId: String(body.chatId || 'test-chat'), text: String(body.text || ''), isGroup: !!body.isGroup, mentionedBot: body.mentionedBot !== false, replyTarget: { test: true } });
+      return json(res, 202, result);
+    } catch (error) { return json(res, 400, { error: error.message }); }
   }
   if (pathname === '/api/library/experts' && req.method === 'POST') {
     try { return json(res, 200, saveExpert(await readBody(req))); } catch (error) { return badRequest(res, error.message); }
@@ -254,6 +307,10 @@ async function route(req, res, url) {
     } catch (error) {
       return json(res, error.status === 401 || error.status === 403 ? error.status : 502, { error: error.message, code: error.code });
     }
+  }
+  if (pathname === '/api/account/check-email' && req.method === 'POST') {
+    try { return json(res, 200, await checkAccountEmail(String((await readBody(req)).email || '').trim())); }
+    catch (error) { return json(res, error.status || 400, { error: error.message, code: error.code }); }
   }
   if (pathname === '/api/account/captcha' && req.method === 'GET') {
     try { return json(res, 200, await getAccountCaptcha()); }
@@ -327,9 +384,11 @@ async function route(req, res, url) {
   }
   if (pathname === '/api/workspaces' && req.method === 'GET') return json(res, 200, { workspaces: listWorkspaces(), active: getWorkspaceRoot() });
   if (pathname === '/api/workspaces' && req.method === 'POST') {
+    assertWorkspaceIdle();
     const body = await readBody(req); const item = addWorkspace(body); setWorkspaceRoot(item.path); cfg.security.workspaceRoot = item.path; saveConfigFile(CONFIG_FILE); setLoopConfig(cfg); emit('workspace_changed', { workspace: item }); return json(res, 200, { workspace: item, workspaces: listWorkspaces() });
   }
   if ((match = m(/^\/api\/workspaces\/([\w-]+)\/activate$/)) && req.method === 'POST') {
+    assertWorkspaceIdle();
     const item = setActiveWorkspace(match[1]); setWorkspaceRoot(item.path); cfg.security.workspaceRoot = item.path; saveConfigFile(CONFIG_FILE); setLoopConfig(cfg); emit('workspace_changed', { workspace: item }); return json(res, 200, { workspace: item, workspaces: listWorkspaces() });
   }
   if ((match = m(/^\/api\/workspaces\/([\w-]+)$/)) && req.method === 'DELETE') { removeWorkspace(match[1]); return json(res, 200, { ok: true, workspaces: listWorkspaces() }); }
@@ -354,6 +413,19 @@ async function route(req, res, url) {
   if (pathname === '/api/file/meta' && req.method === 'GET') {
     const file = rawWorkspaceFile(url.searchParams.get('path') || '');
     return json(res, 200, { path: file.relative, name: path.basename(file.abs), kind: file.kind, size: file.stat.size });
+  }
+  if (pathname.startsWith('/api/file/raw/') && req.method === 'GET') {
+    const file = rawWorkspaceFile(decodeURIComponent(pathname.slice('/api/file/raw/'.length)));
+    const html = /\.html?$/i.test(file.abs);
+    res.writeHead(200, {
+      'content-type': html ? 'text/html; charset=utf-8' : file.mime,
+      'content-length': file.stat.size,
+      'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(path.basename(file.abs))}`,
+      'cache-control': 'no-store',
+      ...(html ? { 'content-security-policy': 'sandbox allow-scripts allow-forms' } : {}),
+    });
+    fs.createReadStream(file.abs).pipe(res);
+    return true;
   }
   if (pathname === '/api/file/raw' && req.method === 'GET') {
     const file = rawWorkspaceFile(url.searchParams.get('path') || '');
@@ -434,6 +506,7 @@ async function route(req, res, url) {
     return json(res, 200, publicSettings());
   }
   if (pathname === '/api/settings' && req.method === 'POST') {
+    assertWorkspaceIdle();
     const body = await readBody(req);
     const info = applyProviderPatch(body);
     saveConfigFile(CONFIG_FILE);
@@ -471,7 +544,40 @@ async function route(req, res, url) {
     }
   }
   if (pathname === '/api/sessions') {
-    return json(res, 200, { sessions: Session.list() });
+    const sessions = Session.list().map((session) => ({
+      ...session,
+      running: isRunning(session.id) || activeSequences.has(session.id),
+    }));
+    return json(res, 200, { sessions });
+  }
+  if (pathname === '/api/schedules' && req.method === 'GET') {
+    return json(res, 200, { tasks: scheduler.list(), runs: scheduler.runs() });
+  }
+  if (pathname === '/api/schedules' && req.method === 'POST') {
+    const body = await readBody(req);
+    try {
+      const workspacePath = body.workspacePath || getWorkspaceRoot();
+      if (!registeredWorkspace(workspacePath)) return json(res, 400, { error: '请选择已登记的工作空间' });
+      const task = scheduler.create({ ...body, workspacePath });
+      return json(res, 201, { task });
+    } catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  if ((match = m(/^\/api\/schedules\/([\w-]+)$/)) && (req.method === 'PATCH' || req.method === 'POST')) {
+    const body = await readBody(req);
+    try {
+      if (body.workspacePath && !registeredWorkspace(body.workspacePath)) return json(res, 400, { error: '请选择已登记的工作空间' });
+      const task = scheduler.update(match[1], body);
+      return task ? json(res, 200, { task }) : notFound(res, '定时任务不存在');
+    } catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  if ((match = m(/^\/api\/schedules\/([\w-]+)$/)) && req.method === 'DELETE') {
+    return scheduler.remove(match[1]) ? json(res, 200, { ok: true }) : notFound(res, '定时任务不存在');
+  }
+  if ((match = m(/^\/api\/schedules\/([\w-]+)\/run$/)) && req.method === 'POST') {
+    const task = scheduler.list().find((item) => item.id === match[1]);
+    if (!task) return notFound(res, '定时任务不存在');
+    scheduler.runNow(match[1]).catch((error) => console.error(`[scheduler] 手动运行失败：${error.message}`));
+    return json(res, 202, { accepted: true, taskId: task.id });
   }
   if (pathname === '/api/session' && req.method === 'POST') {
     const body = await readBody(req);
@@ -482,7 +588,7 @@ async function route(req, res, url) {
 
   if ((match = m(/^\/api\/session\/([\w-]+)$/))) {
     const s = getSessionOr400(res, match[1]); if (!s) return;
-    if (req.method === 'GET') return json(res, 200, { ...s.snapshot(cfg.provider?.contextWindow ?? 128000), queue: s.queued(), running: isRunning(s.id), permission: pendingRequest(s.id) });
+    if (req.method === 'GET') return json(res, 200, { ...s.snapshot(cfg.provider?.contextWindow ?? 128000), queue: s.queued(), running: isRunning(s.id), activeStep: runningStep(s.id), eventSeq: eventSequence(), permission: pendingRequest(s.id), uiRequests: pendingUiRequests(s.id) });
     if (req.method === 'DELETE') {
       if (isRunning(s.id)) return json(res, 409, { error: '会话正在运行中，停止后才能删除' });
       Session.remove(s.id);
@@ -494,22 +600,27 @@ async function route(req, res, url) {
   if ((match = m(/^\/api\/session\/([\w-]+)\/message$/)) && req.method === 'POST') {
     const s = getSessionOr400(res, match[1]); if (!s) return;
     const body = await readBody(req);
-    if (!body.text?.trim() && !body.attachments?.length) return badRequest(res, '消息或图片不能为空');
+    if (!body.text?.trim() && !body.attachments?.length) return badRequest(res, '消息或附件不能为空');
     if (isRunning(s.id) || activeSequences.has(s.id)) return json(res, 409, { error: '会话正在运行中' });
     const managed = runtimeInfo().provider?.providerId === 'mli-managed';
     if (managed) {
       try { await requireAccount(); } catch (error) { return json(res, error.status || 401, { error: error.message, code: 'ACCOUNT_REQUIRED' }); }
     }
-    if (s.title === '新会话') s.setTitle(String(body.text || '').trim().slice(0, 40) || '图片任务');
-    runSequence(s, String(body.text || '').trim(), body.attachments || [], { clientMessageId: body.clientMessageId }).catch((e) => emit('error', { sessionId: s.id, message: e.message, details: { stage: 'turn_start', name: e.name || 'Error', message: e.message, stack: e.stack || '' } }));
+    let savedAttachments;
+    try { savedAttachments = s.saveAttachments(body.attachments || []); }
+    catch (error) { return badRequest(res, error.message); }
+    if (s.title === '新会话') s.setTitle(String(body.text || '').trim().slice(0, 40) || '附件任务');
+    runSequence(s, String(body.text || '').trim(), [], { clientMessageId: body.clientMessageId, savedAttachments }).catch((e) => emit('error', { sessionId: s.id, message: e.message, details: { stage: 'turn_start', name: e.name || 'Error', message: e.message, stack: e.stack || '' } }));
     return json(res, 202, { ok: true, running: true });
   }
   if ((match = m(/^\/api\/session\/([\w-]+)\/queue$/)) && req.method === 'POST') {
     const s = getSessionOr400(res, match[1]); if (!s) return;
     const body = await readBody(req);
-    if (!String(body.text || '').trim() && !body.attachments?.length) return badRequest(res, '消息或图片不能为空');
+    if (!String(body.text || '').trim() && !body.attachments?.length) return badRequest(res, '消息或附件不能为空');
     if (!isRunning(s.id) && !activeSequences.has(s.id)) return json(res, 409, { error: '会话未运行，请直接发送消息' });
-    const entry = s.enqueue(body.text, body.attachments || [], body.mode);
+    let entry;
+    try { entry = s.enqueue(body.text, body.attachments || [], body.mode); }
+    catch (error) { return badRequest(res, error.message); }
     emit('queue_updated', { sessionId: s.id, queue: s.queued() });
     return json(res, 202, { queue: s.queued(), entry });
   }
@@ -530,7 +641,7 @@ async function route(req, res, url) {
   if ((match = m(/^\/api\/session\/([\w-]+)\/attachment\/([\w-]+)$/)) && req.method === 'GET') {
     const s = getSessionOr400(res, match[1]); if (!s) return;
     const item = s.attachment(match[2]); if (!item) return notFound(res, '附件不存在');
-    res.writeHead(200, { 'content-type': item.mime, 'content-length': fs.statSync(item.path).size, 'cache-control': 'private, max-age=3600' }); fs.createReadStream(item.path).pipe(res); return true;
+    res.writeHead(200, { 'content-type': item.mime, 'content-length': fs.statSync(item.path).size, 'cache-control': 'private, max-age=3600', 'x-content-type-options': 'nosniff', 'content-disposition': `${item.type === 'file' ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(item.name)}` }); fs.createReadStream(item.path).pipe(res); return true;
   }
   if ((match = m(/^\/api\/session\/([\w-]+)\/attachment\/([\w-]+)\/asset$/)) && req.method === 'POST') {
     const s = getSessionOr400(res, match[1]); if (!s) return;
@@ -538,7 +649,7 @@ async function route(req, res, url) {
     const body = await readBody(req); return json(res, 200, { asset: addAssetFromFile(media.path, { title: body.title || media.name, source: 'conversation', metadata: { sessionId: s.id, attachmentId: media.attachmentId } }) });
   }
   if ((match = m(/^\/api\/session\/([\w-]+)\/abort$/)) && req.method === 'POST') {
-    return json(res, 200, { ok: abortRun(match[1]) });
+    return json(res, 200, { ok: stopSession(match[1]) });
   }
   if ((match = m(/^\/api\/session\/([\w-]+)\/permission\/([\w-]+)$/)) && req.method === 'POST') {
     const body = await readBody(req);
@@ -547,7 +658,7 @@ async function route(req, res, url) {
   }
   if ((match = m(/^\/api\/session\/([\w-]+)\/ui\/([\w-]+)$/)) && req.method === 'POST') {
     const body = await readBody(req);
-    const ok = resolveUiRequest(match[2], body.value);
+    const ok = resolveUiRequest(match[2], body.value, match[1]);
     return ok ? json(res, 200, { ok: true }) : notFound(res, 'UI 请求不存在或已处理');
   }
   if ((match = m(/^\/api\/session\/([\w-]+)\/mode$/)) && req.method === 'POST') {
@@ -576,6 +687,7 @@ async function route(req, res, url) {
     return json(res, 200, value);
   }
   if ((match = m(/^\/api\/session\/([\w-]+)\/workspace$/)) && req.method === 'POST') {
+    assertWorkspaceIdle();
     const s = getSessionOr400(res, match[1]); if (!s) return;
     if (isRunning(s.id)) return json(res, 409, { error: '会话运行中，不能修改工作目录' });
     const body = await readBody(req);
@@ -618,7 +730,10 @@ async function route(req, res, url) {
     }
   }
   if (pathname === '/api/plugins/reload' && req.method === 'POST') {
+    assertWorkspaceIdle();
+    await disconnectChannels();
     const info = await loadAll({ reload: true });
+    await initializeChannels();
     emit('plugins_reloaded', {});
     return json(res, 200, info);
   }
@@ -635,12 +750,13 @@ const server = http.createServer(async (req, res) => {
     }
     serveStatic(req, res, url.pathname);
   } catch (err) {
-    if (!res.writableEnded) json(res, 500, { error: err.message });
+    if (!res.writableEnded) json(res, err.status || 500, { error: err.message });
   }
 });
 
 server.listen(PORT, HOST, () => {
   const address = server.address();
+  runtimeHost?.publish(`http://127.0.0.1:${address.port}`);
   if (process.send) process.send({ type: 'mli-ready', port: address.port, pid: process.pid });
   const info = runtimeInfo();
   console.log(`\n  MLI Agent 已启动  →  http://${HOST}:${address.port}\n`);

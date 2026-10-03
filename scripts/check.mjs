@@ -30,7 +30,7 @@ async function syntaxCheck() {
       if (f.name === 'node_modules' || f.name === '.agent') continue;
       const p = path.join(dir, f.name);
       if (f.isDirectory()) walk(p);
-      else if (f.name.endsWith('.mjs')) files.push(p);
+      else if (/\.(?:mjs|cjs)$/.test(f.name)) files.push(p);
     }
   }
   walk(APP_ROOT);
@@ -203,7 +203,7 @@ async function main() {
     setConfig({ provider: { type: 'openai', baseUrl: 'http://127.0.0.1:1/v1', model: 'test', contextWindow: 32000 }, mcp: { servers: [] } });
     const info = await loadAll();
     const names = getTools().map((t) => t.name);
-    for (const n of ['read_file', 'write_file', 'bash', 'grep', 'find', 'web_fetch', 'mcp', 'office_read', 'office_edit']) {
+    for (const n of ['read_file', 'write_file', 'bash', 'grep', 'find', 'web_fetch', 'mcp', 'office_read', 'office_edit', 'lsp', 'lsp_status']) {
       if (!names.includes(n)) throw new Error(`missing tool ${n} (have ${names.join(',')})`);
     }
     if (!getSkills().some((s) => s.path.includes('office'))) throw new Error('office skill missing');

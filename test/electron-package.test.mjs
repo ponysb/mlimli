@@ -100,6 +100,8 @@ test('Windows staging only contains public runtime files and no private services
   }
   assert.ok(record.files.includes('client/server.mjs'));
   assert.ok(record.files.includes('client/core/loop.mjs'));
+  assert.ok(record.files.includes('client/electron/runtime.cjs'));
+  assert.ok(record.files.includes('client/cli/main.cjs'));
   assert.ok(record.files.includes('client/dist/branding/logo.png'));
   assert.ok(record.files.includes('client/licenses/dotenv.txt'));
   assert.ok(record.files.includes('client/LICENSE'));
@@ -142,10 +144,11 @@ test('self-contained compatibility bundle supports missing web APIs and streamin
   await bundleCompatibility(stage);
   const compatibility = path.join(stage.appDirectory, 'electron', 'compat.cjs');
   const script = [
-    'delete globalThis.fetch; delete globalThis.ReadableStream; delete Array.prototype.findLast;',
+    'delete globalThis.fetch; delete globalThis.ReadableStream; delete globalThis.structuredClone; delete Array.prototype.findLast;',
     'require(', JSON.stringify(compatibility), ').installCompatibility();',
     "const assert = require('node:assert/strict'); const http = require('node:http');",
     "assert.equal([1, 2, 3].findLast(value => value < 3), 2); assert.equal(typeof ReadableStream, 'function');",
+    "const source = { nested: [1], bytes: new Uint8Array([7, 8]) }; source.self = source; const copy = structuredClone(source, { transfer: [source.bytes.buffer] }); assert.equal(copy.self, copy); assert.notEqual(copy.nested, source.nested); assert.equal(copy.bytes[0], 7); assert.equal(source.bytes.byteLength, 0); assert.throws(() => structuredClone(() => {}), { name: 'DataCloneError' });",
     "const server = http.createServer((request, response) => { response.writeHead(200, { 'content-type': 'text/event-stream' }); response.write('data: first\\n'); setTimeout(() => response.end('data: second\\n'), 10); }); server.keepAliveTimeout = 1;",
     "server.listen(0, '127.0.0.1', async () => { try { const response = await fetch('http://127.0.0.1:' + server.address().port, { signal: AbortSignal.timeout(2000) }); assert.equal(response.headers.get('content-type'), 'text/event-stream'); const reader = response.body.getReader(); const decoder = new TextDecoder(); let text = ''; for (;;) { const chunk = await reader.read(); if (chunk.done) break; text += decoder.decode(chunk.value, { stream: true }); } assert.equal(text, 'data: first\\ndata: second\\n'); console.log(JSON.stringify({ node: process.versions.node, arch: process.arch, streaming: 'passed' })); } catch (error) { console.error(error); process.exitCode = 1; } finally { server.close(); } });",
   ].join('');

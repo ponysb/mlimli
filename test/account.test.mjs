@@ -85,3 +85,44 @@ test('新版魔力值按六位小数计算，新配置优先，旧字段仅作�
   account.setAccountConfig({ account: { billing: { magicValuePerCurrencyUnit: 0, pointsPerCurrencyUnit: 100, currency: 'CNY' } } });
   assert.equal(account.magicValueForCost(1, 'CNY'), 0);
 });
+test('验证码代理串行刷新、保存正确的 Cookie，普通账户请求不覆盖验证码会话', async t => {
+  let generation = 0;
+  const cookies = [];
+  const server = http.createServer(async (req, res) => {
+    const chunks = []; for await (const chunk of req) chunks.push(chunk);
+    const body = chunks.length ? JSON.parse(Buffer.concat(chunks)) : {};
+    const send = (status, value) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(value)); };
+    if (req.url === '/api/auth/captcha') {
+      cookies.push(req.headers.cookie || '');
+      generation++;
+      res.writeHead(200, { 'content-type': 'image/svg+xml', 'set-cookie': ['tracking=unrelated; Path=/', 'connect.sid=captcha-session; Path=/; HttpOnly'] });
+      return res.end('<svg><text>code-' + generation + '</text></svg>');
+    }
+    if (req.url === '/api/auth/check-email') {
+      res.writeHead(200, { 'content-type': 'application/json', 'set-cookie': 'connect.sid=unrelated-session; Path=/' });
+      return res.end(JSON.stringify({ success: true, exists: body.email === 'taken@example.com' }));
+    }
+    if (['/api/auth/verify-captcha', '/api/auth/send-register-code'].includes(req.url)) {
+      assert.equal(req.headers.cookie, 'connect.sid=captcha-session');
+      return send(200, { success: true });
+    }
+    send(404, { error: 'missing' });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
+  account.setAccountConfig({ account: { baseUrl: 'http://127.0.0.1:' + server.address().port } });
+  const images = await Promise.all([account.getAccountCaptcha(), account.getAccountCaptcha()]);
+  assert.match(images[0].svg, /code-1/); assert.match(images[1].svg, /code-2/);
+  assert.deepEqual(cookies, ['', 'connect.sid=captcha-session']);
+  assert.equal((await account.checkAccountEmail('taken@example.com')).exists, true);
+  assert.equal((await account.verifyAccountCaptcha('code-2')).success, true);
+  assert.equal((await account.sendRegisterCode('new@example.com')).success, true);
+});
+
+test('验证码代理发现后台未下发会话 Cookie 时直接报告配置问题', async t => {
+  const server = http.createServer((req, res) => { res.writeHead(200, { 'content-type': 'image/svg+xml' }); res.end('<svg/>'); });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
+  account.setAccountConfig({ account: { baseUrl: 'http://127.0.0.1:' + server.address().port } });
+  await assert.rejects(account.getAccountCaptcha(), /未建立验证码会话/);
+});

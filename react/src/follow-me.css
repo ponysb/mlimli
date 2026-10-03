@@ -1,0 +1,25 @@
+.sidebar-footer-actions { display: flex; gap: 4px; }
+.sidebar-footer-actions > button { display: inline-flex; align-items: center; justify-content: center; flex: 1; gap: 7px; min-width: 0; padding: 8px 5px; color: #515966; border-radius: 7px; }
+.sidebar-footer-actions > button:hover, .sidebar-footer-actions > button.active { background: var(--sidebar-hover); color: var(--ink); }
+.follow-me-dialog { width: min(540px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; padding: 24px; color: var(--ink); border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: 0 24px 80px #182d2630; }
+.follow-me-dialog::backdrop { background: #172b2359; }
+.follow-me-dialog header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.follow-me-dialog h2 { margin: 0; font-size: 20px; }
+.follow-me-dialog p { margin: 7px 0 20px; color: var(--muted); font-size: 12px; }
+.follow-me-dialog header button { display: grid; place-items: center; padding: 5px; border-radius: 6px; }
+.follow-me-dialog header button:hover { background: var(--sidebar-hover); }
+.follow-me-links { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.follow-me-links a { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 12px; color: var(--ink); text-decoration: none; border: 1px solid var(--line); border-radius: 9px; }
+.follow-me-links a:hover { background: #f5f9f7; border-color: #b9d1c3; }
+.follow-platform { display: grid; place-items: center; flex: 0 0 32px; height: 32px; border-radius: 8px; font-weight: 700; }
+.follow-platform.bilibili { background: #ecf7fc; color: #2383a9; }
+.follow-platform.xiaohongshu { background: #fff0f2; color: #c84359; }
+.follow-me-links a > span:nth-child(2) { display: grid; flex: 1; gap: 4px; }
+.follow-me-links b, .follow-me-codes b { font-size: 13px; }
+.follow-me-links small, .follow-me-codes small { color: var(--muted); font-size: 11px; }
+.follow-me-links svg { flex-shrink: 0; color: var(--muted); }
+.follow-me-codes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px; }
+.follow-me-codes figure { margin: 0; min-width: 0; text-align: center; }
+.follow-me-codes img { display: block; width: 100%; height: 196px; object-fit: contain; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+.follow-me-codes figcaption { display: grid; gap: 5px; margin-top: 10px; }
+@media (max-width: 440px) { .follow-me-dialog { padding: 18px; } .follow-me-links { grid-template-columns: 1fr; } .follow-me-codes { gap: 10px; } .follow-me-codes img { height: 158px; } }

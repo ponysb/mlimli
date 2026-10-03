@@ -1,0 +1,25 @@
+.whiteboard-layer { position: fixed; z-index: 90; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(27,33,42,.34); }
+.whiteboard-dialog { display: grid; grid-template-rows: auto minmax(0,1fr) auto; width: min(1440px,100%); height: calc(100dvh - 40px); max-height: 1000px; min-width: 0; overflow: hidden; outline: none; border: 1px solid #cfd6df; border-radius: 8px; background: #fff; box-shadow: 0 16px 50px #18202a33; }
+.whiteboard-header { display: flex; align-items: center; gap: 20px; min-height: 54px; padding: 8px 16px; border-bottom: 1px solid #e1e5eb; }
+.whiteboard-header h2 { margin: 0; flex: none; font-size: 16px; }
+.whiteboard-template-actions, .whiteboard-header-actions { display: flex; gap: 6px; align-items: center; }
+.whiteboard-header-actions { margin-left: auto; flex: none; }
+.whiteboard-header button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; min-width: 32px; padding: 6px 9px; border-radius: 5px; background: #f3f5f7; font-size: 12px; white-space: nowrap; }
+.whiteboard-header button:hover { background: #e8edf0; }
+.whiteboard-header button:disabled, .whiteboard-send:disabled { opacity: .45; cursor: not-allowed; }
+.whiteboard-editor { min-height: 0; min-width: 0; height: 100%; position: relative; }
+.whiteboard-editor .excalidraw { --color-primary: #287856; --color-primary-darker: #1e6045; --color-primary-light: #e8f3ed; --color-primary-light-darker: #d4e7dc; --color-brand-hover: #e8f3ed; }
+.whiteboard-editor .excalidraw button, .whiteboard-editor .excalidraw input { font-family: inherit; }
+.whiteboard-footer { display: flex; gap: 12px; align-items: center; justify-content: space-between; min-height: 54px; padding: 9px 16px; border-top: 1px solid #e1e5eb; }
+.whiteboard-footer > span { color: #b23e3e; font-size: 12px; min-width: 0; }
+.whiteboard-send { display: inline-flex; flex: none; align-items: center; gap: 7px; padding: 8px 13px; border-radius: 5px; background: #287856; color: white; font-size: 12px; }
+.whiteboard-confirm-layer { position: absolute; z-index: 1; inset: 0; display: grid; place-items: center; padding: 16px; background: #18202a55; }
+.whiteboard-confirm { width: min(480px,100%); padding: 20px; border: 1px solid #cfd6df; border-radius: 8px; background: #fff; box-shadow: 0 12px 40px #18202a33; }
+.whiteboard-confirm h3 { margin: 0; font-size: 16px; }
+.whiteboard-confirm p { margin: 12px 0 20px; font-size: 13px; line-height: 1.6; color: #626d78; }
+.whiteboard-confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.whiteboard-confirm-actions button { display: inline-flex; gap: 6px; align-items: center; padding: 8px 10px; border: 1px solid #d6dfe3; border-radius: 5px; font-size: 12px; background: #fff; }
+.whiteboard-confirm-actions button:hover { background: #f0f4f2; }
+.whiteboard-confirm-actions .whiteboard-confirm-primary { background: #287856; border-color: #287856; color: #fff; }
+.whiteboard-confirm-actions .whiteboard-confirm-primary:hover { background: #1e6045; }
+@media (max-width: 680px) { .whiteboard-layer { padding: 6px; }.whiteboard-dialog { height: calc(100dvh - 12px); }.whiteboard-header { flex-wrap: wrap; gap: 8px; padding: 8px; }.whiteboard-header h2 { font-size: 14px; }.whiteboard-template-actions { gap: 3px; }.whiteboard-header button { padding: 6px; }.whiteboard-footer { padding: 8px; } }

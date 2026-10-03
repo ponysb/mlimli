@@ -9,16 +9,56 @@ export const DATA_ROOT = process.env.MLI_AGENT_DATA_DIR ? path.resolve(process.e
 export const USER_PLUGINS_DIR = path.join(DATA_ROOT, 'plugins');
 
 let workspaceRoot = APP_ROOT;
+let ownedWorkspaceLock;
+
+function releaseWorkspaceLock() {
+  if (!ownedWorkspaceLock) return;
+  try {
+    const record = JSON.parse(fs.readFileSync(ownedWorkspaceLock, 'utf8'));
+    if (record.instance === globalThis.mliRuntimeHost?.instance) fs.unlinkSync(ownedWorkspaceLock);
+  } catch {}
+  ownedWorkspaceLock = undefined;
+}
+process.once('exit', releaseWorkspaceLock);
+
+function claimWorkspace(root) {
+  const owner = globalThis.mliRuntimeHost;
+  if (!owner) return;
+  const directory = path.join(root, '.agent');
+  fs.mkdirSync(directory, { recursive: true });
+  const file = path.join(directory, 'runtime-lock.json');
+  if (ownedWorkspaceLock && norm(file) === norm(ownedWorkspaceLock)) return;
+  const record = JSON.stringify({ pid: process.pid, instance: owner.instance });
+  try { fs.writeFileSync(file, record, { flag: 'wx', mode: 0o600 }); }
+  catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+    let previous;
+    try { previous = JSON.parse(fs.readFileSync(file, 'utf8')); }
+    catch { throw new Error('项目运行时正在启动，请稍后重试'); }
+    if (previous.instance === owner.instance) return;
+    let running = false;
+    try { process.kill(previous.pid, 0); running = true; } catch (failure) { running = failure.code === 'EPERM'; }
+    if (running) throw new Error('此项目已由另一个运行时占用，请使用同一用户配置目录连接');
+    fs.unlinkSync(file);
+    fs.writeFileSync(file, record, { flag: 'wx', mode: 0o600 });
+  }
+  releaseWorkspaceLock();
+  ownedWorkspaceLock = file;
+}
 
 export function setWorkspaceRoot(root) {
-  workspaceRoot = path.resolve(root);
-  fs.mkdirSync(workspaceRoot, { recursive: true });
+  const resolved = path.resolve(root);
+  fs.mkdirSync(resolved, { recursive: true });
+  claimWorkspace(resolved);
+  workspaceRoot = resolved;
   return workspaceRoot;
 }
 
 export function getWorkspaceRoot() {
   return workspaceRoot;
 }
+
+export function isWorkspaceRoot(root) { return norm(root) === norm(workspaceRoot); }
 
 /** 相对/绝对路径 → 工作区内绝对路径；越界（..、符号链接逃逸、盘符切换）直接抛错 */
 export function resolveInWorkspace(p, { write = false } = {}) {

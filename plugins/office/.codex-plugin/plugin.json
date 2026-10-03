@@ -1,6 +1,6 @@
 {
   "name": "office",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "读取和编辑 DOCX、XLSX、PPTX 文档，并支持格式转换。",
   "author": { "name": "MLI Agent" },
   "license": "MIT",

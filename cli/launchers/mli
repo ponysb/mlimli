@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+launcher=$0
+while [ -L "$launcher" ]; do
+  parent=$(CDPATH= cd -- "$(dirname -- "$launcher")" && pwd)
+  target=$(readlink "$launcher")
+  case "$target" in /*) launcher=$target ;; *) launcher=$parent/$target ;; esac
+done
+root=$(CDPATH= cd -- "$(dirname -- "$launcher")/.." && pwd)
+case "$root" in
+  */Contents/Resources) client=$root/client; node=$root/node/node ;;
+  *) client=$root/client; node=$root/runtime/node ;;
+esac
+exec "$node" "$client/cli/main.cjs" "$@"

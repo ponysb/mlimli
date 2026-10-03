@@ -3,10 +3,12 @@ import { EventEmitter } from 'node:events';
 
 export const bus = new EventEmitter();
 bus.setMaxListeners(100);
+let sequence = 0;
+export function eventSequence() { return sequence; }
 
 /** 发出一个事件：{type, ts, ...data}，返回该事件对象 */
 export function emit(type, data = {}) {
-  const evt = { type, ts: Date.now(), ...data };
+  const evt = { type, ts: Date.now(), ...data, seq: ++sequence };
   bus.emit('event', evt);
   return evt;
 }

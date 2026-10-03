@@ -1,0 +1,6 @@
+{
+  "name": "feishu",
+  "version": "0.2.0",
+  "description": "飞书机器人长连接渠道",
+  "capabilities": ["channel"]
+}

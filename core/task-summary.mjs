@@ -52,7 +52,7 @@ export function summarizeChanges(before, after = workspaceSnapshot()) {
 }
 
 export function discoverArtifacts(after, summaryText, changedFiles = []) {
-  const previewable = /\.(?:html?|pdf|svg|png|jpe?g|webp)$/i;
+  const previewable = /\.(?:html?|pdf|svg|png|jpe?g|webp|m4a|mp3|wav|mp4|webm|mov|docx|xlsx|pptx|md|txt|csv)$/i;
   const changed = new Set(changedFiles.filter((file) => file.status !== 'deleted').map((file) => file.path));
   return [...after.keys()].filter((filePath) => previewable.test(filePath) &&
     (changed.has(filePath) || String(summaryText).includes(filePath) || String(summaryText).includes(path.posix.basename(filePath))))

@@ -1,6 +1,6 @@
 {
   "name": "ffmpeg",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "工作区内的视频和音频处理：探测、转码、裁剪、拼接、提取音频和生成缩略图。",
   "permissions": ["workspace-read", "workspace-write"],
   "capabilities": []

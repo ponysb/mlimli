@@ -14,8 +14,8 @@ npm run dist:win
 
 不想输入命令时，也可双击项目根目录的 `build-windows.cmd`。它会检查 Node.js 版本，在依赖未安装时执行 `npm ci`，然后运行同一个双版本打包命令。
 
-- `MoliCreation-Modern-Setup-1.0.0-x64.exe`：现代版，Electron 44.4.5，面向 Win10 / Win11 64 位。
-- `MoliCreation-Legacy-Win7-Setup-1.0.0-ia32.exe`：兼容版，Electron 22.3.27，面向 Win7 SP1 32/64 位及 Win10 32 位；64 位新系统也可通过 WOW64 运行。
+- `MoliCreation-Modern-Setup-0.2.0-x64.exe`：现代版，Electron 44.4.5，面向 Win10 / Win11 64 位。
+- `MoliCreation-Legacy-Win7-Setup-0.2.0-ia32.exe`：兼容版，Electron 22.3.27，面向 Win7 SP1 32/64 位及 Win10 32 位；64 位新系统也可通过 WOW64 运行。
 - `SHA256SUMS.txt`：最终安装包的 SHA-256 校验值。
 
 `npm run dist:win:all` 是上述命令的别名。分别构建：`npm run dist:win:modern`、`npm run dist:win:legacy`。默认不生成免安装包；需要时执行 `npm run dist:win -- --portable`。
@@ -52,6 +52,8 @@ Electron 窗口入口放在 `app.asar`，本地服务和插件文件放在 `reso
 
 ## 运行与数据
 
+安装包同时提供独立终端入口 `mli.cmd`，安装程序将应用目录加入当前用户 PATH。安装后打开新的 PowerShell、CMD 或 Windows Terminal 即可运行 `mli`，无需先打开桌面窗口，也无需安装 Node.js。现代版自带独立 Node 22，兼容版使用随包的 Electron Node 16；兼容系统的全屏 TUI 需要支持 ANSI 的终端。命令与跨平台打包说明见 [终端版说明](TERMINAL.md)。
+
 首次启动会自动创建默认工作区目录：现代版为 `%APPDATA%/MoliCreation/workspace/`，兼容版为 `%APPDATA%/MoliCreationLegacy/workspace/`。已有配置不会覆盖；默认目录初始为空，不会自动生成项目入口文件。可在客户端选择自己的项目目录。
 
 项目终端使用 xterm.js 渲染，支持 ANSI 颜色、光标、文本选择复制、命令历史和 Ctrl+C 停止。每条命令在当前工作目录启动独立的 cmd/sh 进程，输出记录连续保留；Windows 的停止操作会终止该命令的子进程树。它不是持久化 PTY 会话，跨命令的 `cd`、环境变量和需要交互输入的 REPL/TUI 不在当前支持范围。
@@ -65,7 +67,7 @@ Electron 窗口入口放在 `app.asar`，本地服务和插件文件放在 `reso
 
 首次运行从安全示例配置创建独立配置，保留不收费的 **mock 演示模型**，不包含开发者模型凭据。未配置构建 `.env` 时不要求官方账户；如配置了公开后台 URL 与账户开关，安装包会使用该公开配置连接账户服务。接入真实服务需配置供应商或登录官方账户；不要把服务端共享密钥嵌入客户端。
 
-每个桌面实例使用由操作系统分配的独立回环端口，与源码版 3000 端口服务互不冲突。服务就绪后才打开窗口，同一数据目录只能启动一个实例。关闭最后一个窗口会关闭该实例的本地服务。卸载默认保留用户数据。
+同一用户数据目录的桌面与终端复用一个回环服务，端口由操作系统分配，与源码版 3000 端口互不冲突。服务就绪后才打开窗口，最后一个客户端退出才停止服务。运行任务时不能切换项目，另一个数据目录也不能同时占用同一项目。卸载默认保留用户数据。
 
 ## 验证
 

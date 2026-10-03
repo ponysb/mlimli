@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import * as icons from 'lucide-react';
+import { primaryTaskArtifact } from '../core/task-artifacts.mjs';
 import { transformWithOxc } from 'vite';
 
 const avatarSource = readFileSync(new URL('../react/src/ConversationAvatar.jsx', import.meta.url), 'utf8').replace(/^import .*;$/gm, '').replace('export default function', 'function');
@@ -15,17 +16,18 @@ function componentSource(name) {
   return applicationSource.slice(start, end);
 }
 const transformed = await transformWithOxc([avatarSource, ...['Message', 'RunStep', 'TaskSummary', 'WorkbenchState'].map(componentSource)].join('\n'), 'conversation-fixture.jsx', { jsx: { runtime: 'classic' } });
-const iconNames = ['UserRound', 'SquareTerminal', 'LoaderCircle', 'ChevronRight', 'RefreshCw', 'ShieldAlert', 'Check', 'LayoutDashboard', 'FolderOpen', 'FileText', 'Code2', 'BookOpen', 'FolderPlus'];
-const components = new Function('React', 'icons', `
+const iconNames = ['UserRound', 'SquareTerminal', 'LoaderCircle', 'ChevronRight', 'ChevronDown', 'Eye', 'ExternalLink', 'RefreshCw', 'ShieldAlert', 'Check', 'LayoutDashboard', 'FolderOpen', 'FileText', 'Code2', 'BookOpen', 'FolderPlus'];
+const components = new Function('React', 'icons', 'primaryTaskArtifact', `
   const { useState, useEffect } = React;
   const { ${iconNames.join(', ')} } = icons;
   const Markdown = ({ text }) => React.createElement('p', null, text);
   const MessageMedia = () => null;
+  const FileIcon = () => React.createElement('span', null, 'file');
   const formatContent = (text) => text;
   const formatDuration = () => '1 秒';
   ${transformed.code}
   return { ConversationAvatar, Message, RunStep, TaskSummary, WorkbenchState };
-`)(React, icons);
+`)(React, icons, primaryTaskArtifact);
 const render = (name, props = {}) => renderToStaticMarkup(React.createElement(components[name], props));
 
 test('workbench branding and task entry points cover work beyond writing', () => {
@@ -79,4 +81,14 @@ test('final task cards have an agent avatar without replacing success or failure
   assertAgentAvatar(failed);
   assert.match(failed, /lucide-shield-alert/);
   assert.match(failed, /连接失败/);
+});
+
+test('a completed task highlights one deliverable and shows only three other files', () => {
+  const item = { reason: 'done', summaryText: 'Final output', primaryArtifact: { path: 'output/final.wav' }, files: Array.from({ length: 7 }, (_, index) => ({ path: `output/file-${index}.txt`, status: 'created' })), artifacts: [{ path: 'output/final.wav' }] };
+  const markup = render('TaskSummary', { item });
+  assert.equal((markup.match(/class="summary-primary-file"/g) || []).length, 1);
+  assert.equal((markup.match(/class="summary-file"/g) || []).length, 3);
+  assert.ok(markup.indexOf('summary-primary-file') < markup.indexOf('summary-text'));
+  assert.match(markup, /再显示 4 个文件/);
+  assert.ok(!markup.includes('summary-artifacts'));
 });

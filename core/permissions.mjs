@@ -146,7 +146,14 @@ export async function authorize({ session, tool, args, timeoutMs }) {
   if (tool.name === 'bash' && isReadOnlyCommand(args?.command)) return { ok: true, decision: 'auto' };
 
   const mode = session.mode;
-  if (mode === 'auto-all' && (level === 'L1' || level === 'L2')) return { ok: true, decision: 'auto' };
+  // 完全访问用于无人值守执行常规工作。L3 默认仍需确认，只有工具明确声明
+  // 可在该模式下自动执行时才放行（例如只读的网页抓取）；桌面等敏感能力
+  // 不会因为切换到完全访问而被隐式开启。
+  if (mode === 'auto-all' && (
+    level === 'L1' ||
+    level === 'L2' ||
+    (level === 'L3' && tool.autoApproveInAutoAll === true)
+  )) return { ok: true, decision: 'auto' };
 
   if (checkRules(session, tool.name, args, argsStr)) return { ok: true, decision: 'rule' };
 
@@ -155,6 +162,7 @@ export async function authorize({ session, tool, args, timeoutMs }) {
     reqId, sessionId: session.id, tool: tool.name,
     level, levelLabel: LEVEL_INFO[level] ?? level,
     summary: argsStr.slice(0, 500),
+    rememberPattern: rememberPattern(tool, args),
     sessionScope: tool.name === 'bash' ? '当前任务中完全相同的命令' : ['write_file', 'edit_file', 'office_edit'].includes(tool.name) && args?.path ? `当前任务中 ${tool.name} 操作 ${args.path}` : `当前任务中完全相同的 ${tool.name} 调用`,
     preview: buildPreview(tool, args),
   };
@@ -195,6 +203,15 @@ export function resolveRequest(reqId, decision, sessionId) {
 }
 
 export function pendingCount() { return pending.size; }
+
+export function cancelRequests(sessionId) {
+  for (const [id, item] of pending) {
+    if (sessionId && item.request.sessionId !== sessionId) continue;
+    clearTimeout(item.timer);
+    pending.delete(id);
+    item.resolve('cancelled');
+  }
+}
 
 export function pendingRequest(sessionId) {
   for (const item of pending.values()) if (item.request?.sessionId === sessionId) return item.request;

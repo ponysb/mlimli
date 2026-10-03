@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+volume=${3:-/}
+launcher="${volume%/}/Applications/魔力工作台.app/Contents/Resources/bin/mli"
+bin="${volume%/}/usr/local/bin"
+test -f "$launcher"
+mkdir -p "$bin"
+if [ -e "$bin/mli" ] || [ -L "$bin/mli" ]; then
+  existing=$(readlink "$bin/mli" 2>/dev/null || true)
+  if [ "$existing" != "$launcher" ]; then
+    printf '%s\n' "Refusing to replace existing command: $bin/mli" >&2
+    exit 1
+  fi
+else
+  ln -s "$launcher" "$bin/mli"
+fi

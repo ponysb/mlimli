@@ -1,11 +1,18 @@
 {
   "name": "mli-agent",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "魔力工作台：本地 Agent 运行时、React 工作台、Electron 桌面入口与可扩展插件系统",
   "type": "module",
   "main": "electron/main.cjs",
+  "bin": {
+    "mli": "cli/main.cjs"
+  },
   "scripts": {
     "start": "node server.mjs",
+    "tui": "node cli/main.cjs",
+    "cli": "node cli/main.cjs",
+    "build:tui": "node scripts/build-tui.mjs",
+    "test:tui": "node scripts/test-tui.mjs",
     "check": "node scripts/check.mjs",
     "test": "node --test test/*.test.mjs",
     "dev:web": "vite --host 127.0.0.1",
@@ -19,7 +26,9 @@
     "dist:win:modern": "node scripts/package-win.mjs --modern",
     "dist:win:legacy": "node scripts/package-win.mjs --legacy",
     "dist:win:all": "npm run dist:win",
-    "verify:win": "node scripts/verify-win.mjs"
+    "verify:win": "node scripts/verify-win.mjs",
+    "dist:mac": "node scripts/package-mac.mjs",
+    "dist:linux": "node scripts/package-linux.mjs"
   },
   "engines": {
     "node": ">=22.12"
@@ -41,25 +50,34 @@
     "@codemirror/lang-markdown": "^6.5.2",
     "@codemirror/lang-python": "^6.2.1",
     "@codemirror/lang-sql": "^6.10.0",
+    "@excalidraw/excalidraw": "0.18.1",
+    "@larksuiteoapi/node-sdk": "1.74.0",
     "@uiw/react-codemirror": "^4.25.11",
     "@vitejs/plugin-react": "latest",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
+    "dingtalk-stream": "2.1.5",
     "dotenv": "17.2.2",
     "lucide-react": "latest",
+    "pdfjs-dist": "4.8.69",
     "qrcode.react": "^4.2.0",
     "react": "latest",
     "react-dom": "latest",
     "streamdown": "^2.6.0",
+    "terminal-kit": "^3.1.4",
     "vite": "latest",
     "xterm-readline": "^1.2.2"
   },
   "devDependencies": {
+    "@opentui/core": "0.4.5",
+    "@opentui/solid": "0.4.5",
+    "bun": "1.3.14",
     "core-js": "3.50.0",
     "electron": "44.4.5",
     "electron-builder": "26.15.3",
     "electron-legacy": "npm:electron@22.3.27",
     "esbuild": "0.28.2",
+    "solid-js": "1.9.12",
     "undici": "5.29.0"
   },
   "private": true

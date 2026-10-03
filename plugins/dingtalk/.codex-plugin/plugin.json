@@ -1,0 +1,6 @@
+{
+  "name": "dingtalk",
+  "version": "0.2.0",
+  "description": "钉钉机器人 Stream 渠道",
+  "capabilities": ["channel"]
+}

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
@@ -94,6 +95,25 @@ async function main() {
   try {
     const first = await launch('first-start');
     const result = await exerciseClient(first.url, dataRoot);
+    const client = path.join(path.dirname(path.resolve(executable)), 'resources', 'client');
+    const bundledNode = path.join(path.dirname(path.resolve(executable)), 'resources', 'node', 'node.exe');
+    const cliExecutable = fs.existsSync(bundledNode) ? bundledNode : path.resolve(executable);
+    const cliEnvironment = { ...environment, ...(fs.existsSync(bundledNode) ? {} : { ELECTRON_RUN_AS_NODE: '1' }) };
+    const help = await promisify(execFile)(cliExecutable, [path.join(client, 'cli', 'main.cjs'), '--help'], { env: cliEnvironment, timeout: 15000, windowsHide: true });
+    assert.match(help.stdout, /mli exec/);
+    if (fs.existsSync(bundledNode)) {
+      const tui = path.join(client, 'cli', 'bin', 'mli-tui.exe');
+      assert.ok(fs.existsSync(tui), '现代安装包必须包含独立 TUI 程序');
+      const checked = await promisify(execFile)(tui, ['--self-test'], { cwd: dataRoot, timeout: 15000, windowsHide: true });
+      assert.match(checked.stdout, /OpenTUI native renderer ready/);
+      result.modernTui = 'passed';
+    }
+    const terminal = await promisify(execFile)(cliExecutable, [path.join(client, 'cli', 'main.cjs'), '--data-dir', dataRoot, '--cwd', first.dataRoot + path.sep + 'workspace', 'exec', '--auto', '--json', '写一个 hello.txt，用于终端打包验证'], { env: cliEnvironment, timeout: 20000, windowsHide: true });
+    const terminalEvents = terminal.stdout.trim().split('\n').map(line => JSON.parse(line));
+    assert.equal(terminalEvents.findLast(event => event.type === 'turn_end').reason, 'done');
+    assert.equal((await (await fetch(`${first.url}/api/runtime`)).json()).pid, first.serverPid);
+    result.terminal = 'passed';
+    result.sharedRuntime = 'passed';
     const defaults = {};
     clientEnvironment.loadClientEnvironment({ runtimeRoot: path.join(path.dirname(path.resolve(executable)), 'resources', 'client'), packaged: true, env: defaults });
     const firstInfo = await (await fetch(`${first.url}/api/info`)).json();
