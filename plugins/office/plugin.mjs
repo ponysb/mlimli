@@ -4,8 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import { resolveInWorkspace, resolveReadable } from '../../core/paths.mjs';
 import { docxExtractText, docxReplace, docxAppendParagraph, xlsxRead, xlsxWrite, xlsxSetCells, pptxExtractText } from './lib/ooxml.mjs';
+import { verifierProcess } from '../../core/verifier-process.mjs';
+import { findExecutable } from '../../core/sandbox.mjs';
 
 function powershell(script) {
   return new Promise((resolve, reject) => {
@@ -95,50 +98,41 @@ function findSoffice() {
       }
     } catch { /* skip */ }
   }
-  return process.platform === 'win32' ? 'soffice.exe' : 'soffice';
+  return findExecutable('soffice');
 }
 
-function convertLibreOffice(src, dst, format) {
-  return new Promise((resolve, reject) => {
-    const bin = findSoffice();
-    const outdir = path.dirname(dst);
-    const child = spawn(bin, ['--headless', '--norestore', '--convert-to', format, '--outdir', outdir, src], { windowsHide: true });
-    let err = [];
-    child.stderr.on('data', (d) => err.push(d));
-    const timer = setTimeout(() => { try { child.kill(); } catch {} }, 180000);
-    child.on('error', (e) => { clearTimeout(timer); reject(e); });
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      const expected = path.join(outdir, path.basename(src).replace(/\.[^.]+$/, `.${format}`));
-      if (fs.existsSync(expected)) {
-        if (path.resolve(expected) !== path.resolve(dst)) {
-          try { fs.renameSync(expected, dst); } catch { /* 已在目标位置 */ }
-        }
-        resolve(dst);
-        return;
-      }
-      reject(new Error(Buffer.concat(err).toString('utf8') || `LibreOffice 退出码 ${code}`));
-    });
-  });
+async function convertLibreOffice(src, dst, format, options = {}) {
+  if(options.signal?.aborted)throw new Error('文档转换已停止');
+  const bin=findSoffice();
+  if(!bin)throw new Error('未找到 LibreOffice 无界面转换器');
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'mli-office-convert-')),profile=path.join(directory,'profile'),outdir=path.join(directory,'output');
+  fs.mkdirSync(outdir);fs.mkdirSync(profile);
+  fs.writeFileSync(path.join(profile,'registrymodifications.xcu'),'<oor:items xmlns:oor="http://openoffice.org/2001/registry"><item oor:path="/org.openoffice.Office.Common/Security/Scripting"><prop oor:name="MacroSecurityLevel" oor:op="fuse"><value>3</value></prop></item></oor:items>');
+  try {
+    const result=await verifierProcess(bin,[`-env:UserInstallation=${pathToFileURL(profile).href}`,'--headless','--norestore','--convert-to',format,'--outdir',outdir,src],{timeoutMs:180000,...options});
+    const expected=path.join(outdir,path.basename(src).replace(/\.[^.]+$/,`.${format}`));
+    if(result.code!==0||!fs.existsSync(expected)||!fs.statSync(expected).size)throw new Error(result.stderr||`LibreOffice 未产出有效文件（退出码 ${result.code}）`);
+    fs.copyFileSync(expected,dst);return dst;
+  } finally {try{fs.rmSync(directory,{recursive:true,force:true,maxRetries:5,retryDelay:100});}catch{}}
 }
 
-export async function convertOfficeFile(source, destination, format = 'pdf') {
+export async function convertOfficeFile(source, destination, format = 'pdf', options = {}) {
   const src = path.resolve(source);
   const dst = path.resolve(destination);
   const ext = path.extname(src).toLowerCase();
   if (!['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx'].includes(ext)) throw new Error(`不支持的 Office 格式 ${ext}`);
   if (!['pdf', 'csv'].includes(format) || format === 'csv' && !['.xls', '.xlsx'].includes(ext)) throw new Error(`不支持的转换格式：${format}`);
   fs.mkdirSync(path.dirname(dst), { recursive: true });
-  let lastErr;
-  if (process.platform === 'win32') {
-    try { await powershell(CONVERT_SCRIPT(src, dst, format)); }
+  let lastErr,converted=false;
+  if (process.platform === 'win32' && options.preferNative !== false) {
+    try { await powershell(CONVERT_SCRIPT(src, dst, format)); converted=fs.existsSync(dst); }
     catch (err) { lastErr = err; }
   }
-  if (!fs.existsSync(dst)) {
-    try { await convertLibreOffice(src, dst, format); lastErr = null; }
+  if (!converted) {
+    try { await convertLibreOffice(src, dst, format, options); lastErr = null; converted=true; }
     catch (err) { lastErr = lastErr ?? err; }
   }
-  if (!fs.existsSync(dst)) throw new Error(`转换失败：${lastErr?.message ?? '未知错误'}。请安装 Microsoft Office / WPS 或 LibreOffice。`);
+  if (!converted) throw new Error(`转换失败：${lastErr?.message ?? '未知错误'}。${options.preferNative===false?'此隔离验收需要安装 LibreOffice；不会启动 Word/WPS。':'请安装 Microsoft Office / WPS 或 LibreOffice。'}`);
   return dst;
 }
 

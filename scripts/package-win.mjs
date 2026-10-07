@@ -9,6 +9,7 @@ import { planClientExport } from './export-client.mjs';
 import clientEnvironment from '../core/client-env.cjs';
 import { copyTerminalDependencies, installNodeRuntime } from './terminal-package.mjs';
 import { buildTui } from './build-tui.mjs';
+const { updateFeedUrl } = createRequire(import.meta.url)('../electron/updater.cjs');
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -60,9 +61,9 @@ export function stageWindowsClient({ root = ROOT, output, legacy = false } = {})
   }
   for (const entry of plan.entries) {
     if (entry.path.startsWith('electron/')) write(appDirectory, entry.path, entry.data);
-    else if (['server.mjs', 'config.example.json', 'LICENSE'].includes(entry.path) || /^(core|plugins|cli)\//.test(entry.path)) write(runtimeDirectory, entry.path, entry.data);
+    else if (['server.mjs', 'config.example.json', 'LICENSE', 'scripts/setup-windows-sandbox.mjs', 'scripts/build-sandbox-image.mjs', 'scripts/sandbox/Dockerfile', 'docs/SANDBOX.md', 'docs/APP-CENTER.md'].includes(entry.path) || /^(core|plugins|cli)\//.test(entry.path)) write(runtimeDirectory, entry.path, entry.data);
   }
-  for (const name of ['user-data.cjs', 'runtime-host.cjs']) write(appDirectory, `core/${name}`, fs.readFileSync(path.join(root, 'core', name)));
+  for (const name of ['user-data.cjs', 'runtime-host.cjs', 'app-center-policy.cjs']) write(appDirectory, `core/${name}`, fs.readFileSync(path.join(root, 'core', name)));
   write(runtimeDirectory, 'electron/compat.cjs', plan.entries.find(entry => entry.path === 'electron/compat.cjs').data);
   write(runtimeDirectory, 'electron/runtime.cjs', plan.entries.find(entry => entry.path === 'electron/runtime.cjs').data);
   write(runtimeDirectory, 'client-defaults.env', Buffer.from(publicEnvironment));
@@ -87,7 +88,8 @@ export function stageWindowsClient({ root = ROOT, output, legacy = false } = {})
     write(runtimeDirectory, `licenses/${dependency.replace('/', '-')}.txt`, fs.readFileSync(path.join(ROOT, 'node_modules', dependency, 'LICENSE')));
   }
   fs.writeFileSync(path.join(destination, 'PACKAGE-MANIFEST.json'), JSON.stringify({ scope: 'client-only', variant: legacy ? 'legacy-ia32' : 'modern-x64', version: manifest.version, terminalDependencies, files: records, warnings: plan.warnings }, null, 2));
-  return { destination, appDirectory, runtimeDirectory, manifest, legacy };
+  const updateServerUrl = publicEnvironment.match(/^MLI_ACCOUNT_SERVER_URL=(.+)$/m)?.[1] || '';
+  return { destination, appDirectory, runtimeDirectory, manifest, legacy, updateServerUrl };
 }
 
 export async function bundleCompatibility(stage) {
@@ -95,8 +97,12 @@ export async function bundleCompatibility(stage) {
   const result = await build({ entryPoints: [path.join(ROOT, 'electron', 'compat.cjs')], bundle: true, write: false, platform: 'node', target: 'node16', format: 'cjs', legalComments: 'eof' });
   for (const directory of [stage.appDirectory, stage.runtimeDirectory]) fs.writeFileSync(path.join(directory, 'electron', 'compat.cjs'), result.outputFiles[0].contents);
   const environment = await build({ entryPoints: [path.join(ROOT, 'core', 'client-env.cjs')], bundle: true, write: false, platform: 'node', target: 'node16', format: 'cjs', legalComments: 'eof' });
-  fs.mkdirSync(path.join(stage.runtimeDirectory, 'core'), { recursive: true });
-  fs.writeFileSync(path.join(stage.runtimeDirectory, 'core', 'client-env.cjs'), environment.outputFiles[0].contents);
+  for (const directory of [stage.appDirectory, stage.runtimeDirectory]) {
+    fs.mkdirSync(path.join(directory, 'core'), { recursive: true });
+    fs.writeFileSync(path.join(directory, 'core', 'client-env.cjs'), environment.outputFiles[0].contents);
+  }
+  const updater = await build({ entryPoints: [path.join(ROOT, 'electron', 'updater.cjs')], bundle: true, write: false, platform: 'node', target: 'node16', format: 'cjs', external: ['electron'], legalComments: 'eof' });
+  fs.writeFileSync(path.join(stage.appDirectory, 'electron', 'updater.cjs'), updater.outputFiles[0].contents);
 }
 
 export function executableArchitecture(file) {
@@ -141,6 +147,9 @@ export function windowsBuildConfig(stage, electronDist = path.join(ROOT, 'node_m
     extraFiles: [{ from: path.join(stage.runtimeDirectory, 'cli', 'launchers', 'mli.cmd'), to: 'mli.cmd' }],
     asar: true,
     npmRebuild: false,
+    // Explicit publishing configuration also makes builder embed app-update.yml.
+    // An unconfigured client keeps updates disabled; no requests go to this fallback.
+    publish: { provider: 'generic', url: updateFeedUrl(stage.updateServerUrl || 'https://updates.invalid', legacy ? 'windows-legacy-ia32' : 'windows-x64') },
     electronVersion: legacy ? stage.manifest.devDependencies['electron-legacy'].split('@').at(-1) : stage.manifest.devDependencies.electron,
     electronDist,
     win: { icon: path.join(ROOT, 'electron', 'assets', 'icon.png'), target: ['nsis', 'portable'] },
@@ -148,6 +157,7 @@ export function windowsBuildConfig(stage, electronDist = path.join(ROOT, 'node_m
       oneClick: false,
       perMachine: false,
       allowElevation: true,
+      packElevateHelper: true,
       allowToChangeInstallationDirectory: true,
       createDesktopShortcut: true,
       createStartMenuShortcut: true,
@@ -187,7 +197,7 @@ async function main() {
       const targets = args.includes('--dir') ? ['dir'] : args.includes('--portable') ? ['nsis', 'portable'] : ['nsis'];
       const config = windowsBuildConfig(stage, electronDist);
       config.win.target = targets;
-      files.push(...await build({ projectDir: stage.appDirectory, targets: Platform.WINDOWS.createTarget(targets, legacy ? Arch.ia32 : Arch.x64), config }));
+      files.push(...await build({ projectDir: stage.appDirectory, targets: Platform.WINDOWS.createTarget(targets, legacy ? Arch.ia32 : Arch.x64), config, publish: 'never' }));
       if (args.includes('--dir')) {
         console.log(`调试解包目录：${path.join(stage.destination, 'artifacts')}`);
       } else {

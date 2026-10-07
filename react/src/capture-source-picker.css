@@ -1,0 +1,32 @@
+.capture-picker-layer { position: fixed; inset: 0; z-index: 1200; display: grid; place-items: center; padding: 24px; background: #18252f66; backdrop-filter: blur(3px); }
+.capture-picker { width: min(780px, 100%); max-height: calc(100dvh - 48px); display: flex; flex-direction: column; min-width: 0; overflow: hidden; background: #fff; color: #26313c; border: 1px solid #dce3e8; border-radius: 8px; box-shadow: 0 20px 64px #17232d33; }
+.capture-picker > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 22px; border-bottom: 1px solid #e5e9ee; }
+.capture-picker h2 { margin: 0; font-size: 17px; font-weight: 600; }
+.capture-picker > header button, .capture-refresh { display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 32px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: #687582; cursor: pointer; }
+.capture-picker > header button:hover, .capture-refresh:hover { background: #eef2f5; }
+.capture-picker-tabs { display: flex; align-items: center; gap: 22px; padding: 0 22px; border-bottom: 1px solid #e5e9ee; }
+.capture-picker-tabs [role=tab] { display: flex; align-items: center; gap: 7px; min-height: 48px; padding: 0; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #6b7785; font-size: 13px; cursor: pointer; }
+.capture-picker-tabs [aria-selected=true] { color: #267255; border-bottom-color: #267255; }
+.capture-picker-tabs .capture-refresh { margin-left: auto; }
+.capture-picker-content { min-height: 0; overflow: auto; padding: 22px; }
+.capture-source-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.capture-source { position: relative; min-width: 0; padding: 0; border: 2px solid #e3e8ed; border-radius: 6px; overflow: hidden; background: #fff; text-align: left; cursor: pointer; }
+.capture-source:hover { border-color: #9ab9ad; }
+.capture-source.selected { border-color: #267255; }
+.capture-source img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: #eef1f4; }
+.capture-source > span { display: block; padding: 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; color: #3d4a58; }
+.capture-source-check { position: absolute; right: 7px; top: 7px; padding: 2px; color: #fff; background: #267255; border-radius: 4px; }
+.capture-audio { display: flex; align-items: center; gap: 8px; margin-top: 22px; color: #526170; font-size: 12px; }
+.capture-audio input { width: 16px; height: 16px; margin: 0; accent-color: #267255; }
+.capture-empty { min-height: 170px; display: flex; align-items: center; justify-content: center; gap: 9px; color: #6b7785; font-size: 13px; }
+.capture-picker > footer { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding: 14px 22px; border-top: 1px solid #e5e9ee; background: #fafbfc; }
+.capture-picker > footer button { min-height: 36px; border-radius: 6px; font-size: 12px; }
+.capture-cancel { padding: 0 16px; border: 1px solid #d9e0e6; color: #526170; background: #fff; cursor: pointer; }
+.capture-picker button:disabled { opacity: .5; cursor: default; }
+.capture-picker button:focus-visible, .capture-picker select:focus-visible { outline: 2px solid #85bba2; outline-offset: 2px; }
+.capture-camera-select { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; font-size: 13px; }
+.capture-camera-select select { flex: 1; min-width: 0; height: 36px; padding: 0 10px; border: 1px solid #d9e0e6; border-radius: 5px; background: #fff; font: inherit; }
+.capture-camera-preview { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #181d22; border-radius: 6px; overflow: hidden; }
+.capture-camera-preview video { width: 100%; height: 100%; object-fit: contain; }
+.capture-camera-preview > span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 20px; color: #c8d0d7; text-align: center; font-size: 13px; }
+@media (max-width: 600px) { .capture-picker-layer { padding: 12px; } .capture-picker { max-height: calc(100dvh - 24px); } .capture-source-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } .capture-picker-content { padding: 16px; } .capture-picker > header, .capture-picker > footer { padding: 14px 16px; } .capture-picker-tabs { padding: 0 16px; } }

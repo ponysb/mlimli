@@ -1,0 +1,33 @@
+.desktop-update-sidebar { flex-shrink: 0; min-width: 0; color: var(--ink); border: 1px solid #dbe6e0; border-radius: 7px; background: #f9fcfa; transition: background .15s, border-color .15s; }
+.desktop-update-sidebar:hover, .desktop-update-sidebar:focus-within { border-color: #b9d3c4; background: #f1f8f4; }
+.desktop-update-sidebar-row { display: flex; align-items: center; gap: 4px; min-height: 42px; padding: 3px 6px 3px 4px; }
+.desktop-update-sidebar .desktop-update-summary { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 34px; padding: 0 4px; text-align: left; border: 0; border-radius: 4px; background: transparent; color: inherit; }
+.desktop-update-symbol { display: grid; place-items: center; flex: 0 0 26px; width: 26px; height: 26px; color: #287255; }
+.desktop-update-label { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 7px; min-width: 0; font-size: 11px; line-height: 1.4; }
+.desktop-update-label b { font-weight: 550; color: #365344; }
+.desktop-update-label > span { color: #6c8176; font-size: 10px; overflow-wrap: anywhere; }
+.desktop-update-chevron { margin-left: auto; flex-shrink: 0; color: #879c90; }
+.desktop-update-sidebar .desktop-update-command { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 5px; color: #287255; background: #e8f1ec; }
+.desktop-update-sidebar .desktop-update-command:hover { color: #174e36; background: #dcebe2; }
+.desktop-update-sidebar button:focus-visible, .desktop-update-log:focus-visible { outline: 2px solid #71a78b; outline-offset: 2px; }
+.desktop-update-sidebar progress { display: block; width: calc(100% - 20px); height: 3px; margin: 0 10px 7px; accent-color: #287255; }
+.desktop-update-sidebar[data-status=error] { border-color: #ead5d0; background: #fff9f7; }
+.desktop-update-sidebar[data-status=error] .desktop-update-symbol, .desktop-update-sidebar[data-status=error] .desktop-update-label b { color: #a24e3d; }
+.desktop-update-log { position: fixed; z-index: 2000; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; color: var(--ink); border: 1px solid #dde5e1; border-radius: 8px; background: #fff; box-shadow: 0 8px 32px #263c3021; text-align: left; }
+.desktop-update-log header { display: flex; align-items: center; gap: 10px; flex-shrink: 0; padding: 15px 16px 13px; border-bottom: 1px solid #edf0ee; }
+.desktop-update-log-icon { display: grid; place-items: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: 7px; background: #eff6f1; color: #287255; }
+.desktop-update-log header > div { min-width: 0; }
+.desktop-update-log header strong { display: block; font-size: 13px; font-weight: 600; }
+.desktop-update-log header div > span { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-top: 4px; color: #85928b; font-size: 10px; overflow-wrap: anywhere; }
+.desktop-update-log-status { flex-shrink: 0; margin-left: auto; color: #438466; font-size: 10px; }
+.desktop-update-log-body { min-height: 0; max-height: 240px; overflow: auto; overscroll-behavior: contain; padding: 14px 16px 17px; white-space: pre-wrap; overflow-wrap: anywhere; color: #526059; font-size: 12px; line-height: 1.8; }
+.desktop-update-log footer { flex-shrink: 0; padding: 9px 16px; border-top: 1px solid #edf0ee; background: #fafcfb; color: #839088; font-size: 10px; line-height: 1.6; overflow-wrap: anywhere; }
+.desktop-update-log .desktop-update-log-error { color: #a24e3d; }
+.desktop-update-settings button { display: inline-flex; align-items: center; gap: 5px; padding: 7px 10px; border-radius: 5px; white-space: nowrap; }
+.desktop-update-settings .section-head { align-items: center; gap: 20px; }
+.desktop-update-settings .section-head > div { min-width: 0; }
+.desktop-update-settings > p { margin-top: 20px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--sidebar); line-height: 1.7; }
+.desktop-update-settings progress { width: 100%; margin-top: 16px; accent-color: var(--blue); }
+.desktop-update-notes { margin-top: 24px; padding: 16px; background: var(--sidebar); border-radius: 8px; }
+.desktop-update-notes h3 { margin: 0 0 10px; font-size: 13px; }
+.desktop-update-notes p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; }

@@ -18,7 +18,8 @@ export async function executePrompt(client, options, { stdout = process.stdout, 
   let connected, connectionFailed;
   const ready = new Promise((resolve, reject) => { connected = resolve; connectionFailed = reject; });
   const stream = client.events(event => {
-    if (event.sessionId !== session.id) return;
+    if (event.sessionId !== session.id && event.rootSessionId !== session.id) return;
+    if (event.isSubagent && !['permission_request', 'ui_request', 'agent_group_updated'].includes(event.type)) { if (options.json) stdout.write(`${JSON.stringify(event)}\n`); return; }
     if (options.json) stdout.write(`${JSON.stringify(event)}\n`);
     else if (event.type === 'text_delta') stdout.write(event.text);
     else if (event.type === 'tool_call') stderr.write(`\n[${event.call.name}] ${JSON.stringify(event.call.args)}\n`);

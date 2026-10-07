@@ -12,9 +12,12 @@ import { sessionsDir } from './paths.mjs';
 import { ATTACHMENT_LIMITS, attachmentKind, attachmentMime } from './attachment-types.mjs';
 import { attachmentText, workingAttachmentPath } from './attachment-content.mjs';
 import { discoverLegacySessions, readLegacyTranscript, summarizeLegacyTranscript, legacySessionId, legacyTitle } from './session-import.mjs';
+import { copyToolOutputs, removeToolOutputs } from './tool-output.mjs';
+import { taskRecoveryState } from './task-checkpoint.mjs';
+import { visibleSessionEntries, deletionState, deletionTargets } from './session-deletion.mjs';
 
-const indexFile = () => path.join(sessionsDir(), 'index.json');
-const attachmentDir = (id) => path.join(sessionsDir(), `${id}-attachments`);
+const indexFile = (directory = sessionsDir()) => path.join(directory, 'index.json');
+const attachmentDir = (id, directory = sessionsDir()) => path.join(directory, `${id}-attachments`);
 const MEDIA_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'video/quicktime', 'audio/mpeg', 'audio/wav', 'audio/ogg']);
 const MEDIA_EXT = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif', 'video/mp4': '.mp4', 'video/webm': '.webm', 'video/quicktime': '.mov', 'audio/mpeg': '.mp3', 'audio/wav': '.wav', 'audio/ogg': '.ogg' };
 const IMAGE_CONTEXT_TOKENS = 800;
@@ -57,11 +60,11 @@ function completeToolReplies(messages) {
   return result;
 }
 
-function readIndex() {
-  try { return JSON.parse(fs.readFileSync(indexFile(), 'utf8')); } catch { return {}; }
+function readIndex(directory) {
+  try { return JSON.parse(fs.readFileSync(indexFile(directory), 'utf8')); } catch { return {}; }
 }
-function writeIndex(idx) {
-  fs.writeFileSync(indexFile(), JSON.stringify(idx, null, 2));
+function writeIndex(idx, directory) {
+  fs.writeFileSync(indexFile(directory), JSON.stringify(idx, null, 2));
 }
 
 function importLegacySessions() {
@@ -87,47 +90,74 @@ function importLegacySessions() {
 }
 
 export class Session {
-  constructor(id) {
+  constructor(id, directory = sessionsDir()) {
     this.id = id;
-    this.file = path.join(sessionsDir(), `${id}.jsonl`);
+    this.directory = directory;
+    this.file = path.join(directory, `${id}.jsonl`);
     this.counter = 0;
     this.leaf = 0; // 游标：指向树中的当前位置
   }
 
-  static create(title = '新会话') {
-    const id = crypto.randomUUID().slice(0, 8);
-    const s = new Session(id);
-    s.append({ type: 'meta', title, created: Date.now() }, { root: true });
-    const idx = readIndex();
-    idx[id] = { id, title, created: Date.now(), updated: Date.now() };
-    writeIndex(idx);
+  static create(title = '新会话', { directory = sessionsDir(), parentSessionId, rootSessionId } = {}) {
+    fs.mkdirSync(directory, { recursive: true });
+    const id = crypto.randomUUID();
+    const s = new Session(id, directory);
+    s.append({ type: 'meta', title, created: Date.now(), parentSessionId, rootSessionId }, { root: true });
+    const idx = readIndex(directory);
+    idx[id] = { id, title, created: Date.now(), updated: Date.now(), parentSessionId, rootSessionId };
+    s.parentSessionId = parentSessionId; s.rootSessionId = rootSessionId;
+    writeIndex(idx, directory);
     return s;
   }
 
-  static load(id) {
+  static load(id, directory = sessionsDir()) {
     if (!/^[\w-]+$/.test(id)) return null;
-    const file = path.join(sessionsDir(), `${id}.jsonl`);
+    const file = path.join(directory, `${id}.jsonl`);
     if (!fs.existsSync(file)) return null;
-    const s = new Session(id);
+    const s = new Session(id, directory);
     const entries = s.entries();
     // 恢复计数器与游标：leaf = 最后一个 entry（线性追加；树分支由 fork 产生新文件）
     if (entries.length) {
       s.counter = entries.length;
       s.leaf = entries[entries.length - 1].id;
     }
+    s.parentSessionId = entries[0]?.parentSessionId; s.rootSessionId = entries[0]?.rootSessionId;
     return s;
   }
 
-  static list() {
+  /** 仅用于 UI 首屏：不解析整个会话文件，完整内容在需要时由 entries/chain 读取。 */
+  static loadLight(id, directory = sessionsDir()) {
+    if (!/^[\w-]+$/.test(id)) return null;
+    const file = path.join(directory, `${id}.jsonl`);
+    if (!fs.existsSync(file)) return null;
+    const s = new Session(id, directory);
+    s.light = true;
+    s.indexMetadata = readIndex(directory)[id] || { id };
+    try {
+      const fd = fs.openSync(file, 'r');
+      const buffer = Buffer.allocUnsafe(64 * 1024);
+      const bytes = fs.readSync(fd, buffer, 0, buffer.length, 0);
+      fs.closeSync(fd);
+      const firstLine = buffer.subarray(0, bytes).toString('utf8').split('\n').find((line) => line.trim());
+      const first = firstLine ? JSON.parse(firstLine) : null;
+      if (first?.type === 'meta') s.indexMetadata = { ...first, ...s.indexMetadata };
+    } catch { /* 索引或首行损坏时仍允许 UI 打开会话 */ }
+    s.parentSessionId = s.indexMetadata.parentSessionId;
+    s.rootSessionId = s.indexMetadata.rootSessionId;
+    return s;
+  }
+
+  static list({ includeChildren = false } = {}) {
     importLegacySessions();
     const idx = readIndex();
-    return Object.values(idx).sort((a, b) => b.updated - a.updated);
+    return Object.values(idx).filter(item => includeChildren || !item.parentSessionId).sort((a, b) => b.updated - a.updated);
   }
 
   static remove(id) {
     const file = path.join(sessionsDir(), `${id}.jsonl`);
     try { fs.unlinkSync(file); } catch { /* 已不存在 */ }
     try { fs.rmSync(attachmentDir(id), { recursive: true, force: true }); } catch { /* 已不存在 */ }
+    try { removeToolOutputs(sessionsDir(), id); } catch { /* 不删除越界存储 */ }
     const idx = readIndex();
     delete idx[id];
     writeIndex(idx);
@@ -142,7 +172,7 @@ export class Session {
     if (path.resolve(targetFile) === path.resolve(this.file)) return this.id;
     if (fs.existsSync(targetFile)) throw new Error('目标工作目录中已存在同 ID 会话');
 
-    const sourceIndex = readIndex();
+    const sourceIndex = readIndex(this.directory);
     let targetIndex = {};
     try { targetIndex = JSON.parse(fs.readFileSync(targetIndexFile, 'utf8')); } catch { /* 首个会话 */ }
     const metadata = sourceIndex[this.id] ?? { id: this.id, title: this.title, created: Date.now(), updated: Date.now() };
@@ -150,9 +180,10 @@ export class Session {
     fs.copyFileSync(this.file, targetFile, fs.constants.COPYFILE_EXCL);
     const workingCopies = [];
     try {
-      const sourceAttachments = attachmentDir(this.id);
+      const sourceAttachments = attachmentDir(this.id, this.directory);
       const targetAttachments = path.join(targetDir, `${this.id}-attachments`);
       if (fs.existsSync(sourceAttachments)) fs.cpSync(sourceAttachments, targetAttachments, { recursive: true, errorOnExist: true });
+      copyToolOutputs(this, { file: targetFile, id: this.id });
       const sourceRoot = path.resolve(path.dirname(this.file), '..', '..');
       const parts = this.chain().flatMap(entry => [...(Array.isArray(entry.content) ? entry.content : []), ...(entry.attachments || [])]);
       for (const relative of new Set(parts.map(part => part.workspacePath).filter(Boolean))) {
@@ -167,23 +198,50 @@ export class Session {
     } catch (error) {
       try { fs.unlinkSync(targetFile); } catch { /* 回滚失败时保留副本，不破坏源会话 */ }
       for (const file of workingCopies) { try { fs.unlinkSync(file); } catch {} }
+      try { removeToolOutputs(targetDir, this.id); } catch {}
       throw error;
     }
 
     fs.unlinkSync(this.file);
-    try { fs.rmSync(attachmentDir(this.id), { recursive: true, force: true }); } catch { /* 已移动 */ }
+    try { fs.rmSync(attachmentDir(this.id, this.directory), { recursive: true, force: true }); } catch { /* 已移动 */ }
+    try { removeToolOutputs(this.directory, this.id); } catch { /* 已移动 */ }
     delete sourceIndex[this.id];
-    writeIndex(sourceIndex);
+    writeIndex(sourceIndex, this.directory);
     return this.id;
   }
 
   append(data, { root = false } = {}) {
+    const persisted = this.normalizeMediaEntry(data);
     const entry = root
-      ? { id: 0, parent: null, ts: Date.now(), ...data }
-      : { id: ++this.counter, parent: this.leaf, ts: Date.now(), ...data };
+      ? { id: 0, parent: null, ts: Date.now(), ...persisted }
+      : { id: ++this.counter, parent: this.leaf, ts: Date.now(), ...persisted };
     fs.appendFileSync(this.file, JSON.stringify(entry) + '\n');
     if (!root) this.leaf = entry.id;
     return entry;
+  }
+
+  normalizeMediaEntry(data) {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
+    const result = { ...data }, seen = new Map(), generated = [];
+    const persist = (value, fallbackName) => {
+      if (!value || typeof value !== 'object' || typeof value.dataUrl !== 'string' || !value.dataUrl.startsWith('data:')) return value;
+      if (seen.has(value.dataUrl)) return seen.get(value.dataUrl);
+      const mime = value.mime || value.dataUrl.match(/^data:([^;,]+)/i)?.[1] || 'application/octet-stream';
+      const saved = this.saveAttachments([{ dataUrl: value.dataUrl, mime, name: value.name || fallbackName }], { imagesOnly: false })[0];
+      const reference = { ...value, ...saved };
+      delete reference.dataUrl;
+      seen.set(value.dataUrl, reference); generated.push(reference);
+      return reference;
+    };
+    if (result.ui?.dataUrl) {
+      const existing = (result.media || []).find(item => item && !item.dataUrl && item.name === (result.ui.title || '') && item.type === result.ui.kind);
+      const reference = existing || persist(result.ui, result.ui.title || '会话媒体');
+      result.ui = { ...reference, asset: result.ui.asset };
+      delete result.ui.dataUrl;
+    }
+    if (Array.isArray(result.media)) result.media = result.media.map(item => persist(item, item?.name || '会话媒体'));
+    if (generated.length) result.media = [...(result.media || []), ...generated.filter(item => !(result.media || []).includes(item))];
+    return result;
   }
 
   saveAttachments(items = [], { imagesOnly } = {}) {
@@ -276,7 +334,7 @@ export class Session {
 
   attachment(id) {
     if (!/^[\w-]+$/.test(id)) return null;
-    const item = this.chain().flatMap((entry) => entry.type === 'message' ? [...(Array.isArray(entry.content) ? entry.content : []), ...(Array.isArray(entry.media) ? entry.media : [])] : entry.type === 'queue_add' ? entry.attachments || [] : []).find((part) => part?.attachmentId === id);
+    const item = this.chain().flatMap((entry) => entry.type === 'queue_add' ? entry.attachments || [] : [...(Array.isArray(entry.content) ? entry.content : []), ...(Array.isArray(entry.media) ? entry.media : [])]).find((part) => part?.attachmentId === id);
     if (!item) return null;
     const file = path.join(path.dirname(this.file), `${this.id}-attachments`, path.basename(item.file));
     return fs.existsSync(file) ? { ...item, path: file } : null;
@@ -288,22 +346,95 @@ export class Session {
       const lines = fs.readFileSync(this.file, 'utf8').split('\n');
       for (const line of lines) {
         if (!line.trim()) continue;
-        try { out.push(JSON.parse(line)); } catch { /* 跳过损坏行 */ }
+        try { const entry = JSON.parse(line); if (entry && typeof entry === 'object' && !Array.isArray(entry)) out.push(entry); } catch { /* 跳过损坏行 */ }
       }
     } catch { /* 空会话 */ }
     return out;
   }
 
+  /** 从 JSONL 尾部读取一页，避免打开大记录时先把整个文件读入内存。 */
+  readPage({ limit = 120, before = null } = {}) {
+    const deletion = readIndex(this.directory)[this.id] || {}, deleted = deletion.deletedEntries || [];
+    const deletedIds = new Set(deleted), earliestDeleted = deleted.reduce((value, id) => Math.min(value, id), Infinity);
+    const visible = entry => entry.type !== 'entry_delete' && !deletedIds.has(entry.id) && !(entry.type === 'compaction' && entry.id > earliestDeleted && entry.id < deletion.deletedThrough);
+    const wanted = Math.max(1, Math.min(500, Number(limit) || 120));
+    const boundary = before == null || before === '' ? null : Number(before);
+    const stat = (() => { try { return fs.statSync(this.file); } catch { return { size: 0 }; } })();
+    if (!stat.size) return { entries: [], hasMore: false, oldestId: null, newestId: null };
+    const fd = fs.openSync(this.file, 'r');
+    const chunkSize = 256 * 1024;
+    const found = [];
+    let position = stat.size;
+    let carry = Buffer.alloc(0);
+    let hasEarlier = false;
+    try {
+      while (position > 0 && found.length <= wanted) {
+        const start = Math.max(0, position - chunkSize);
+        const size = position - start;
+        const buffer = Buffer.allocUnsafe(size);
+        fs.readSync(fd, buffer, 0, size, start);
+        const combined = Buffer.concat([buffer, carry]);
+        const parts = [];
+        let lineStart = 0;
+        for (let offset = 0; offset < combined.length; offset += 1) {
+          if (combined[offset] !== 10) continue;
+          parts.push(combined.subarray(lineStart, offset));
+          lineStart = offset + 1;
+        }
+        parts.push(combined.subarray(lineStart));
+        carry = Buffer.from(parts.shift() || []);
+        for (let index = parts.length - 1; index >= 0; index -= 1) {
+          const line = parts[index].toString('utf8').trim();
+          if (!line) continue;
+          let entry;
+          try { entry = JSON.parse(line); } catch { continue; }
+          if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+          if (!visible(entry)) continue;
+          if (boundary != null && Number(entry.id) >= boundary) continue;
+          if (found.length < wanted) found.push(entry);
+          else { hasEarlier = true; break; }
+        }
+        if (hasEarlier) break;
+        position = start;
+      }
+      if (!hasEarlier && position > 0) hasEarlier = true;
+      if (!hasEarlier && carry.length) {
+        try {
+          const entry = JSON.parse(carry.toString('utf8').trim());
+          if (entry && typeof entry === 'object' && !Array.isArray(entry) && visible(entry) && (boundary == null || Number(entry.id) < boundary)) {
+            if (found.length < wanted) found.push(entry);
+            else hasEarlier = true;
+          }
+        } catch { /* 损坏的首行 */ }
+      }
+    } finally { fs.closeSync(fd); }
+    const deletedPrompts = new Set(deletion.deletedPromptTurns || []);
+    const entries = found.reverse().map(entry => deletedPrompts.has(entry.turnId) && entry.promptText ? { ...entry, promptText: '' } : entry);
+    return { entries, hasMore: hasEarlier, oldestId: entries[0]?.id ?? null, newestId: entries.at(-1)?.id ?? null };
+  }
+
   /** 根 → 当前叶子 的链（即"当前分支"） */
   chain() {
-    return this.entries();
+    return visibleSessionEntries(this.entries());
+  }
+
+  deleteEntry(entryId) {
+    const entries = this.chain(), target = entries.find(entry => entry.id === Number(entryId));
+    if (!target || !(['task_summary', 'step_end'].includes(target.type) || target.type === 'message' && ['user', 'assistant'].includes(target.role))) throw new Error('消息不存在或不可删除');
+    const entryIds = deletionTargets(entries, target);
+    const earliest = entryIds.reduce((value, id) => Math.min(value, id), Infinity);
+    entryIds.push(...entries.filter(entry => entry.type === 'compaction' && entry.id > earliest).map(entry => entry.id));
+    this.append({ type: 'entry_delete', entryIds, promptTurnId: target.role === 'user' ? target.turnId : undefined });
+    const state = deletionState(this.entries());
+    this.touchIndex({ deletedEntries: [...state.ids], deletedPromptTurns: [...state.prompts], deletedThrough: state.through });
+    return { entryIds, promptTurnId: target.role === 'user' ? target.turnId : undefined };
   }
 
   touchIndex(patch = {}) {
-    const idx = readIndex();
+    const idx = readIndex(this.directory);
     if (idx[this.id]) {
       Object.assign(idx[this.id], { updated: Date.now(), ...patch });
-      writeIndex(idx);
+      writeIndex(idx, this.directory);
     }
   }
 
@@ -340,13 +471,21 @@ export class Session {
     return fallback;
   }
 
-  get title() { return this._lastState('title', readIndex()[this.id]?.title ?? '新会话'); }
+  get title() { return this._lastState('title', readIndex(this.directory)[this.id]?.title ?? '新会话'); }
   get mode() { const value = this._lastState('mode', 'default'); return value === 'auto-all' ? 'auto-all' : 'default'; }
   get desktopEnabled() { return this._lastState('desktopEnabled', false); }
   get expertId() { return this._lastState('expertId', ''); }
   get expertPrompt() { return this._lastState('expertPrompt', ''); }
 
-  /** 重建 LLM 消息载荷：遇到 compaction entry 时用摘要替换其前的全部历史 */
+  contextEntries() {
+    const chain = this.chain(), checkpoint = chain.findLast(entry => entry.type === 'compaction');
+    if (!checkpoint) return chain;
+    if (!Array.isArray(checkpoint.retainedEntryIds)) return chain.filter(entry => entry.id >= checkpoint.id);
+    const retained = new Set(checkpoint.retainedEntryIds);
+    return chain.filter(entry => entry.id >= checkpoint.id || retained.has(entry.id));
+  }
+
+  /** 重建模型消息；新压缩格式保留原始指令和完整近期工具交互。 */
   messages({ contextWindow = 0 } = {}) {
     const out = [];
     let compacted = null;
@@ -356,22 +495,25 @@ export class Session {
       out.push({ role: 'user', content: [{ type: 'text', text: '[以下图片是上一组工具生成的结果，请结合任务继续处理]' }, ...pendingGeneratedImages] });
       pendingGeneratedImages = [];
     };
-    for (const e of this.chain()) {
+    for (const e of this.contextEntries()) {
       if (e.type === 'compaction') {
         compacted = e.summary;
-        out.length = 0;
-        pendingGeneratedImages = [];
+        if (!Array.isArray(e.retainedEntryIds)) { out.length = 0; pendingGeneratedImages = []; }
         continue;
       }
       if (e.type !== 'message') continue;
       const m = e;
-      if (m.role !== 'tool') flushGeneratedImages();
+      // Generated images are useful to the model only while the immediately
+      // preceding tool turn is being answered. Do not replay every historical
+      // screenshot on the next user turn; that silently inflates context with
+      // Base64 payloads. User attachments remain explicit model inputs.
+      if (m.role !== 'tool') pendingGeneratedImages = [];
       if (m.role === 'user') out.push({ role: 'user', content: Array.isArray(m.content) ? m.content.map(part => this.modelAttachment(part)) : m.content });
       else if (m.role === 'assistant') out.push({ role: 'assistant', text: m.text ?? '', toolCalls: m.toolCalls ?? [] });
       else if (m.role === 'tool') {
         out.push({ role: 'tool', toolCallId: m.toolCallId, content: m.content });
         const imageMedia = (m.media || []).filter((item) => item.type === 'image' && item.file);
-        pendingGeneratedImages.push(...imageMedia.map((item) => ({ type: 'image', dataUrl: `data:${item.mime};base64,${fs.readFileSync(path.join(attachmentDir(this.id), item.file)).toString('base64')}` })));
+        pendingGeneratedImages.push(...imageMedia.map((item) => ({ type: 'image', dataUrl: `data:${item.mime};base64,${fs.readFileSync(path.join(attachmentDir(this.id, this.directory), item.file)).toString('base64')}` })));
       }
     }
     flushGeneratedImages();
@@ -383,6 +525,7 @@ export class Session {
     const limit = Math.max(2000, Math.floor(Number(contextWindow) * 0.85));
     const estimate = estimateMessageTokens;
     if (estimate(replay) <= limit) return replay;
+    if (this.chain().findLast(entry => entry.type === 'compaction')?.formatVersion === 2) throw Object.assign(new Error('受保护上下文超过窗口，不能静默丢弃原始要求或证据'), { code: 'CONTEXT_COMPACTION_FAILED' });
     const fixed = summary ? [summary] : [{ role: 'user', content: '[更早的对话已压缩或省略，当前消息为最近上下文]' }];
     const tail = summary ? replay.slice(1) : replay;
     const selected = [];
@@ -401,46 +544,59 @@ export class Session {
   }
 
   /** 供 UI 重放：返回当前分支的 entries + 会话状态 */
-  snapshot(contextWindow = 128000) {
+  snapshot(contextWindow = 128000, options = {}) {
+    const paged = Number.isFinite(Number(options.limit));
+    const page = paged ? this.readPage({ limit: options.limit, before: options.before }) : null;
+    const recent = page?.entries || [];
     return {
       id: this.id,
+      parentSessionId: this.parentSessionId,
+      rootSessionId: this.rootSessionId || this.id,
       title: this.title,
       mode: this.mode,
       desktopEnabled: this.desktopEnabled,
       expertId: this.expertId,
       expertPrompt: this.expertPrompt,
-      entries: this.chain(),
+      meetingId: this._lastState('meetingId', null),
+      entries: paged ? recent : this.chain(),
+      recovery: (() => { const { baseline, qualityProgress, ...state } = taskRecoveryState(this); return state; })(),
       context: this.contextStats(contextWindow),
+      ...(paged ? { history: { hasMore: page.hasMore, oldestId: page.oldestId, newestId: page.newestId, limit: Number(options.limit) } } : {}),
     };
   }
 
   contextStats(contextWindow = 128000) {
-    const messages = this.messages({ contextWindow });
+    const raw = this.messages();
+    let messages, blocked = false;
+    try { messages = this.messages({ contextWindow }); }
+    catch (error) { if (error.code !== 'CONTEXT_COMPACTION_FAILED') throw error; messages = raw; blocked = true; }
     const tokens = estimateMessageTokens(messages);
-    const rawTokens = estimateMessageTokens(this.messages());
-    return { tokens, rawTokens, contextWindow, percent: contextWindow ? Math.min(100, Math.round(tokens / contextWindow * 1000) / 10) : 0, messageCount: messages.length, compacted: this.chain().some((e) => e.type === 'compaction'), truncated: rawTokens > tokens };
+    const rawTokens = estimateMessageTokens(raw);
+    return { tokens, rawTokens, contextWindow, percent: contextWindow ? Math.min(100, Math.round(tokens / contextWindow * 1000) / 10) : 0, messageCount: messages.length, compacted: this.chain().some((e) => e.type === 'compaction'), truncated: rawTokens > tokens, blocked };
   }
 
   /** fork：把当前分支完整复制为一个新会话文件 */
   fork(newTitle) {
-    const ns = Session.create(newTitle ?? `${this.title} (fork)`);
+    const ns = Session.create(newTitle ?? `${this.title} (fork)`, { directory: this.directory });
     fs.writeFileSync(ns.file, ''); // 清掉 create 写入的 meta，重写完整分支
     ns.counter = 0;
     ns.leaf = 0;
-    const idx = readIndex();
+    const idx = readIndex(this.directory);
     for (const e of this.chain()) {
       const copy = { ...e };
       if (e.id === 0) {
+        delete copy.parentSessionId; delete copy.rootSessionId;
         copy.created = Date.now();
         copy.title = newTitle ?? `${this.title} (fork)`;
       }
       fs.appendFileSync(ns.file, JSON.stringify(copy) + '\n');
       if (e.id !== 0) { ns.counter = e.id; ns.leaf = e.id; }
     }
-    const sourceAttachments = attachmentDir(this.id), targetAttachments = attachmentDir(ns.id);
+    const sourceAttachments = attachmentDir(this.id, this.directory), targetAttachments = attachmentDir(ns.id, ns.directory);
     if (fs.existsSync(sourceAttachments)) fs.cpSync(sourceAttachments, targetAttachments, { recursive: true });
+    copyToolOutputs(this, ns);
     idx[ns.id].title = newTitle ?? `${this.title} (fork)`;
-    writeIndex(idx);
+    writeIndex(idx, this.directory);
     return ns;
   }
 }

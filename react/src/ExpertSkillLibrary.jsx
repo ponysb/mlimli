@@ -1,3 +1,4 @@
+import { confirmAction } from './ActionPopover.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 import { BookOpen, Check, ChevronRight, Download, Package, Pencil, Plus, RefreshCw, Search, Server, Sparkles, Trash2, Wrench, X } from 'lucide-react';
 import './expert-library.css';
@@ -33,7 +34,7 @@ export default function ExpertSkillLibrary({ info, current, pending, running, on
   function toggleSaved(kind, item) { const key = `${kind}:${kind === 'expert' ? item.id : skillKey(item)}`, next = { ...saved, [key]: !saved[key] }; setSaved(next); localStorage.setItem('mli-library-saved', JSON.stringify(next)); }
   function startDraft(kind, item = null) { setError(''); setDraft(item ? { ...item, kind } : kind === 'expert' ? { kind, name: '', description: '', category: '自建', tags: [], prompt: '' } : { kind, name: '', description: '', content: '' }); }
   async function saveItem() { try { await request(`/api/library/${draft.kind === 'expert' ? 'experts' : 'skills'}`, { method: 'POST', body: draft }); setDraft(null); setError(''); await onRefresh(); } catch (reason) { setError(reason.message); } }
-  async function removeItem(item, kind) { if (!window.confirm(`删除“${item.name}”？`)) return; try { await request(`/api/library/${kind === 'expert' ? 'experts' : 'skills'}/${item.id}`, { method: 'DELETE' }); setSelected(null); setError(''); await onRefresh(); } catch (reason) { setError(reason.message); } }
+  async function removeItem(item, kind) { if (!await confirmAction(`删除“${item.name}”？`)) return; try { await request(`/api/library/${kind === 'expert' ? 'experts' : 'skills'}/${item.id}`, { method: 'DELETE' }); setSelected(null); setError(''); await onRefresh(); } catch (reason) { setError(reason.message); } }
   async function installPlugin(item) { setPluginBusy(true); setError(''); try { await request(`/api/account/plugins/${encodeURIComponent(item.id)}/install`, { method: 'POST', body: { sha256: item.sha256 } }); await request('/api/plugins/reload', { method: 'POST' }); await onRefresh(); setPluginTab('installed'); } catch (reason) { setError(reason.message); } finally { setPluginBusy(false); } }
   return <div className="collection-page library-hub">
     <header className="collection-header library-hub-head"><div><h1>专家与 Skill</h1><p>专家负责当前会话的工作方式，Skill 按需提供可复用流程；插件运行时能力在“已加载插件”中管理。</p></div><label className="collection-search"><Search size={15}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索名称或描述"/></label></header>

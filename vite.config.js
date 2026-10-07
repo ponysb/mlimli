@@ -33,4 +33,4 @@ function whiteboardAssets() {
   };
 }
 
-export default defineConfig(({ mode }) => ({ plugins: [react(), whiteboardAssets()], root: 'react', define: { __MLI_LEGACY_WINDOWS__: JSON.stringify(mode === 'legacy') }, build: { outDir: mode === 'legacy' ? '../dist-legacy' : '../dist', emptyOutDir: true, ...(mode === 'legacy' ? { target: 'chrome108' } : {}) } }));
+export default defineConfig(({ mode }) => ({ base: './', plugins: [react(), whiteboardAssets()], root: 'react', define: { __MLI_LEGACY_WINDOWS__: JSON.stringify(mode === 'legacy') }, build: { outDir: mode === 'legacy' ? '../dist-legacy' : '../dist', emptyOutDir: true, rollupOptions: { input: { main: path.resolve('react/index.html'), document: path.resolve('react/document-renderer.html') } }, ...(mode === 'legacy' ? { target: 'chrome108' } : {}) } }));

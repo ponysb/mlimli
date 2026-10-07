@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { resolveInWorkspace, resolveReadable } from '../../core/paths.mjs';
+import { fileEvidence } from '../../core/verification.mjs';
+import { assertLocalVerification, verificationEnvironment } from '../../core/artifact-evidence.mjs';
 
 function runBinary(binary, args, { signal } = {}) {
   return new Promise((resolve, reject) => {
@@ -43,12 +45,20 @@ function extension(value, fallback) {
   return ext || fallback;
 }
 
+export function mediaProbeChecks(data,input) {
+  const streams=Array.isArray(data.streams)?data.streams:[];
+  const still=/\.(?:png|jpe?g|webp)$/i.test(input);
+  return [{name:'媒体流存在',passed:streams.length>0},still?{name:'图像尺寸有效',passed:streams.some(stream=>stream.codec_type==='video'&&Number(stream.width)>0&&Number(stream.height)>0)}:{name:'媒体时长有效',passed:Number(data.format?.duration)>0||streams.some(stream=>Number(stream.duration)>0)}];
+}
 async function probe({ input }, ctx) {
+  assertLocalVerification();
   const file = inputPath(input);
+  const artifact=fileEvidence(input);
   const result = await runBinary('ffprobe', ['-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams', file], ctx);
   let data;
   try { data = JSON.parse(result.stdout); } catch { throw new Error('ffprobe 返回了无效 JSON'); }
-  return { content: JSON.stringify(data, null, 2), data };
+  const checks=mediaProbeChecks(data,input);checks.push({name:'读取期间文件保持一致',passed:fileEvidence(input).sha256===artifact.sha256});
+  return { content: JSON.stringify(data, null, 2), data, status:checks.every(check=>check.passed)?'ok':'error', verification:{kind:'media',environment:verificationEnvironment(),artifacts:[artifact],checks,assertions:checks.length,decoded:false,scope:'ffprobe 元数据；仍需实际解码及抽帧核对内容与音画质量'} };
 }
 
 async function check(_args, ctx) {

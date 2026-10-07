@@ -41,7 +41,8 @@ export function hydrate(snapshot) {
 }
 
 export function reduceEvent(current, event) {
-  if (!current.id || event.sessionId !== current.id || (event.seq && event.seq <= current.eventSeq)) return current;
+  const groupEvent = event.rootSessionId === current.id && ['permission_request', 'permission_resolved', 'ui_request', 'ui_resolved', 'agent_group_updated'].includes(event.type);
+  if (!current.id || (event.sessionId !== current.id && !groupEvent) || (event.seq && event.seq <= current.eventSeq)) return current;
   const next = { ...current, parts: current.parts.map(part => ({ ...part })), eventSeq: event.seq || current.eventSeq };
   const upsert = part => {
     const index = next.parts.findIndex(item => item.id === part.id);
@@ -70,8 +71,9 @@ export function reduceEvent(current, event) {
   }
   if (event.type === 'queue_updated') next.queue = event.queue || [];
   if (event.type === 'session_updated') Object.assign(next, Object.fromEntries(['title', 'mode', 'expertId'].filter(key => event[key] !== undefined).map(key => [key, event[key]])));
-  if (event.type === 'permission_request') next.permission = event.request;
-  if (event.type === 'permission_resolved' && next.permission?.reqId === event.reqId) next.permission = null;
+  if (event.type === 'agent_group_updated') next.group = event.group;
+  if (event.type === 'permission_request') { next.permissions = [...(next.permissions || (next.permission ? [next.permission] : []))].filter(request => request.reqId !== event.request.reqId).concat(event.request); next.permission = next.permissions[0]; }
+  if (event.type === 'permission_resolved') { next.permissions = (next.permissions || (next.permission ? [next.permission] : [])).filter(request => request.reqId !== event.reqId); next.permission = next.permissions[0] || null; }
   if (event.type === 'ui_request' && !next.uiRequests.some(item => item.reqId === event.request.reqId)) next.uiRequests = [...next.uiRequests, event.request];
   if (event.type === 'ui_resolved') next.uiRequests = next.uiRequests.filter(item => item.reqId !== event.reqId);
   if (event.type === 'context_update') next.context = event.context;

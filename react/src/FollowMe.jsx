@@ -4,11 +4,11 @@ import publicAccountQr from '../../electron/assets/dyh.png';
 import qqQr from '../../electron/assets/qq.png';
 import './follow-me.css';
 
-export default function FollowMe() {
+export default function FollowMe({ compact = false }) {
   const [open, setOpen] = useState(false);
   const dialog = useRef(null);
   useEffect(() => { if (open && !dialog.current.open) dialog.current.showModal(); }, [open]);
-  return <><button className="follow-me-button" onClick={() => setOpen(true)}><Heart size={16}/>关注我</button>{open && <dialog className="follow-me-dialog" ref={dialog} aria-labelledby="follow-me-title" onClose={() => setOpen(false)} onClick={(event) => {
+  return <><button className={`follow-me-button ${compact ? 'sidebar-footer-icon' : ''}`} title="关注我" aria-label="关注我" onClick={() => setOpen(true)}><Heart size={17}/>{!compact && '关注我'}</button>{open && <dialog className="follow-me-dialog" ref={dialog} aria-labelledby="follow-me-title" onClose={() => setOpen(false)} onClick={(event) => {
     if (event.target !== event.currentTarget) return;
     const bounds = event.currentTarget.getBoundingClientRect();
     if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) event.currentTarget.close();

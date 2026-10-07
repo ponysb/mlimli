@@ -19,6 +19,7 @@ export async function* parseOpenAIStream(res) {
   const decoder = new TextDecoder();
   let buf = '';
   let metadataSent = false;
+  let responseFinished = false;
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -56,10 +57,10 @@ export async function* parseOpenAIStream(res) {
         if (tc.function?.arguments) yield { type: 'tool_delta', index, argsChunk: tc.function.arguments };
         if (tc.id && tc.function?.arguments !== undefined) yield { type: 'tool_end', index };
       }
-      if (choice.finish_reason) yield { type: 'done' };
+      if (choice.finish_reason) { responseFinished = true; yield { type: 'done', reason: choice.finish_reason }; }
     }
   }
-  yield { type: 'done' };
+  yield { type: 'done', reason: responseFinished ? undefined : 'incomplete' };
 }
 
 async function* parseSse(res, mapEvent) {
@@ -92,6 +93,7 @@ async function* parseSse(res, mapEvent) {
 export async function* parseResponsesStream(res) {
   const started = new Set();
   const argsSeen = new Set();
+  let responseFinished = false;
   yield* parseSse(res, (event) => {
     const out = [];
     const index = event.output_index ?? 0;
@@ -112,19 +114,23 @@ export async function* parseResponsesStream(res) {
       if (!argsSeen.has(index) && event.arguments) out.push({ type: 'tool_delta', index, argsChunk: event.arguments });
       out.push({ type: 'tool_end', index });
     }
-    if (event.type === 'response.completed') {
+    if (event.type === 'response.completed' || event.type === 'response.incomplete') {
+      responseFinished = true;
       out.push({ type: 'metadata', metadata: { id: event.response?.id, model: event.response?.model, status: event.response?.status } });
       if (event.response?.usage) out.push({ type: 'usage', usage: event.response.usage });
-      out.push({ type: 'done' });
+      out.push({ type: 'done', reason: event.type === 'response.incomplete' || event.response?.status === 'incomplete' ? 'incomplete' : 'stop' });
     }
     if (event.type === 'error') out.push({ type: 'error', message: event.message || event.error?.message || 'Responses API 返回错误' });
     return out;
   });
+  if (!responseFinished) yield { type: 'done', reason: 'incomplete' };
 }
 
 /** Anthropic Messages SSE -> unified StreamEvent. */
 export async function* parseAnthropicStream(res) {
   let inputTokens = 0, outputTokens = 0, cacheCreationTokens = 0, cacheReadTokens = 0;
+  let stopReason;
+  let responseFinished = false;
   yield* parseSse(res, (event) => {
     const out = [];
     const index = event.index ?? 0;
@@ -143,14 +149,16 @@ export async function* parseAnthropicStream(res) {
       if (event.delta?.type === 'input_json_delta' && event.delta.partial_json) out.push({ type: 'tool_delta', index, argsChunk: event.delta.partial_json });
     }
     if (event.type === 'content_block_stop') out.push({ type: 'tool_end', index });
-    if (event.type === 'message_delta') outputTokens = Number(event.usage?.output_tokens || outputTokens);
+    if (event.type === 'message_delta') { outputTokens = Number(event.usage?.output_tokens || outputTokens); stopReason = event.delta?.stop_reason || stopReason; }
     if (event.type === 'message_stop') {
+      responseFinished = true;
       out.push({ type: 'usage', usage: { input_tokens: inputTokens, output_tokens: outputTokens, cache_creation_input_tokens: cacheCreationTokens, cache_read_input_tokens: cacheReadTokens } });
-      out.push({ type: 'done' });
+      out.push({ type: 'done', reason: stopReason });
     }
     if (event.type === 'error') out.push({ type: 'error', message: event.error?.message || 'Anthropic API 返回错误' });
     return out;
   });
+  if (!responseFinished) yield { type: 'done', reason: 'incomplete' };
 }
 
 /** 增量拼装 tool_calls：StreamEvent[] → [{ id, name, args(对象) }] */
@@ -167,7 +175,7 @@ export function assembleToolCalls(events) {
   }
   return [...map.values()].map((t) => {
     let args = {};
-    try { args = t.argsBuf ? JSON.parse(t.argsBuf) : {}; } catch { args = { _raw: t.argsBuf }; }
+    try { args = t.argsBuf ? JSON.parse(t.argsBuf) : {}; if (!args || typeof args !== 'object' || Array.isArray(args)) args = { _raw: t.argsBuf }; } catch { args = { _raw: t.argsBuf }; }
     return { id: t.id, name: t.name, args };
   });
 }
@@ -201,6 +209,13 @@ export async function* mockStream(messages, tools) {
     for (const c of chunk(s, 6)) { yield { type: 'text_delta', text: c }; await sleep(8); }
   }
 
+  if (text.startsWith('[协作消息：')) { yield* emitText('已收到子任务结果。请以子任务记录中的证据和验证为准；mock 演示不代表真实代码分析。'); yield { type: 'done' }; return; }
+  if (text.startsWith('[主任务协作汇总]')) { yield* emitText('正在等待子任务并汇总结果；mock 模式仅演示协作流程。'); yield { type: 'done' }; return; }
+  if (/子\s*agent|subagent|并行.*探索/i.test(text) && hasTool('agent_spawn') && !hasToolResult) {
+    yield { type: 'tool_start', index: 0, id: 'mock_spawn', name: 'agent_spawn' };
+    yield { type: 'tool_delta', index: 0, argsChunk: JSON.stringify({ tasks: [{ profile: 'explorer', title: '代码结构', instruction: '只读分析代码结构，返回文件证据。' }, { profile: 'reviewer', title: '验证检查', instruction: '只读检查验证入口，返回证据。' }], idempotencyKey: 'mock-demo' }) };
+    yield { type: 'done' }; return;
+  }
   if (/截图|screenshot|屏幕/.test(text) && hasTool('screenshot')) {
     yield { type: 'text_delta', text: '好的，我先截取当前屏幕。\n\n' };
     yield { type: 'tool_start', index: 0, id: 'mock_call_1', name: 'screenshot' };

@@ -1,0 +1,7 @@
+{
+  "name": "local-speech",
+  "version": "0.3.0",
+  "description": "可选 Paraformer、SenseVoice、Qwen3-ASR 0.6B / 1.7B，本机配置推荐、按需下载、会议说话人识别。",
+  "permissions": [],
+  "capabilities": []
+}

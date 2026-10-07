@@ -16,7 +16,9 @@ export function macBuildConfig(stage, arch) {
       { from: path.join(stage.destination, 'stage', 'node'), to: 'node', filter: ['**/*'] },
       { from: path.join(ROOT, 'cli', 'launchers', 'mli'), to: 'bin/mli' },
     ],
-    mac: { target: ['pkg'], category: 'public.app-category.productivity', artifactName: `MoliCreation-\${version}-${arch}.\${ext}` },
+    mac: { target: ['pkg'], category: 'public.app-category.productivity', artifactName: `MoliCreation-\${version}-${arch}.\${ext}`,
+      extendInfo: { NSMicrophoneUsageDescription: '用于语音输入与会议录音，在本机转写发言。', NSCameraUsageDescription: '用于用户开启的会议视频录制。', NSScreenCaptureUsageDescription: '用于用户选择的会议屏幕或窗口录制。' },
+    },
     pkg: { installLocation: '/Applications', scripts: path.join(ROOT, 'electron', 'pkg-scripts') },
     afterPack: async context => {
       const resources = path.join(context.appOutDir, '魔力工作台.app', 'Contents', 'Resources');

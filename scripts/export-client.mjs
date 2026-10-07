@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 export const CLIENT_FILES = [
-  'README.md', 'README.en.md', '.gitignore', '.env.example', 'config.example.json', 'package.json', 'package-lock.json', 'build-windows.cmd',
+  'README.md', 'README.en.md', '.gitignore', '.gitattributes', '.env.example', 'config.example.json', 'package.json', 'package-lock.json', 'build-windows.cmd',
   'vite.config.js', 'server.mjs', 'PLUGIN-COMPATIBILITY.md',
   'scripts/check.mjs', 'scripts/export-client.mjs', 'scripts/package-win.mjs', 'scripts/verify-win.mjs', 'scripts/clean-release.mjs', 'docs/WINDOWS-PACKAGING.md',
   'scripts/terminal-package.mjs', 'scripts/package-linux.mjs', 'scripts/package-mac.mjs', 'docs/TERMINAL.md', 'test/cli.test.mjs',
@@ -12,26 +12,42 @@ export const CLIENT_FILES = [
   'test/account.test.mjs', 'test/agent-workflow.test.mjs', 'test/export-client.test.mjs',
   'test/local-library.test.mjs', 'test/session-compat.test.mjs', 'test/session-queue.test.mjs',
   'test/session-tool-replay.test.mjs', 'test/conversation-avatar.test.mjs', 'test/electron-package.test.mjs', 'test/terminal-ui.test.mjs', 'test/provider-settings.test.mjs', 'test/client-env.test.mjs',
-  'test/terminal-dependencies.test.mjs',
+  'test/computer-use.test.mjs', 'test/fixtures/computer-use-window.ps1', 'test/fixtures/computer-use-browser-smoke.cjs',
+  'test/fixtures/speech-entry-browser-smoke.cjs',
+  'test/terminal-dependencies.test.mjs', 'test/desktop-update.test.mjs', 'test/fixtures/desktop-update-smoke.cjs',
+  'test/sandbox.test.mjs', 'test/sandbox-http.test.mjs', 'docs/SANDBOX.md', 'scripts/setup-windows-sandbox.mjs', 'scripts/build-sandbox-image.mjs', 'scripts/sandbox/Dockerfile',
+  'docs/APP-CENTER.md', 'test/app-center.test.mjs', 'test/app-center-http.test.mjs', 'test/app-center-browser.test.mjs', 'test/fixtures/app-center-smoke.cjs',
+  'test/app-center-catalog.test.mjs', 'test/app-center-icons.test.mjs',
+  'test/api-log-recovery.test.mjs',
   'test/attachments.test.mjs', 'test/attachments-http.test.mjs',
+  'docs/CLIENT-QUALITY.md', 'docs/MEMORY.md', 'docs/SUBAGENTS.md', 'docs/SCHEDULES.md', 'docs/LSP.md', 'scripts/verify-memory-ui.cjs',
+  'test/browser-recording.test.mjs', 'test/channels.test.mjs', 'test/composer-capabilities.test.mjs',
+  'test/delivery-evidence.test.mjs', 'test/fixtures/document-evidence.mjs', 'test/dictation-draft.test.mjs', 'test/dictation-microphone.test.mjs',
+  'test/meeting-workspace.test.mjs', 'test/memory-http.test.mjs', 'test/memory.test.mjs',
+  'test/run-control.test.mjs', 'test/sandbox-setup.test.mjs', 'test/scheduler.test.mjs',
+  'test/session-deletion.test.mjs', 'test/session-pagination.test.mjs', 'test/speech-worker-cache.test.mjs',
+  'test/subagents-http.test.mjs', 'test/subagents.test.mjs', 'test/task-continuity.test.mjs',
+  'test/task-quality-http.test.mjs', 'test/task-quality.test.mjs', 'test/task-recovery-http.test.mjs',
+  'test/ui-preferences-http.test.mjs', 'test/windows-command-quoting.test.mjs', 'test/workspace-reference-files.test.mjs', 'test/workspaces-http.test.mjs',
   'test/lsp.test.mjs', 'test/task-artifacts.test.mjs', 'test/debug-console.test.mjs',
+  'docs/VOICE-MEETINGS.md', 'test/speech.test.mjs', 'test/speech-models.test.mjs', 'test/speech-summary-http.test.mjs', 'test/fixtures/speech-browser-smoke.cjs', 'test/fixtures/speech-model-regression.py', 'test/fixtures/speech-tier-regression.py', 'test/fixtures/speaker-model-regression.py',
 ];
 export const CLIENT_TREES = [
   'core', 'react', 'electron', 'cli',
-  ...['desktop', 'office', 'ffmpeg', 'remotion', 'notion', 'build-web-apps',
+  ...['computer-use', 'office', 'ffmpeg', 'local-speech', 'remotion', 'notion', 'build-web-apps',
     'build-web-data-visualization', 'linear', 'google-drive', 'github', 'feishu', 'dingtalk', 'lsp'].map(name => `plugins/${name}`),
 ];
 const CLIENT_SCRIPTS = ['start', 'tui', 'cli', 'build:tui', 'test:tui', 'check', 'test', 'dev:web', 'build:web', 'build:web:legacy', 'preelectron', 'electron', 'export:client', 'pack:win', 'dist:win', 'dist:win:modern', 'dist:win:legacy', 'dist:win:all', 'verify:win', 'dist:mac', 'dist:linux'];
-const EXCLUDED_DIRECTORIES = new Set(['node_modules', '.git', '.agent', '.agents', 'logs', 'dist', 'dist-legacy', 'release', 'storage', 'media-secrets']);
+const EXCLUDED_DIRECTORIES = new Set(['node_modules', '.git', '.agent', '.agents', '.security', 'logs', 'dist', 'dist-legacy', 'release', 'storage', 'media-secrets', 'meetings', '__pycache__', '.cache', '.pytest_cache', '.venv', 'Partitions']);
 const SOURCE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function excluded(relativePath) {
   const parts = relativePath.split('/');
   const name = parts.at(-1);
   return parts.some(part => EXCLUDED_DIRECTORIES.has(part)) ||
-    name === 'config.json' || name === 'account-session.json' ||
+    name === 'config.json' || name === 'account-session.json' || name === 'OWNERS' || name === 'voice-profiles.json' ||
     (name.startsWith('.env') && name !== '.env.example') ||
-    /\.(?:log|pem|key|p12|pfx|sqlite|sqlite3|db|zip)$/i.test(name);
+    /\.(?:log|pem|key|p12|pfx|sqlite|sqlite3|db|zip|pyc|pyo|bak|tmp|old)$/i.test(name);
 }
 
 function assertNoLink(root, relativePath) {
@@ -77,6 +93,10 @@ export function planClientExport(sourceRoot = SOURCE_ROOT) {
   if (fs.existsSync(path.join(root, 'LICENSE'))) collect('LICENSE');
   const entries = [...paths].sort().map(relativePath => {
     let data = fs.readFileSync(path.join(root, relativePath));
+    // Keep manifest hashes stable across Windows and Unix Git checkouts.
+    if (!data.includes(0) && Buffer.from(data.toString('utf8')).equals(data)) {
+      data = Buffer.from(data.toString('utf8').replace(/\r\n/g, '\n'));
+    }
     if (relativePath === 'package.json') data = packageForClient(data);
     if (relativePath === 'config.example.json') {
       const config = JSON.parse(data.toString('utf8'));

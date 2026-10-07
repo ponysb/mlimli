@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { getRunContext } from './run-context.mjs';
 import { parseOpenAIStream, parseResponsesStream, parseAnthropicStream, mockStream } from './stream.mjs';
 import { PROTOCOLS, createId, defaultBaseUrl, keyHint, normalizeProtocol } from './providers.mjs';
 import { appendApiLog, createApiLogId } from './api-logs.mjs';
@@ -50,6 +51,15 @@ function normalizePricing(value = {}) { return { inputPer1M: Math.max(0, Number(
 function validPricingTime(value) { return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || '')); }
 function isPricingPeak(now, pricing) { if (!pricing.peakEnabled || !validPricingTime(pricing.peakStartTime) || !validPricingTime(pricing.peakEndTime) || pricing.peakStartTime === pricing.peakEndTime) return false; if (pricing.peakWeekdaysOnly && (now.getDay() === 0 || now.getDay() === 6)) return false; const current = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`; return pricing.peakStartTime < pricing.peakEndTime ? current >= pricing.peakStartTime && current < pricing.peakEndTime : current >= pricing.peakStartTime || current < pricing.peakEndTime; }
 function effectivePricing(value, now = new Date()) { const pricing = normalizePricing(value); if (!isPricingPeak(now, pricing)) return pricing; return { ...pricing, inputPer1M: pricing.peakInputPer1M ?? pricing.inputPer1M, outputPer1M: pricing.peakOutputPer1M ?? pricing.outputPer1M, cacheCreationPer1M: pricing.peakCacheCreationPer1M ?? pricing.cacheCreationPer1M, cacheReadPer1M: pricing.peakCacheReadPer1M ?? pricing.cacheReadPer1M }; }
+export function resolveModelSelection(modelId) {
+  ensureCatalog();
+  if (!config) return {};
+  const model = config.models.find(item => item.id === (modelId || config.activeModelId));
+  const provider = config.providers.find(item => item.id === model?.providerId);
+  if (!model || !provider) throw new Error('模型或服务商不存在');
+  return structuredClone({ model, provider });
+}
+
 function activePair() {
   ensureCatalog();
   const model = config.models.find((m) => m.id === config.activeModelId) || config.models[0];
@@ -74,7 +84,7 @@ function resolvedKey(provider, override) {
   return process.env.MLI_API_KEY || '';
 }
 function publicProvider(provider) { return { id: provider.id, name: provider.name, protocol: provider.protocol, baseUrl: provider.baseUrl, apiKeyEnv: provider.apiKeyEnv || '', hasKey: !!resolvedKey(provider), keyHint: provider.id === MANAGED_PROVIDER_ID ? '账户登录' : provider.apiKey ? keyHint(provider.apiKey) : (resolvedKey(provider) ? '已配置' : ''), managed: provider.id === MANAGED_PROVIDER_ID }; }
-function publicModel(model) { return { id: model.id, providerId: model.providerId, name: model.name || model.model, model: model.model, contextWindow: Number(model.contextWindow || 128000), pricing: normalizePricing(model.pricing), capabilities: model.capabilities || null }; }
+function publicModel(model) { return { id: model.id, providerId: model.providerId, name: model.name || model.model, model: model.model, contextWindow: Number(model.contextWindow || 128000), pricing: normalizePricing(model.pricing), capabilities: model.capabilities || null, ...(model.providerId === MANAGED_PROVIDER_ID ? { displayMultiplier: Number(model.displayMultiplier ?? 1) } : {}) }; }
 
 export function providerInfo() {
   const { provider, model } = activePair();
@@ -219,11 +229,16 @@ function toOpenAI(messages) { return messages.map((m) => m.role === 'assistant' 
 function responseParts(content) { return Array.isArray(content) ? content.map(p => p.type === 'image' ? { type: 'input_image', image_url: p.dataUrl } : p.type === 'file' ? { type: 'input_file', filename: p.name, file_data: p.dataUrl } : { type: 'input_text', text: p.text || '' }) : String(content ?? ''); }
 function toResponses(messages) { const out = []; for (const m of messages) { if (m.role === 'assistant') { if (m.text) out.push({ role: 'assistant', content: m.text }); for (const c of m.toolCalls || []) out.push({ type: 'function_call', call_id: c.id, name: c.name, arguments: JSON.stringify(c.args || {}) }); } else if (m.role === 'tool') out.push({ type: 'function_call_output', call_id: m.toolCallId, output: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }); else out.push({ role: m.role, content: responseParts(m.content) }); } return out; }
 function toAnthropic(messages) { const out = []; for (const m of messages) { if (m.role === 'assistant') { const content = []; if (m.text) content.push({ type: 'text', text: m.text }); for (const c of m.toolCalls || []) content.push({ type: 'tool_use', id: c.id, name: c.name, input: c.args || {} }); out.push({ role: 'assistant', content }); } else if (m.role === 'tool') out.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: m.toolCallId, content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }] }); else out.push({ role: m.role === 'system' ? 'user' : m.role, content: anthropicParts(m.content) }); } return out; }
-export function buildRequest(provider, model, messages, system, tools, stream) {
+export function buildRequest(provider, model, messages, system, tools, stream, maxOutputTokens) {
   messages = prepareModelMessages(messages, model, provider.protocol);
-  if (provider.protocol === 'openai-responses') { const body = { model: model.model, input: toResponses(messages), instructions: system || undefined, stream, store: false }; if (tools.length) body.tools = responseTools(tools); return { url: `${provider.baseUrl}/responses`, body }; }
-  if (provider.protocol === 'anthropic') { const body = { model: model.model, messages: toAnthropic(messages), system: system || undefined, max_tokens: 4096, stream }; if (tools.length) body.tools = anthropicTools(tools); return { url: `${provider.baseUrl}/messages`, body }; }
-  const body = { model: model.model, messages: toOpenAI(system ? [{ role: 'system', content: system }, ...messages] : messages), stream }; if (tools.length) body.tools = openAITools(tools); if (stream) body.stream_options = { include_usage: true }; return { url: `${provider.baseUrl}/chat/completions`, body };
+  if (provider.protocol === 'openai-responses') { const body = { model: model.model, input: toResponses(messages), instructions: system || undefined, stream, store: false }; if (tools.length) body.tools = responseTools(tools); applyOutputLimit(body, provider, model, maxOutputTokens); return { url: `${provider.baseUrl}/responses`, body }; }
+  if (provider.protocol === 'anthropic') { const body = { model: model.model, messages: toAnthropic(messages), system: system || undefined, max_tokens: 4096, stream }; if (tools.length) body.tools = anthropicTools(tools); applyOutputLimit(body, provider, model, maxOutputTokens); return { url: `${provider.baseUrl}/messages`, body }; }
+  const body = { model: model.model, messages: toOpenAI(system ? [{ role: 'system', content: system }, ...messages] : messages), stream }; if (tools.length) body.tools = openAITools(tools); if (stream) body.stream_options = { include_usage: true }; applyOutputLimit(body, provider, model, maxOutputTokens); return { url: `${provider.baseUrl}/chat/completions`, body };
+}
+function applyOutputLimit(body, provider, model, value) {
+  if (!Number.isFinite(Number(value)) || Number(value) <= 0) return;
+  const field = provider.protocol === 'openai-responses' ? 'max_output_tokens' : provider.protocol === 'openai-chat' && /^(gpt-[56]|o[134])/.test(model.model) ? 'max_completion_tokens' : 'max_tokens';
+  body[field] = Math.max(128, Math.min(65536, Math.floor(Number(value))));
 }
 function extractNonStream(protocol, json) { if (protocol === 'openai-responses') return { text: json.output_text || (json.output || []).flatMap((i) => i.content || []).filter((c) => c.type === 'output_text').map((c) => c.text).join(''), usage: json.usage }; if (protocol === 'anthropic') return { text: (json.content || []).filter((c) => c.type === 'text').map((c) => c.text).join(''), usage: json.usage }; return { text: json.choices?.[0]?.message?.content || '', usage: json.usage }; }
 function estimateTokens(value) { return Math.max(0, Math.ceil(String(value ?? '').length / 4)); }
@@ -279,10 +294,10 @@ function responseMetadata(response) {
   return { httpStatus: response.status, headers };
 }
 
-export async function* chat({ messages, system, tools = [], signal, sessionId, step } = {}) {
-  const { provider, model } = activePair();
+export async function* chat({ messages, system, tools = [], signal, sessionId, step, modelSelection = getRunContext()?.modelSelection } = {}) {
+  const { provider, model } = modelSelection || activePair();
   if (!provider || !model) { yield { type: 'error', message: '请先添加服务商和模型' }; return; }
-  const request = buildRequest(provider, model, messages, system, tools, true);
+  const request = buildRequest(provider, model, messages, system, tools, true, getRunContext()?.config?.agent?.runControl?.maxOutputTokens);
   const startedAt = performance.now(), firstOutputAt = { value: null }, responseEvents = [];
   let res;
   let outputText = '', thinkingText = '', usage = null, streamMetadata = {}, billedFromStream = null, parsedError = null;
@@ -335,10 +350,14 @@ export async function* chat({ messages, system, tools = [], signal, sessionId, s
   } finally { await finish({ httpStatus: res.status, ...(streamError || parsedError || !res.ok ? { error: streamError || parsedError || `HTTP ${res.status}` } : {}) }); }
 }
 
-export async function completeOnce({ messages, signal, sessionId } = {}) {
-  const { provider, model } = activePair();
+export async function completeOnce({ messages, signal, sessionId, maxOutputTokens, requireComplete = false, modelSelection = getRunContext()?.modelSelection } = {}) {
+  const { provider, model } = modelSelection || activePair();
   if (!provider || !model) throw new Error('请先添加服务商和模型');
   const request = buildRequest(provider, model, messages, '', [], false), startedAt = performance.now(), pricing = normalizePricing(model.pricing);
+  if (maxOutputTokens != null) {
+    const field = provider.protocol === 'openai-responses' ? 'max_output_tokens' : provider.protocol === 'openai-chat' && /^(gpt-[56]|o[134])/.test(model.model) ? 'max_completion_tokens' : 'max_tokens';
+    request.body[field] = Math.max(128, Math.min(4096, Number(maxOutputTokens) || 1800));
+  }
   const save = async (text, usage, extra = {}) => {
     const counts = usageNumbers(usage, request.body, text), totalMs = performance.now() - startedAt;
     const row = { id: createApiLogId(), sessionId, kind: 'complete', provider: { id: provider.id, name: provider.name, protocol: provider.protocol, baseUrl: provider.baseUrl, model: model.model, modelName: model.name || model.model }, request: request.body, response: { text, usage, ...extra }, metrics: { ...counts, totalTokens: counts.promptTokens + counts.completionTokens, estimatedTokens: !usage, firstTokenMs: totalMs, totalMs, throughputTokensPerSecond: totalMs > 0 ? counts.completionTokens / (totalMs / 1000) : 0, cost: usageCost(counts, pricing), currency: pricing.currency, ...(extra.error ? { error: extra.error } : {}) } };
@@ -364,7 +383,11 @@ export async function completeOnce({ messages, signal, sessionId } = {}) {
   }
   if (!res.ok) { await save('', null, { error: `LLM API ${res.status}: ${raw.slice(0, 300)}`, metadata: responseMetadata(res) }); throw new Error(`LLM API ${res.status}: ${raw.slice(0, 300)}`); }
   let json; try { json = JSON.parse(raw); } catch { throw new Error('模型响应不是 JSON'); }
-  const result = extractNonStream(provider.protocol, json); await save(result.text, result.usage, { raw: json, metadata: { ...responseMetadata(res), id: json.id, model: json.model, status: json.status } }); return result.text;
+  const result = extractNonStream(provider.protocol, json);
+  const incomplete = json.status === 'incomplete' || json.stop_reason === 'max_tokens' || json.choices?.[0]?.finish_reason === 'length';
+  await save(result.text, result.usage, { raw: json, metadata: { ...responseMetadata(res), id: json.id, model: json.model, status: json.status }, ...(requireComplete && incomplete ? { error: '摘要响应不完整' } : {}) });
+  if (requireComplete && incomplete) throw new Error('摘要响应不完整');
+  return result.text;
 }
 
 export function loadConfig(file) { const cfg = JSON.parse(fs.readFileSync(file, 'utf8')); setConfig(cfg); return cfg; }

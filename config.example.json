@@ -31,11 +31,41 @@
   "activeModelId": "demo-model",
   "agent": {
     "compactAtPercent": 75,
-    "toolTimeoutMs": 60000
+    "toolTimeoutMs": 60000,
+    "maxSteps": null,
+    "maxDurationMs": null,
+    "runControl": {
+      "enabled": true,
+      "wrapUpRatio": 0.85,
+      "repeatThreshold": 3,
+      "maxToolOutputChars": 12000
+    },
+    "quality": {
+      "enabled": true,
+      "noProgressThreshold": 3
+    },
+    "subagents": {
+      "enabled": true,
+      "delegation": "auto",
+      "maxConcurrent": 2
+    }
+  },
+  "memory": {
+    "enabled": true,
+    "autoLearn": true,
+    "reviewBeforeSave": false,
+    "historyEnabled": true
   },
   "security": {
     "workspaceRoot": "./workspace",
-    "permissionTimeoutMs": 300000
+    "permissionTimeoutMs": 300000,
+    "sandbox": {
+      "mode": "workspace-write",
+      "backend": "auto",
+      "networkAccess": false,
+      "dockerImage": "mli-agent-sandbox:1",
+      "allowedDomains": []
+    }
   },
   "account": {
     "enabled": false,

@@ -1,0 +1,21 @@
+{
+  "name": "computer-use",
+  "displayName": "computer use",
+  "permissions": ["desktop"],
+  "capabilities": ["desktop"],
+  "version": "0.2.0",
+  "description": "Windows 桌面自动化工具。",
+  "author": { "name": "MLI Agent" },
+  "license": "MIT",
+  "keywords": ["desktop", "windows", "automation"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "computer use",
+    "shortDescription": "读取窗口并执行桌面操作",
+    "longDescription": "通过 Windows PowerShell 和 UI Automation 操作桌面。",
+    "developerName": "MLI Agent",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Write", "desktop"],
+    "defaultPrompt": ["读取当前窗口和控件", "截图当前桌面", "聚焦指定窗口"]
+  }
+}

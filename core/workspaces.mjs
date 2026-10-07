@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import { DATA_ROOT } from './paths.mjs';
 
 const registryFile = path.join(DATA_ROOT, '.agent', 'workspaces.json');
+export function workspaceRegistryExists() { return fs.existsSync(registryFile); }
 function read() {
   try { return JSON.parse(fs.readFileSync(registryFile, 'utf8')); } catch { return { activeId: null, items: [] }; }
 }

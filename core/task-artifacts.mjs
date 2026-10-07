@@ -10,17 +10,22 @@ export function primaryTaskArtifact({ primaryArtifact, files = [], artifacts = [
   }
   if (primaryArtifact?.path && !deleted.has(primaryArtifact.path)) return { ...candidates.get(primaryArtifact.path), ...primaryArtifact };
   const score = file => {
-    const ext = extension(file), name = file.path.split('/').at(-1);
+    const ext = extension(file), name = file.path.replaceAll('\\', '/').split('/').at(-1);
     let value = deliverables.has(ext) ? 40 : ['md', 'txt', 'csv'].includes(ext) ? 12 : 0;
     if (/^(?:输出|output|outputs|dist|deliverables)\//i.test(file.path)) value += 20;
     if (/(?:^|\/)(?:tools?|tests?|scripts?|assets|attachments|node_modules|\.agent)\//i.test(file.path)) value -= 45;
-    if (/最终|成品|流畅版|(?:^|[._-])final(?:[._-]|$)/i.test(name)) value += 25;
+    if (/最终|成品|流畅版|(?:^|[._-])final(?:\d|[._-]|$)/i.test(name)) value += 25;
     if (/^index\.html?$/i.test(name)) value += 30;
     if (summaryText.includes(file.path) || summaryText.includes(name)) value += 30;
     const mention = summaryText.indexOf(file.path) >= 0 ? summaryText.indexOf(file.path) : summaryText.indexOf(name);
     if (mention >= 0 && /主要(?:成果|文件)|交付(?:物|文件)|成品|最终(?:文件|版本)/.test(summaryText.slice(Math.max(0, mention - 70), mention))) value += 30;
     if (/ppt|幻灯片|演示文稿/i.test(promptText) && ['pptx', 'ppt'].includes(ext)) value += 60;
     if (/录音|剪辑|音频|m4a|mp3/i.test(promptText) && ['m4a', 'mp3', 'wav', 'mp4'].includes(ext)) value += 50;
+    if (/视频|短片|影片|字幕|卡点|mp4|webm|mov/i.test(promptText)) {
+      if (['mp4', 'webm', 'mov'].includes(ext)) value += 100;
+      if (['png', 'jpg', 'jpeg', 'webp', 'svg'].includes(ext)) value -= 60;
+    }
+    if (/图片|海报|插画|图像|png|jpe?g|webp/i.test(promptText) && ['png', 'jpg', 'jpeg', 'webp', 'svg'].includes(ext)) value += 60;
     if (/网页|网站|html/i.test(promptText) && ['html', 'htm'].includes(ext)) value += 50;
     return value;
   };

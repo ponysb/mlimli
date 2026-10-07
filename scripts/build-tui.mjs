@@ -4,14 +4,60 @@ import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const execute = promisify(execFile);
-export function bunExecutable() {
-  const binary = path.join(root, 'node_modules', 'bun', 'bin', process.platform === 'win32' ? 'bun.exe' : 'bun');
-  if (!fs.existsSync(binary)) throw new Error('Bun 未安装，请执行 node node_modules/bun/install.js');
-  return binary;
+function nativeExecutable(binary, platform, arch) {
+  let handle;
+  try {
+    if (!fs.statSync(binary).isFile()) return false;
+    handle = fs.openSync(binary, 'r');
+    const header = Buffer.alloc(64);
+    if (fs.readSync(handle, header, 0, header.length, 0) < header.length) return false;
+    if (platform === 'win32') {
+      if (header.subarray(0, 2).toString() !== 'MZ') return false;
+      const offset = header.readUInt32LE(60);
+      const pe = Buffer.alloc(6);
+      if (fs.readSync(handle, pe, 0, pe.length, offset) !== pe.length || pe.readUInt32LE(0) !== 0x4550) return false;
+      return pe.readUInt16LE(4) === (arch === 'arm64' ? 0xaa64 : 0x8664);
+    }
+    if (platform === 'linux') return header.subarray(0, 4).equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46]));
+    if (platform === 'darwin') return [0xfeedfacf, 0xcffaedfe, 0xcafebabe, 0xbebafeca, 0xcafebabf, 0xbfbafeca].includes(header.readUInt32BE(0));
+    return false;
+  } catch { return false; }
+  finally { if (handle !== undefined) fs.closeSync(handle); }
 }
+
+export function bunExecutable({ projectRoot = root, platform = process.platform, arch = process.arch } = {}) {
+  if (!['win32', 'linux', 'darwin'].includes(platform) || !['x64', 'arm64'].includes(arch)) throw new Error('当前平台不支持 Bun TUI 构建');
+  const filename = platform === 'win32' ? 'bun.exe' : 'bun';
+  const bunPackage = path.join(projectRoot, 'node_modules', 'bun');
+  const binary = path.join(bunPackage, 'bin', filename);
+  // The npm package ships a text placeholder when postinstall was skipped.
+  if (nativeExecutable(binary, platform, arch)) return fs.realpathSync(binary);
+  try {
+    // Resolve from Bun's real package directory so pnpm's optional dependencies work.
+    const packageRoot = fs.realpathSync(bunPackage);
+    const requireBun = createRequire(path.join(packageRoot, 'package.json'));
+    const expectedVersion = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8')).version;
+    const cpu = arch === 'arm64' ? 'aarch64' : 'x64';
+    const osName = platform === 'win32' ? 'windows' : platform;
+    let names = arch === 'x64' ? ['bun-' + osName + '-' + cpu + '-baseline', 'bun-' + osName + '-' + cpu] : ['bun-' + osName + '-' + cpu];
+    if (platform === 'linux' && !process.report?.getReport().header.glibcVersionRuntime) names = names.map(name => name.replace('-baseline', '-musl-baseline') + (name.endsWith('-baseline') ? '' : '-musl'));
+    for (const name of names) {
+      try {
+        const packageName = '@oven/' + name;
+        const manifest = JSON.parse(fs.readFileSync(requireBun.resolve(packageName + '/package.json'), 'utf8'));
+        if (manifest.version !== expectedVersion) continue;
+        const candidate = requireBun.resolve(packageName + '/bin/' + filename);
+        if (nativeExecutable(candidate, platform, arch)) return fs.realpathSync(candidate);
+      } catch { /* Try the other native package for this CPU. */ }
+    }
+  } catch { /* Report an actionable error when the package itself is missing. */ }
+  throw new Error('Bun 未完成安装或可执行文件无效，请执行 node node_modules/bun/install.js 后重试；安装依赖时需保留 Bun 的平台可选依赖');
+}
+
 
 async function nativePackage(platform, arch) {
   const name = `@opentui/core-${platform}-${arch}`;
@@ -40,6 +86,7 @@ async function nativePackage(platform, arch) {
 
 export async function buildTui({ platform = process.platform, arch = process.arch, output } = {}) {
   if (!['win32', 'linux', 'darwin'].includes(platform) || !['x64', 'arm64'].includes(arch)) throw new Error('Unsupported modern TUI target');
+  const compiler = bunExecutable();
   const directory = path.resolve(output || path.join(root, 'node_modules', '.cache', 'mli-tui', `${platform}-${arch}`));
   fs.mkdirSync(directory, { recursive: true });
   const native = await nativePackage(platform, arch);
@@ -56,7 +103,7 @@ export async function buildTui({ platform = process.platform, arch = process.arc
   fs.copyFileSync(native, nativeTarget);
   const binary = path.join(directory, platform === 'win32' ? 'mli-tui.exe' : 'mli-tui');
   const target = `bun-${platform === 'win32' ? 'windows' : platform}-${arch}${arch === 'x64' ? '-baseline' : ''}`;
-  const result = await execute(bunExecutable(), [path.join(root, 'scripts', 'compile-tui.ts'), target, binary], { cwd: root, windowsHide: true, maxBuffer: 4 * 1024 * 1024 });
+  const result = await execute(compiler, [path.join(root, 'scripts', 'compile-tui.ts'), target, binary], { cwd: root, windowsHide: true, maxBuffer: 4 * 1024 * 1024 });
   if (result.stdout.trim()) console.log(result.stdout.trim());
   if (process.platform !== 'win32') fs.chmodSync(binary, 0o755);
   const licenses = path.join(directory, 'licenses');

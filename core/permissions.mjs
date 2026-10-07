@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { emit } from './events.mjs';
+import { getRunContext, assertAgentTool } from './run-context.mjs';
 import { agentDataDir, getWorkspaceRoot } from './paths.mjs';
 
 export const LEVEL_INFO = {
@@ -134,6 +135,7 @@ function buildPreview(tool, args) {
  * - ok=false 时调用方应把拒绝原因作为工具结果回灌给模型。
  */
 export async function authorize({ session, tool, args, timeoutMs }) {
+  try { assertAgentTool(tool, args); } catch (error) { return { ok: false, decision: 'blocked', reason: error.message }; }
   const level = tool.permission ?? 'L0';
   const argsStr = argsSummary(tool.name, args);
 
@@ -159,7 +161,7 @@ export async function authorize({ session, tool, args, timeoutMs }) {
 
   const reqId = crypto.randomUUID().slice(0, 12);
   const request = {
-    reqId, sessionId: session.id, tool: tool.name,
+    reqId, sessionId: session.id, rootSessionId: getRunContext()?.rootSessionId, tool: tool.name,
     level, levelLabel: LEVEL_INFO[level] ?? level,
     summary: argsStr.slice(0, 500),
     rememberPattern: rememberPattern(tool, args),

@@ -187,7 +187,20 @@ export function getAccountCaptcha() { return accountCaptchaRequest('/api/auth/ca
 export function checkAccountEmail(email) { return request('/api/auth/check-email', { method: 'POST', body: { email } }); }
 export function verifyAccountCaptcha(code) { return accountCaptchaRequest('/api/auth/verify-captcha', { code }); }
 export function sendRegisterCode(email) { return accountCaptchaRequest('/api/auth/send-register-code', { email }); }
-export function registerAccount(email, password, code) { return accountCaptchaRequest('/api/auth/register', { email, password, code }); }
+export function registerAccount(email, password, code, inviteCode = '') { return accountCaptchaRequest('/api/auth/register', { email, password, code, inviteCode }); }
+export function getMarketingConfig() { return request('/api/v2/marketing/config'); }
+export function getMarketingSummary() {
+  if (!current?.token) throw Object.assign(new Error('请先登录账户'), { status: 401 });
+  return request('/api/v2/marketing/summary', { token: current.token });
+}
+export async function claimDailyCheckin() {
+  if (!current?.token) throw Object.assign(new Error('请先登录账户'), { status: 401 });
+  const result = await request('/api/v2/marketing/checkin', { method: 'POST', token: current.token, body: {} });
+  current.user = { ...current.user, magicValue: result.magicValue };
+  saveStoredSession();
+  emit('account_updated', { account: publicAccountStatus() });
+  return result;
+}
 export function sendResetCode(email) { return accountCaptchaRequest('/api/auth/send-code', { email }); }
 export function resetAccountPassword(email, code, newPassword) { return accountCaptchaRequest('/api/auth/reset-password', { email, code, newPassword }); }
 

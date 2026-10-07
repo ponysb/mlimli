@@ -1,6 +1,4 @@
-.sidebar-footer-actions { display: flex; gap: 4px; }
-.sidebar-footer-actions > button { display: inline-flex; align-items: center; justify-content: center; flex: 1; gap: 7px; min-width: 0; padding: 8px 5px; color: #515966; border-radius: 7px; }
-.sidebar-footer-actions > button:hover, .sidebar-footer-actions > button.active { background: var(--sidebar-hover); color: var(--ink); }
+.sidebar-footer > .sidebar-footer-icon { display: grid; place-items: center; flex: 0 0 32px; width: 32px; height: 32px; padding: 0; color: #515966; border-radius: 6px; }
 .follow-me-dialog { width: min(540px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; padding: 24px; color: var(--ink); border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: 0 24px 80px #182d2630; }
 .follow-me-dialog::backdrop { background: #172b2359; }
 .follow-me-dialog header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }

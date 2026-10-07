@@ -59,7 +59,8 @@ test('default workspace is created automatically and terminal commands run there
   const runtime = startRuntime({ executable: process.execPath, runtimeRoot: root, dataRoot: directory });
   context.after(async () => {
     if (runtime.child.exitCode === null) { const exited = once(runtime.child, 'exit'); runtime.child.kill(); await exited; }
-    fs.rmSync(directory, { recursive: true, force: true });
+    // Windows can briefly retain directory handles after the process exits.
+    fs.rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
   const { url } = await runtime.ready;
   const info = await (await fetch(`${url}/api/info`)).json();

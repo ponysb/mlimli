@@ -251,7 +251,7 @@ export class TuiController extends EventEmitter {
         const confirmed = await this.choose('保存永久允许规则？', [{ label: '取消', value: false }, { label: '保存规则', value: true }], { reqId: request.reqId, description: `${request.tool}\n${request.rememberPattern || request.summary}` });
         if (confirmed !== true || this.session.permission?.reqId !== request.reqId) return;
       }
-      await this.client.request(`/api/session/${id}/permission/${request.reqId}`, { decision });
+      await this.client.request(`/api/session/${request.sessionId || id}/permission/${request.reqId}`, { decision });
       if (this.session.permission?.reqId === request.reqId) this.session = { ...this.session, permission: null };
     } catch (error) { if (error.status !== 404) this.error(error); }
     finally { this.requestBusy = false; this.changed(); }
@@ -268,7 +268,7 @@ export class TuiController extends EventEmitter {
         : [{ label: '取消', value: false }, { label: '确认', value: true }];
       const value = request.kind === 'input' ? await this.ask(safeText(request.text), extra) : await this.choose(safeText(request.title || request.text || '确认'), choices, extra);
       if (!this.session.uiRequests.some(item => item.reqId === request.reqId)) return;
-      await this.client.request(`/api/session/${id}/ui/${request.reqId}`, { value });
+      await this.client.request(`/api/session/${request.sessionId || id}/ui/${request.reqId}`, { value });
       this.session = { ...this.session, uiRequests: this.session.uiRequests.filter(item => item.reqId !== request.reqId) };
     } catch (error) { if (error.status !== 404) this.error(error); }
     finally { this.requestBusy = false; this.changed(); }

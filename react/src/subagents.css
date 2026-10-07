@@ -1,0 +1,20 @@
+.subagent-panel { margin: 12px auto; width: min(100%, 860px); border-bottom: 1px solid var(--line); color: inherit; }
+.subagent-heading, .subagent-task-heading, .subagent-meta, .subagent-actions, .subagent-parent { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.subagent-heading { padding: 10px 12px; justify-content: space-between; }
+.subagent-panel button, .subagent-parent button { display: inline-flex; align-items: center; gap: 5px; background: transparent; color: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; cursor: pointer; font: inherit; font-size: 12px; }
+.subagent-panel button:disabled { opacity: .5; cursor: default; }
+.subagent-toggle { border: 0 !important; padding: 0 !important; flex-wrap: wrap; }
+.subagent-heading small, .subagent-meta { color: var(--muted); font-size: 11px; }
+.subagent-body { padding: 0 12px 12px; max-height: min(50vh, 480px); overflow-y: auto; }
+.subagent-task { border-top: 1px solid var(--line); padding: 12px 0; }
+.subagent-task-heading { justify-content: space-between; }
+.subagent-task-heading button { border: 0; padding-left: 0; font-weight: 600; overflow-wrap: anywhere; text-align: left; }
+.subagent-state { font-size: 11px; }
+.subagent-state.failed, .subagent-state.budget_exceeded, .subagent-state.interrupted { color: var(--red, #b42318); }
+.subagent-meta { margin: 5px 0; justify-content: space-between; overflow-wrap: anywhere; }
+.subagent-result { margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; max-height: 200px; overflow: auto; }
+.subagent-parent { padding: 10px 16px; font-size: 12px; border-bottom: 1px solid var(--line); }
+.subagent-message { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; }
+.subagent-message summary { display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--muted); }
+.subagent-message .message-content { margin-top: 10px; }
+@media (max-width: 600px) { .subagent-heading { align-items: flex-start; } .subagent-heading small { width: 100%; } }

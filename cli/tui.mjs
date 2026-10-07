@@ -252,7 +252,7 @@ export async function runTui(client, options, { signal, term, onReady } = {}) {
   function enqueue(type, request) {
     if (seenRequests.has(request.reqId)) return;
     seenRequests.add(request.reqId);
-    requests.push({ type, request, sessionId: current.id });
+    requests.push({ type, request, sessionId: request.sessionId || current.id });
     processRequests().catch(error => view.append(`\nError\n${error.message}`));
   }
   async function processRequests() {
@@ -335,6 +335,8 @@ export async function runTui(client, options, { signal, term, onReady } = {}) {
       if (event.workspace?.path !== options.cwd) { connected = false; view.append('\n\n工作目录已被其他客户端切换。请退出后重新打开此项目。'); updateStatus(); }
     }
     if (event.type === 'settings_updated' || event.type === 'catalog_updated') refresh(true).catch(() => {});
+    if (event.sessionId !== current?.id && event.rootSessionId === current?.id && ['permission_request', 'ui_request'].includes(event.type)) { enqueue(event.type, event.request); return; }
+    if (event.sessionId !== current?.id && event.rootSessionId === current?.id && ['permission_resolved', 'ui_resolved'].includes(event.type)) { const index = requests.findIndex(item => item.request.reqId === event.reqId); if (index !== -1) requests.splice(index, 1); if (activeRequest === event.reqId) view.finishForm(null); return; }
     if (event.sessionId !== current?.id || selecting) return;
     if (event.type === 'message_start') view.append('\n\nMLI\n');
     if (event.type === 'text_delta') view.append(event.text);

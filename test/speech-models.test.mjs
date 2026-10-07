@@ -1,0 +1,62 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import test from 'node:test';
+import { MODELS, PREVIEW, VAD, SPEAKER, modelById, modelSupport, recommendModel } from '../plugins/local-speech/models.mjs';
+
+const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'mli-speech-choice-'));
+process.env.MLI_AGENT_DATA_DIR = temporary;
+const runtime = await import('../plugins/local-speech/runtime.mjs');
+const hardware = { platform: 'win32', arch: 'x64', osRelease: '10.0.19045', memoryGB: 16, cores: 8, gpu: null };
+
+test('hardware ranking favors low-memory compatibility and only recommends 1.7B with enough NVIDIA resources', () => {
+  assert.equal(recommendModel({ ...hardware, memoryGB: 4 }).id, 'paraformer');
+  assert.equal(recommendModel({ ...hardware, arch: 'ia32' }).id, 'paraformer');
+  assert.equal(recommendModel({ ...hardware, memoryGB: 8 }).id, 'sensevoice');
+  assert.equal(recommendModel(hardware).id, 'qwen06');
+  assert.equal(recommendModel({ ...hardware, gpu: { memoryGB: 4 } }).id, 'qwen06');
+  assert.equal(recommendModel({ ...hardware, gpu: { memoryGB: 12 } }).id, 'qwen17');
+});
+test('platform selection distinguishes Windows x86, 64-bit-only models and unverified Windows 7', () => {
+  for (const id of ['paraformer', 'sensevoice']) assert.equal(modelSupport(modelById(id), { ...hardware, arch: 'ia32' }), '');
+  for (const id of ['qwen06', 'qwen17']) assert.match(modelSupport(modelById(id), { ...hardware, arch: 'ia32' }), /64/);
+  assert.match(modelSupport(modelById('paraformer'), { ...hardware, arch: 'ia32', osRelease: '6.1.7601' }), /Windows 7/);
+  for (const platform of ['darwin', 'linux']) for (const arch of ['x64', 'arm64']) for (const model of MODELS) assert.equal(modelSupport(model, { ...hardware, platform, arch }), '');
+  assert.throws(() => modelById('../../other'), /未知/);
+});
+test('installed SenseVoice migrates without changing the selected model; switching persists and missing files prevent use', () => {
+  const home = path.join(temporary, 'local-speech');
+  const write = (file, data = 'fixture') => { fs.mkdirSync(path.dirname(path.join(home, file)), { recursive: true }); fs.writeFileSync(path.join(home, file), data); };
+  write(process.platform === 'win32' ? 'venv/Scripts/python.exe' : 'venv/bin/python');
+  for (const file of ['encoder.int8.onnx', 'decoder.onnx', 'joiner.int8.onnx', 'tokens.txt']) write(`${PREVIEW}/${file}`);
+  for (const file of ['model.int8.onnx', 'tokens.txt']) write(`${modelById('sensevoice').directory}/${file}`);
+  write(VAD); write(SPEAKER); write('installed.json', JSON.stringify({ version: 2 }));
+  let status = runtime.speechStatus();
+  assert.equal(status.ready, true); assert.equal(status.modelId, 'sensevoice');
+  assert.equal(status.models.length, 4); assert.equal(status.models[0].recommended, true);
+  assert.throws(() => runtime.selectSpeechModel('qwen17'), /先下载/);
+  assert.equal(runtime.speechStatus().modelId, 'sensevoice', 'rejected switch must preserve the working model');
+  for (const file of ['model.int8.onnx', 'tokens.txt']) write(`${modelById('paraformer').directory}/${file}`);
+  write('installed-paraformer.json', JSON.stringify({ version: 3, modelId: 'paraformer', platform: process.platform, arch: process.arch, preview: true }));
+  status = runtime.selectSpeechModel('paraformer'); assert.equal(status.ready, true);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(home, 'settings.json'), 'utf8')).modelId, 'paraformer');
+  assert.throws(() => runtime.installSpeech('invalid'), /未知/);
+  assert.equal(runtime.speechStatus().modelId, 'paraformer');
+  fs.unlinkSync(path.join(home, modelById('paraformer').directory, 'model.int8.onnx'));
+  assert.equal(runtime.speechStatus().ready, true, 'an available fallback remains usable');
+  assert.equal(runtime.speechStatus().models.find(item => item.id === 'paraformer').installed, false, 'receipt alone is not sufficient');
+  assert.equal(runtime.speechStatus().modelId, 'sensevoice', 'an interrupted selection falls back to the working model');
+  assert.throws(() => runtime.removeSpeechModel('../../other'), /未知/);
+  const removed = runtime.removeSpeechModel('sensevoice');
+  assert.equal(removed.models.find(item => item.id === 'sensevoice').installed, false);
+  assert.equal(fs.existsSync(path.join(home, 'installed.json')), false);
+  assert.equal(fs.existsSync(path.join(home, VAD)), true, 'shared voice detection remains available');
+  assert.equal(fs.existsSync(path.join(home, SPEAKER)), true, 'shared speaker model is preserved');
+  assert.equal(fs.existsSync(path.join(home, PREVIEW)), true, 'dictation model is preserved');
+  assert.equal(fs.existsSync(path.join(home, modelById('sensevoice').directory)), false);
+  assert.equal(removed.models.find(item => item.id === 'paraformer').removable, true, 'interrupted model files can be deleted');
+  assert.equal(runtime.removeSpeechModel('paraformer').ready, false);
+  assert.equal(fs.existsSync(path.join(home, modelById('paraformer').directory)), false);
+  fs.rmSync(temporary, { recursive: true, force: true });
+});

@@ -70,8 +70,9 @@ async function request(url, body) {
   const timer = setTimeout(() => controller.abort(), 3000);
   try {
     const response = await fetch(url, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, signal: controller.signal });
-    if (!response.ok) throw new Error(`运行时连接失败 HTTP ${response.status}`);
-    return await response.json();
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `运行时连接失败 HTTP ${response.status}`);
+    return data;
   } finally { clearTimeout(timer); }
 }
 
@@ -127,6 +128,14 @@ async function leaseRuntime(record, spawned) {
   let released = false;
   return {
     url: record.url, pid: record.pid, child: spawned?.child.pid === record.pid ? spawned.child : undefined, logFile: record.dataRoot ? path.join(record.dataRoot, 'desktop.log') : spawned?.logFile,
+    async prepareUpdate() {
+      await request(`${record.url}/api/runtime/prepare-update`, lease);
+      released = true;
+      clearInterval(heartbeat);
+      const deadline = Date.now() + 6000;
+      while (alive(record.pid) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 50));
+      if (alive(record.pid)) throw new Error('本地服务尚未退出，本次更新未启动，请重新打开应用后重试');
+    },
     async release() {
       if (released) return;
       released = true;

@@ -6,14 +6,19 @@ import { pathToFileURL } from 'node:url';
 import crypto from 'node:crypto';
 import * as moduleRuntime from 'node:module';
 import { emit } from './events.mjs';
+import { agentTools } from './agent-tools.mjs';
+import { appCenterTools } from './app-center-tools.mjs';
+import { getRunContext, assertAgentTool } from './run-context.mjs';
 import { APP_ROOT, DATA_ROOT, USER_PLUGINS_DIR } from './paths.mjs';
 import { coreTools } from './tools.mjs';
+import { memoryToolEnabled } from './memory-policy.mjs';
 import { mcpTool } from './mcp.mjs';
 import { getConfig } from './llm.mjs';
 import { getWorkspaceRoot } from './paths.mjs';
 import { listLocalSkills } from './local-skills.mjs';
 import { registerLanguageServer, resetLanguageServers } from './lsp.mjs';
 import { registerChannelAdapter } from './channels.mjs';
+import { getSandboxPolicy, withSandboxPolicy, SandboxError } from './sandbox-policy.mjs';
 
 export const PLUGINS_DIR = path.join(APP_ROOT, 'plugins');
 if (DATA_ROOT !== APP_ROOT && moduleRuntime.register) moduleRuntime.register('./plugin-resolver.mjs', import.meta.url, { data: { appRoot: APP_ROOT, dataRoot: DATA_ROOT, pluginsRoot: USER_PLUGINS_DIR } });
@@ -51,7 +56,7 @@ export async function uiRequest(session, kind, payload, timeoutMs = 120000) {
       emit('ui_resolved', { sessionId: session.id, reqId });
       resolve(UI_DEFAULTS[kind] ?? null);
     }, timeoutMs);
-    const request = { reqId, kind, ...payload };
+    const request = { ...payload, reqId, kind, sessionId: session.id, rootSessionId: getRunContext()?.rootSessionId };
     uiPending.set(reqId, { resolve, timer, sessionId: session.id, request });
     emit('ui_request', { sessionId: session.id, request });
   });
@@ -164,16 +169,19 @@ function registerToolDef(def, pluginName, manifest) {
   if (permission === 'L3' && def.capability === 'desktop' && !caps.includes('desktop')) {
     throw new Error(`L3 桌面工具 ${def.name} 需要 manifest 声明 capabilities:["desktop"]`);
   }
-  if (permission === 'L3' && pluginName === 'desktop' && !caps.includes('desktop')) {
+  if (permission === 'L3' && ['desktop', 'computer-use'].includes(pluginName) && !caps.includes('desktop')) {
     throw new Error(`L3 工具 ${def.name} 需要 manifest 声明 capabilities:["desktop"]`);
   }
+  const previous = state.tools.get(def.name);
+  if (previous?.plugin === 'core' && pluginName !== 'core') throw new Error(`插件不能替换核心安全工具 ${def.name}`);
   state.tools.set(def.name, {
     ...def,
     run,
     permission,
     plugin: pluginName,
-    capability: def.capability ?? (pluginName === 'desktop' ? 'desktop' : undefined),
+    capability: def.capability ?? (['desktop', 'computer-use'].includes(pluginName) ? 'desktop' : undefined),
   });
+  if (def.name === 'bash' && pluginName === 'core') Object.defineProperty(state.tools.get(def.name), 'description', { enumerable: true, configurable: true, get: () => def.description });
 }
 
 function makeSetupCtx(manifest) {
@@ -218,7 +226,7 @@ async function importPlugin(entryFile, bust) {
 }
 
 function registerCore() {
-  for (const t of coreTools) {
+  for (const t of [...coreTools, ...appCenterTools]) {
     registerToolDef({ ...t, plugin: 'core' }, 'core', { name: 'core', capabilities: [] });
   }
   registerToolDef(mcpTool(getConfig), 'core', { name: 'core', capabilities: [] });
@@ -253,6 +261,7 @@ export async function loadAll({ reload = false } = {}) {
   state.skills = [];
   state.loaded = [];
   registerCore();
+  for (const tool of agentTools) state.tools.set(tool.name, { ...tool, plugin: 'core' });
 
   const directories = new Map();
   for (const root of new Set([PLUGINS_DIR, USER_PLUGINS_DIR])) {
@@ -278,6 +287,7 @@ export async function loadAll({ reload = false } = {}) {
       state.skills.push(...scanSkills(dir, manifest.name));
       state.loaded.push({
         name: manifest.name,
+        displayName: manifest.displayName || manifest.name,
         version: manifest.version ?? '0.0.0',
         description: manifest.description ?? '',
         tools: [...state.tools.values()].filter((t) => t.plugin === manifest.name).map((t) => t.name),
@@ -300,9 +310,13 @@ function summary() {
 }
 
 export function getTools(session) {
-  const all = [...state.tools.values()];
+  const all = [...state.tools.values()].filter(t => memoryToolEnabled(t.name));
   if (!session) return all;
   return all.filter((t) => {
+    if (!memoryToolEnabled(t.name)) return false;
+    const context = getRunContext();
+    if (context?.config?.agent?.subagents?.enabled === false && t.name.startsWith('agent_')) return false;
+    if (context?.allowedTools && !context.allowedTools.includes(t.name)) return false;
     if (t.capability === 'desktop' && !session.desktopEnabled) return false;
     return true;
   });
@@ -338,6 +352,9 @@ export function expandSlash(text) {
 /** 执行工具的统一入口（含超时与信号） */
 export async function executeTool(tool, args, { session, signal, timeoutMs }) {
   if (signal?.aborted) throw new Error('任务已停止');
+  assertAgentTool(tool, args);
+  const sandboxPolicy = getSandboxPolicy();
+  if (sandboxPolicy.mode === 'read-only' && tool.permission === 'L1') throw new SandboxError('只读沙箱禁止工作区写入；审批允许不会扩大沙箱权限');
   const ctx = {
     signal,
     session,
@@ -346,17 +363,25 @@ export async function executeTool(tool, args, { session, signal, timeoutMs }) {
     emit: (type, data) => emit(type, { sessionId: session?.id, ...data }),
     ui: makeUi(session),
   };
+  const releaseResource = getRunContext()?.acquireResource?.(tool) || (() => {});
   const ac = new AbortController();
+  const isCoreBash = (tool.name === 'bash' || tool.managesTimeout === true) && tool.plugin === 'core';
   let rejectAbort;
   const cancelled = new Promise((_, reject) => { rejectAbort = reject; });
-  const onAbort = () => { ac.abort(); rejectAbort(new Error('任务已停止')); };
+  const onAbort = () => { ac.abort(); if (!isCoreBash) rejectAbort(new Error('任务已停止')); };
   signal?.addEventListener('abort', onAbort);
-  let timer;
+  let timer, resourceDeferred = false;
   try {
     const run = tool.run ?? tool.execute;
-    const result = await Promise.race([
+    // bash owns its timeout and awaits process/container teardown. A Promise
+    // race here would report cancellation while its process was still alive.
+    const runPromise = Promise.resolve(withSandboxPolicy(sandboxPolicy, () => run(args ?? {}, { ...ctx, signal: ac.signal })));
+    // A plugin may ignore cancellation. Keep its lease until the actual work ends.
+    runPromise.then(releaseResource, releaseResource);
+    resourceDeferred = true;
+    const result = isCoreBash ? await runPromise : await Promise.race([
       cancelled,
-      run(args ?? {}, { ...ctx, signal: ac.signal }),
+      runPromise,
       new Promise((_, rej) => {
         timer = setTimeout(() => {
           ac.abort();
@@ -364,10 +389,12 @@ export async function executeTool(tool, args, { session, signal, timeoutMs }) {
         }, (timeoutMs ?? 60000) + 5000);
       }),
     ]);
+    if (tool.permission === 'L1' && args?.path && result?.status !== 'error') getRunContext()?.changedPaths?.add(String(args.path).replaceAll('\\', '/'));
     if (typeof result === 'string') return { content: result };
     return result ?? { content: '(无结果)' };
   } finally {
     clearTimeout(timer);
+    if (!resourceDeferred) releaseResource();
     signal?.removeEventListener('abort', onAbort);
   }
 }

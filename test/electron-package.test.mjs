@@ -119,6 +119,8 @@ test('Windows staging only contains public runtime files and no private services
   assert.equal(config.appId, 'com.molichuangzuo.app');
   assert.equal(config.executableName, 'MoliCreation');
   assert.equal(config.nsis.deleteAppDataOnUninstall, false);
+  assert.equal(config.nsis.packElevateHelper, true);
+  assert.equal(config.publish.url, 'https://public.example.com/api/v2/releases/updates/windows-x64/');
   assert.deepEqual(config.win.target, ['nsis', 'portable']);
   assert.throws(() => stageWindowsClient({ root: source, output: stage.destination }), /必须为空/);
   fs.cpSync(path.join(source, 'dist'), path.join(source, 'dist-legacy'), { recursive: true });
@@ -130,6 +132,7 @@ test('Windows staging only contains public runtime files and no private services
   assert.equal(legacyConfig.executableName, 'MoliCreationLegacy');
   assert.equal(legacyConfig.electronVersion, '22.3.27');
   assert.equal(legacyConfig.appId, 'com.molichuangzuo.app.legacy');
+  assert.equal(legacyConfig.publish.url, 'https://public.example.com/api/v2/releases/updates/windows-legacy-ia32/');
   assert.notEqual(legacyConfig.appId, config.appId);
   assert.notEqual(legacyConfig.executableName, config.executableName);
   assert.notEqual(legacyConfig.nsis.shortcutName, config.nsis.shortcutName);

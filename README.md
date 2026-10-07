@@ -5,7 +5,7 @@
 <h1 align="center">魔力工作台 · MLI Agent</h1>
 <p align="center">开源、本地优先的通用 Agent 工作台</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v0.2.0-245b43" alt="v0.2.0" />
+  <img src="https://img.shields.io/badge/version-v0.3.0-245b43" alt="v0.3.0" />
   <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="Apache-2.0" />
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-64748b" alt="Windows / macOS / Linux" />
 </p>
@@ -15,6 +15,12 @@
 
 MLI Agent 是面向创作、办公与开发的开源 Agent 工作台，支持 Windows、macOS、Linux，提供桌面、浏览器与终端入口。支持自定义 API 地址、自有 API Key 和三种主流模型协议，可自由组合模型、Skill 与工具插件。项目采用 Apache-2.0 许可证，支持二次开发与扩展。
 
+交付验收：默认在任务结束前检查实际交付物和工具证据，缺失时在同轮内补齐或修复；代码运行测试，文字与 Office 重读核对，网页可用隔离 Chromium 执行交互断言。未完成的验收会明确标记，证据和限制可在任务摘要展开查看。机制、配置与适用范围见 [交付质量与验收](docs/CLIENT-QUALITY.md)。
+
+运行安全：Agent 命令默认使用工作区沙箱，命令联网默认关闭。Linux 使用 Bubblewrap，macOS 使用 Seatbelt，Windows 接入 Anthropic Sandbox Runtime 的原生后端（Alpha，首次需要管理员安装）；Docker 为可选后端。后端不可用时阻止命令执行。启用方式、审批与沙箱的区别，以及插件和宿主工具的边界见 [运行沙箱](docs/SANDBOX.md)。
+
+应用台：mac 风格图标卡片展示后台发布与用户自建的应用，只输入网址即可添加，自动获取网站图标。桌面内置浏览器独立保存本机登录；Agent 先查询授权，未登录时自动打开应用台，登录确认后继续原任务。支持授权域名内的页面读取、点击、填写，以及撤销授权和清除登录。使用与边界见 [应用台](docs/APP-CENTER.md)。
+
 ## 核心特性
 
 - **开放的模型接入**：支持 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 三协议；自定义 API 地址、API Key、模型名称与上下文窗口，支持多服务商、多模型切换。
@@ -22,7 +28,10 @@ MLI Agent 是面向创作、办公与开发的开源 Agent 工作台，支持 Wi
 - **创作、办公与开发**：小说与剧本创作、漫剧和 AI 视频制作、口播剪辑；Word、Excel、PPT、PDF 工作流；代码编辑、命令执行、Git、TUI 与 LSP 诊断和代码导航。
 - **可扩展的能力体系**：专家库、Skill 技能库、工具插件、MCP、执行钩子，以及语言服务和消息渠道适配器；按场景组合方法与执行能力。
 - **完整的任务管理**：本地会话持久化、项目记忆、上下文压缩、消息排队、多会话运行、定时任务与完成通知；定时任务创建独立会话，执行进度在界面中可见。
+- **子 Agent 协作**：独立上下文、异步派发、并行探索与审查、持久化消息及主任务汇总；子任务嵌入主会话面板，默认两个并发，共享目录限制一个写入者。见 [子 Agent 使用说明](docs/SUBAGENTS.md)。
+- **记忆与经验沉淀**：全局用户偏好、隔离的项目记忆、相关内容召回、历史检索和任务后回顾；设置中支持开关、搜索编辑、审核、停用与版本恢复。见 [记忆使用说明](docs/MEMORY.md)。
 - **聚焦内容的工作台**：文件与产物预览、内置浏览器、白板、附件拖放、权限审批与交互式提问；支持飞书、钉钉消息渠道。
+- **语音与会议**：发送按钮旁长按语音输入、单击会议录制；支持语音会议或视频会议，视频会议使用浏览器原生 `getDisplayMedia` 共享窗口 / 屏幕并接入麦克风，再由 `MediaRecorder` 保存视频，按需安装本地流式转写与声纹插件，结束后生成会议纪要。见 [语音与会议说明](docs/VOICE-MEETINGS.md)。
 
 跨平台构建覆盖 Windows 安装包、macOS PKG 和 Linux TUI / CLI 归档。媒体工具通过 FFmpeg 完成裁剪、拼接、转码与音轨处理；文档工具结合原生 OOXML、LibreOffice，以及 Windows Office / WPS 完成读写和格式转换。Windows 桌面自动化提供截图、窗口读取、鼠标与键盘操作。
 

@@ -14,8 +14,8 @@ npm run dist:win
 
 不想输入命令时，也可双击项目根目录的 `build-windows.cmd`。它会检查 Node.js 版本，在依赖未安装时执行 `npm ci`，然后运行同一个双版本打包命令。
 
-- `MoliCreation-Modern-Setup-0.2.0-x64.exe`：现代版，Electron 44.4.5，面向 Win10 / Win11 64 位。
-- `MoliCreation-Legacy-Win7-Setup-0.2.0-ia32.exe`：兼容版，Electron 22.3.27，面向 Win7 SP1 32/64 位及 Win10 32 位；64 位新系统也可通过 WOW64 运行。
+- `MoliCreation-Modern-Setup-0.3.0-x64.exe`：现代版，Electron 44.4.5，面向 Win10 / Win11 64 位。
+- `MoliCreation-Legacy-Win7-Setup-0.3.0-ia32.exe`：兼容版，Electron 22.3.27，面向 Win7 SP1 32/64 位及 Win10 32 位；64 位新系统也可通过 WOW64 运行。
 - `SHA256SUMS.txt`：最终安装包的 SHA-256 校验值。
 
 `npm run dist:win:all` 是上述命令的别名。分别构建：`npm run dist:win:modern`、`npm run dist:win:legacy`。默认不生成免安装包；需要时执行 `npm run dist:win -- --portable`。
@@ -90,6 +90,42 @@ npm run verify:win -- "命令输出的调试目录/win-unpacked/MoliCreation.exe
 
 Electron 22、Node 16 与 Win7 均已停止安全维护。兼容版只用于明确需要旧系统的用户，不应替代现代版；没有关闭证书校验或操作系统安全措施。外部插件工具本身可能要求更新的 Windows，兼容壳不代表这些外部工具也支持 Win7。
 
-Python、FFmpeg、LibreOffice、Office COM、Git、MCP 外部服务以及部分 Skill 所需工具不自动捆绑，相关功能需自行安装依赖。基础聊天、文件编辑与审批不依赖这些工具。本次配置没有增加自动更新服务。
+Python、FFmpeg、LibreOffice、Office COM、Git、MCP 外部服务以及部分 Skill 所需工具不自动捆绑，相关功能需自行安装依赖。基础聊天、文件编辑与审批不依赖这些工具。
 
 安装包携带根 Apache-2.0 许可证及已有第三方许可声明。公开发布前仍需核对第三方插件与品牌素材的授权；Windows 打包不等于已完成许可证审核。
+
+## Windows 自动更新
+
+### 调用记录加载失败后无法启动
+
+旧版会在 HTTP 主线程同步扫描整个 `.agent/api-logs.jsonl`。重复保存图片等内联媒体可能使日志达到数 GB，扫描时本地服务无法响应接口和运行时心跳，随后显示“本地服务已停止”或“运行时连接超时”；没有异常堆栈不代表服务仍能响应。
+
+日志查询与详情读取已改为独立 Worker，支持分页结果缓存和同请求合并。逆序读取限制单条历史记录为 4 MB，超过时跳过并返回提示，原文件保留；列表统计不包含跳过的记录。新日志只限制诊断快照（每段文本及整体大小有上限），内联媒体保存省略标记，模型实际请求、响应和用量计费不受影响。重新打包可将修复带入安装版。验证：`node --test test/api-log-recovery.test.mjs`。
+
+Windows 安装版使用 `electron-updater`，复用账户后台的「版本发布」。窗口加载完成后立即自动检查，此后每 6 小时检查；也可以在「设置 → 应用更新」手动检查。无需打开设置或手动检查，发现新版后会在侧边栏底部账户区域上方显示版本入口，悬停、聚焦或点击入口可查看更新日志。点击下载图标可下载更新，下载完成后点击重启图标，安装程序静默覆盖原目录并重新启动。普通退出不会自动安装。
+
+Windows 源码开发模式（`npm run electron`）也支持启动和手动检查，比较的是根 `package.json` 的版本，而非 Electron 引擎版本。设置页会明确显示开发模式；发现新版后仅提示版本与更新说明，不下载或自动安装，避免覆盖源码运行环境。安装更新需使用 Setup 安装版。修改 Electron 主进程代码后必须完全退出并重启客户端。
+
+构建自有安装包时修改根 `package.json` 的版本并执行 `npm run dist:win`。现代版和兼容版保留构建生成的 Setup 文件名，自动更新需要匹配平台的版本清单、安装包及校验值。
+
+更新服务地址沿用 `MLI_ACCOUNT_SERVER_URL`（或已有 `config.json` 的 `account.baseUrl`），与账户登录状态和账户开关无关。主进程读取与本地服务相同的公开配置，打包时配置根 `.env` 即可。更新源分别为：
+
+- `/api/v2/releases/updates/windows-x64/latest.yml`
+- `/api/v2/releases/updates/windows-legacy-ia32/latest.yml`
+
+只选择已发布且本地文件存在的正式 Setup 安装包。只有网盘链接、便携版、预发布版本、文件名与版本不一致的包只保留官网手动下载功能；同一资源同时配置网盘和合格的本地 Setup 包时仍支持自动更新。下架新版本会回退到上一可用版本，但客户端不会自动降级。
+
+应用会在安装前确认本地运行任务与终端命令均已结束，并要求其他共享本地服务的终端客户端退出。确认后停止本地服务，等待进程退出，再启动安装程序；用户数据和工作区继续保留。更新器会校验下载哈希，签名包还会按照构建生成的 `app-update.yml` 校验发布者。
+
+首次接入：旧客户端没有更新器，需要手动安装一次包含更新器的新安装版。随后发布更高版本即可自动更新。macOS、Linux 和便携版暂不使用此 Windows 更新流程。
+
+### 更新回归测试
+
+```powershell
+npm test
+node --test test/desktop-update.test.mjs
+```
+
+客户端测试限制为 4 个并发文件，避免同时启动大量 Electron、Chromium 和本地服务导致超时。更新单元测试覆盖主窗口 IPC 校验、开发/安装版本显示、并发检查和下载、失败重试、任务及共享终端阻止安装，另在两套真实 Electron 引擎中验证下载及损坏文件拒绝。
+
+上线时检查上述两个 `latest.yml` 地址：返回 YAML/JSON 更新清单表示已发布可用安装包；JSON 404 且提示「尚未发布可自动更新的安装版」表示需发布符合文件名规则的包；HTML 404 通常表示更新接口尚未部署或被反向代理路由拦截。已安装 `0.3.0` 客户端需要更高版本才能触发更新，同版本不会重复安装。

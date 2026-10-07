@@ -64,6 +64,7 @@ export function copyTerminalDependencies(destination, root = ROOT) {
   visit('@larksuiteoapi/node-sdk', root);
   visit('dingtalk-stream', root);
   visit('pdfjs-dist', root);
+  visit('@anthropic-ai/sandbox-runtime', root);
   return Object.fromEntries(copied);
 }
 
@@ -119,8 +120,8 @@ export function stageTerminalClient({ root = ROOT, output, platform = 'linux', a
   const client = path.join(destination, 'client');
   const plan = planClientExport(root);
   for (const entry of plan.entries) {
-    if (!(entry.path === 'server.mjs' || entry.path === 'config.example.json' || entry.path === 'LICENSE' || /^(core|cli|plugins)\//.test(entry.path) || entry.path === 'electron/compat.cjs' || entry.path === 'electron/runtime.cjs')) continue;
-    if (platform !== 'win32' && entry.path.startsWith('plugins/desktop/')) continue;
+    if (!(['server.mjs', 'config.example.json', 'LICENSE', 'scripts/setup-windows-sandbox.mjs', 'scripts/build-sandbox-image.mjs', 'scripts/sandbox/Dockerfile', 'docs/SANDBOX.md', 'docs/APP-CENTER.md', 'electron/compat.cjs', 'electron/runtime.cjs'].includes(entry.path) || /^(core|cli|plugins)\//.test(entry.path))) continue;
+    if (platform !== 'win32' && entry.path.startsWith('plugins/computer-use/')) continue;
     const target = path.join(client, entry.path);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, entry.data, { flag: 'wx' });

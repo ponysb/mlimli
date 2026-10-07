@@ -50,7 +50,9 @@ test('客户端发布清单包含完整本地运行代码，不含后台、官�
   const plan = planClientExport(actualRoot);
   const paths = new Set(plan.entries.map(entry => entry.path));
   for (const required of ['README.md', 'README.en.md', 'server.mjs', 'core/loop.mjs', 'react/src/main.jsx', 'electron/main.cjs',
-    'plugins/office/lib/ooxml.mjs', 'plugins/desktop/plugin.mjs', 'plugins/ffmpeg/plugin.mjs', 'config.example.json']) {
+    'plugins/office/lib/ooxml.mjs', 'plugins/computer-use/plugin.mjs', 'plugins/ffmpeg/plugin.mjs', 'config.example.json',
+    'docs/CLIENT-QUALITY.md', 'docs/MEMORY.md', 'docs/SUBAGENTS.md', 'docs/SCHEDULES.md',
+    'test/memory.test.mjs', 'test/subagents.test.mjs', 'test/task-quality.test.mjs', 'test/fixtures/document-evidence.mjs']) {
     assert.ok(paths.has(required), required);
   }
   for (const relativePath of paths) {
@@ -62,6 +64,18 @@ test('客户端发布清单包含完整本地运行代码，不含后台、官�
     assert.notEqual(relativePath, '.env');
   }
   assert.equal(paths.has('docs/OPEN-SOURCE.md'), false, '内部发布说明不进入公开客户端');
+  for (const excluded of ['docs/QUALITY.md', 'docs/AGENT-RUNTIME-UPGRADE.md', 'test/benchmark-grader.test.mjs',
+    'test/website.test.mjs', 'test/integration/windows-update-install.test.mjs', 'plugins/google-drive/OWNERS']) {
+    assert.equal(paths.has(excluded), false, excluded);
+  }
+  for (const entry of plan.entries.filter(item => /^(?:README(?:\.en)?\.md|docs\/.*\.md)$/.test(item.path))) {
+    for (const match of entry.data.toString('utf8').matchAll(/\]\(([^)]+)\)/g)) {
+      const link = match[1];
+      if (/^(?:[a-z]+:|#|\/)/i.test(link)) continue;
+      const target = path.posix.normalize(path.posix.join(path.posix.dirname(entry.path), link.split('#')[0]));
+      assert.ok(paths.has(target), `公开文档链接缺失：${entry.path} → ${target}`);
+    }
+  }
   const clientPackage = JSON.parse(plan.entries.find(entry => entry.path === 'package.json').data);
   assert.equal(clientPackage.scripts.website, undefined);
   assert.equal(clientPackage.scripts['start:backend'], undefined);
@@ -69,7 +83,10 @@ test('客户端发布清单包含完整本地运行代码，不含后台、官�
   assert.equal(clientPackage.scripts.start, 'node server.mjs');
   assert.equal(clientPackage.private, true);
   for (const entry of plan.entries.filter(item => /\.(?:mjs|cjs|jsx|js)$/.test(item.path))) {
-    for (const match of entry.data.toString('utf8').matchAll(/(?:from\s+|import\s+|require\()['"](\.[^'"]+)['"]/g)) {
+    const imports = entry.path.startsWith('test/')
+      ? /^import\s+(?:[^;\n]*?\sfrom\s+)?['"](\.[^'"]+)['"]/gm
+      : /(?:from\s+|import\s+|require\()['"](\.[^'"]+)['"]/g;
+    for (const match of entry.data.toString('utf8').matchAll(imports)) {
       const target = path.posix.normalize(path.posix.join(path.posix.dirname(entry.path), match[1]));
       assert.ok(paths.has(target), `发布包缺少本地依赖：${entry.path} → ${target}`);
     }
@@ -103,7 +120,9 @@ test('首次运行 mock 模型可完整结束流式请求，记录日志且不�
 test('导出过滤运行数据并为实际发布内容生成匹配的 SHA-256 清单', context => {
   const { root, output } = fixture(context);
   for (const relativePath of ['server/private.js', 'website/index.html', 'config.json', '.env',
-    '.agent/sessions/test.json', 'core/.env', 'core/cache.pem', 'react/node_modules/secret.js', 'plugins/office/logs/call.log']) {
+    '.agent/sessions/test.json', 'core/.env', 'core/cache.pem', 'react/node_modules/secret.js', 'plugins/office/logs/call.log',
+    'core/.cache/secret.txt', 'core/__pycache__/secret.pyc', 'core/config.json.bak', 'core/session.tmp',
+    'plugins/google-drive/OWNERS', 'electron/Partitions/private.txt', 'core/voice-profiles.json']) {
     write(root, relativePath, 'private-only-marker');
   }
   write(root, 'core/runtime.mjs', "export const name = 'client';\n");

@@ -11,6 +11,60 @@ process.env.MLI_ACCOUNT_APP_SECRET = 'test-app-secret';
 
 const account = await import('../core/account.mjs');
 
+test('后台托管模型倍率从账户目录传递到界面，并在刷新后保持最新值', async t => {
+  const { setConfig, publicSettings, refreshManagedCatalog } = await import('../core/llm.mjs');
+  let multiplier = 0.8;
+  account.setAccountConfig({ account: { enabled: true, baseUrl: 'https://catalog.example.invalid' } });
+  t.after(() => account.logoutAccount());
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    if (String(url) === 'https://catalog.example.invalid/api/v2/auth/login') return Response.json({ success: true, data: { token: 'catalog-fixture-token', user: { id: 'catalog-user', magicValue: 10 } } });
+    assert.equal(String(url), 'https://catalog.example.invalid/api/v2/models');
+    assert.equal(options.headers.authorization, 'Bearer catalog-fixture-token');
+    return Response.json({ success: true, data: { models: [{ id: 'model-1', name: '托管模型', contextWindow: 128000, billingMultiplier: multiplier, supportsImage: true }], magicValue: 10 } });
+  });
+  await account.loginAccount('fixture@example.com', 'fixture-password');
+  setConfig({ providers: [], models: [] });
+  for (const value of [0.8, 1.25, 0.5, 1]) {
+    multiplier = value;
+    await refreshManagedCatalog({ force: true });
+    const item = publicSettings().models.find(model => model.id === 'managed-model-1');
+    assert.equal(item.displayMultiplier, value);
+    assert.equal(item.capabilities.image, true);
+    assert.equal(item.pricing.inputPer1M, 0);
+  }
+  multiplier = undefined;
+  await refreshManagedCatalog({ force: true });
+  assert.equal(publicSettings().models[0].displayMultiplier, 1);
+});
+
+test('邀请注册透传邀请码，签到后更新客户端和保存会话余额', async t => {
+  let registration;
+  const server = http.createServer(async (req, res) => {
+    const chunks = []; for await (const chunk of req) chunks.push(chunk);
+    const body = chunks.length ? JSON.parse(Buffer.concat(chunks)) : {};
+    const send = payload => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(payload)); };
+    if (req.url === '/api/auth/register') { registration = body; return send({ user: { id: 'new-user' } }); }
+    if (req.url === '/api/v2/marketing/config') { assert.equal(req.headers.authorization, undefined); return send({ success: true, data: { visible: true, inviteEnabled: true } }); }
+    if (req.url === '/api/v2/auth/login') return send({ success: true, data: { token: 'marketing-token', user: { id: 'new-user', magicValue: 5 } } });
+    assert.equal(req.headers.authorization, 'Bearer marketing-token');
+    if (req.url === '/api/v2/marketing/summary') return send({ success: true, data: { inviteCode: 'ABCDEF0123456789', checkedIn: false } });
+    if (req.url === '/api/v2/marketing/checkin') return send({ success: true, data: { magicValue: 105, reward: 100, checkedIn: true } });
+    res.writeHead(404); res.end('{}');
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { account.logoutAccount(); server.closeAllConnections(); server.close(); });
+  account.setAccountConfig({ account: { baseUrl: `http://127.0.0.1:${server.address().port}` } });
+  assert.equal((await account.getMarketingConfig()).visible, true);
+  assert.throws(() => account.getMarketingSummary(), error => error.status === 401);
+  await account.registerAccount('friend@qq.com', 'test-password', '123456', 'ABCDEF0123456789');
+  assert.equal(registration.inviteCode, 'ABCDEF0123456789');
+  await account.loginAccount('friend@qq.com', 'test-password');
+  assert.equal((await account.getMarketingSummary()).inviteCode, 'ABCDEF0123456789');
+  await account.claimDailyCheckin();
+  assert.equal(account.publicAccountStatus().user.magicValue, 105);
+  assert.equal(JSON.parse(fs.readFileSync(process.env.MLI_ACCOUNT_SESSION_FILE, 'utf8')).user.magicValue, 105);
+});
+
 test('统一账户登录、会话复验和幂等魔力值结算', async (t) => {
   let points = 100;
   let magicValue = 10;

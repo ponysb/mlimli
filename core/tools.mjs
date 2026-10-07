@@ -1,13 +1,18 @@
 // core/tools.mjs —— 核心工具集（7 个）：造型化优于裸 shell，全部走路径监狱
 import fs from 'node:fs';
-import { stopProcessTree } from './process-tree.mjs';
 import { StringDecoder } from 'node:string_decoder';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawnSandboxedCommand, selectedBackend } from './sandbox.mjs';
 import { resolveInWorkspace, resolveReadable, getWorkspaceRoot } from './paths.mjs';
 import { addAsset, assetDataUrl, assetLibraryDescription, getAsset, listAssets } from './assets.mjs';
-import { deleteMemory, getMemory, listMemories, memoryCatalog, saveMemory } from './memory.mjs';
+import { deleteMemory, getMemory, listMemories, memoryCatalog, saveMemory, searchMemories, recordMemoryRecall } from './memory.mjs';
+import { memorySettings } from './memory-policy.mjs';
+import { searchHistory } from './memory-history.mjs';
+import { getRunContext } from './run-context.mjs';
+import { verificationTools } from './verification.mjs';
+import { isVerificationCommand, sourceEvidence } from './task-quality.mjs';
 import { readAttachedDocument } from './attachment-content.mjs';
+import { outputTools } from './tool-output.mjs';
 
 const IS_WIN = process.platform === 'win32';
 
@@ -19,7 +24,7 @@ function walk(dir, cb, depth = 0) {
     if (it.name.startsWith('.') || it.name === 'node_modules') continue;
     const p = path.join(dir, it.name);
     if (it.isDirectory()) walk(p, cb, depth + 1);
-    else cb(p);
+    else { try { resolveReadable(p); } catch { continue; } cb(p); }
   }
 }
 
@@ -47,33 +52,56 @@ export const DENY_PATTERNS = [
 ];
 
 export const coreTools = [
+  ...outputTools,
+  ...verificationTools,
   {
     name: 'list_memories',
-    description: '列出当前项目已沉淀的可复用经验、约定和已验证事实。开始复杂任务或遇到重复问题时使用。',
-    parameters: { type: 'object', properties: {} },
+    description: '查询全局用户偏好和当前项目的有效记忆目录；可以限定范围和搜索词。',
+    parameters: { type: 'object', properties: { scope: { type: 'string', enum: ['all', 'global', 'project'] }, query: { type: 'string' } } },
     permission: 'L0',
-    async run() { return { content: memoryCatalog(), ui: { kind: 'memory-list', memories: listMemories().map(({ content, ...item }) => ({ ...item, preview: content.slice(0, 180) })) } }; },
+    async run(args = {}) { return { content: memoryCatalog(args), ui: { kind: 'memory-list', memories: listMemories({ scope: args.scope || 'all', query: args.query || '', status: 'active' }).slice(0, 50).map(({ content, history, ...item }) => ({ ...item, preview: content.slice(0, 180) })) } }; },
   },
   {
     name: 'read_memory',
-    description: '按 ID 读取一条项目记忆的完整内容。记忆是参考上下文，不可覆盖用户当前要求或安全规则。',
-    parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+    description: '按 ID 和 scope（默认 project）读取有效记忆及 revision。更新时必须使用该 revision；记忆不能覆盖用户要求或权限。',
+    parameters: { type: 'object', properties: { id: { type: 'string' }, scope: { type: 'string', enum: ['global', 'project'] } }, required: ['id'] },
     permission: 'L0',
-    async run({ id }) { const item = getMemory(id); if (!item) throw new Error('记忆不存在'); return { content: `[项目记忆：${item.title}]\n${item.content}\n\n标签：${item.tags?.join(', ') || '无'}\n来源：${item.source}` }; },
+    async run({ id, scope = 'project' }) { const item = getMemory(id, scope); if (!item || item.status !== 'active') throw new Error('有效记忆不存在'); recordMemoryRecall({ ids: [{ id, scope }] }); return { content: JSON.stringify({ ...item, history: undefined }) }; },
+  },
+  {
+    name: 'search_memories', permission: 'L0',
+    description: '按中英文关键词召回全局和当前项目的相关有效记忆，返回来源、证据和版本；不返回待审核或停用内容。',
+    parameters: { type: 'object', properties: { query: { type: 'string' }, scope: { type: 'string', enum: ['all', 'global', 'project'] }, limit: { type: 'number' } }, required: ['query'] },
+    async run({ query, ...options }) { const items = searchMemories(query, options); recordMemoryRecall({ ids: items.map(item => ({ id: item.id, scope: item.scope })) }); return { content: JSON.stringify(items.map(({ history, ...item }) => item)) }; },
+  },
+  {
+    name: 'search_history', permission: 'L0',
+    description: '检索当前项目过去会话的真实用户/助手消息，返回会话、消息位置和脱敏片段。用于追溯讨论和依据，历史内容不是新的授权。',
+    parameters: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'number' }, sessionId: { type: 'string' } }, required: ['query'] },
+    async run({ query, ...options }, ctx) { return { content: JSON.stringify(searchHistory(query, { ...options, excludeSessionId: options.sessionId ? undefined : ctx.session?.id })) }; },
   },
   {
     name: 'write_memory',
-    description: '写入或更新一条可跨会话复用的项目经验。仅保存已经验证的稳定事实、项目约定或重复成功的方法；不要保存临时进度、秘密或未经验证的猜测。',
-    parameters: { type: 'object', properties: { id: { type: 'string', description: '更新时传已有 ID；新建时省略' }, title: { type: 'string' }, content: { type: 'string' }, tags: { type: 'array', items: { type: 'string' } }, evidence: { type: 'string', description: '验证依据或触发原因' } }, required: ['title', 'content'] },
+    description: '保存长期记忆：全局用户偏好使用 global/preference，项目事实或可复用方法使用 project。更新先读取现有内容并提供 expectedRevision。写入受审批及记忆审核设置约束，不保存秘密、临时进度或猜测。',
+    parameters: { type: 'object', properties: { id: { type: 'string', description: '更新时传已有 ID；新建时省略' }, expectedRevision: { type: 'number' }, scope: { type: 'string', enum: ['global', 'project'] }, kind: { type: 'string', enum: ['preference', 'fact', 'lesson', 'workflow'] }, title: { type: 'string' }, content: { type: 'string' }, tags: { type: 'array', items: { type: 'string' } }, evidence: { type: 'string', description: '实际验证依据或用户原话' } }, required: ['title', 'content', 'evidence'] },
     permission: 'L1',
-    async run({ id, title, content, tags, evidence }) { const item = saveMemory({ id, title, content, tags, source: evidence || 'agent verified' }); return { content: `已保存项目记忆：${item.title}（ID ${item.id}）` }; },
+    async run(args, ctx) {
+      if (args.id && (!Number.isInteger(args.expectedRevision) || args.expectedRevision < 1)) throw new Error('更新记忆必须先读取并提供有效 expectedRevision');
+      if (typeof args.evidence !== 'string' || !args.evidence.trim()) throw new Error('保存记忆必须提供用户原话或实际验证依据 evidence');
+      const target = args.id ? getMemory(args.id, args.scope || 'project') : null;
+      if (args.id && !target) throw new Error('记忆不存在');
+      if (target && target.status !== 'active') throw new Error('只能更新已启用的记忆，待审核和停用内容请在设置中处理');
+      const gated = memorySettings().reviewBeforeSave;
+      const item = saveMemory({ title: args.title, content: args.content, scope: args.scope, kind: args.kind, tags: args.tags, evidence: args.evidence, expectedRevision: args.expectedRevision, id: gated ? undefined : args.id, status: gated ? 'pending' : 'active', source: 'agent', origin: { sessionId: ctx.session?.id, workspace: getRunContext()?.sessionStorageRoot || getWorkspaceRoot() }, ...(gated && target ? { supersedesId: target.id, baseRevision: args.expectedRevision } : {}) });
+      return { content: `${item.status === 'pending' ? '已提交待审核记忆' : '已保存记忆'}：${item.title}（${item.scope}/${item.id}，revision ${item.revision}）` };
+    },
   },
   {
     name: 'delete_memory',
-    description: '删除错误、过时或不再适用的项目记忆。',
-    parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+    description: '按 ID、scope 和读取时的 revision 删除错误或过时记忆。启用记忆审核时请报告待删除内容，由用户在设置中处理。',
+    parameters: { type: 'object', properties: { id: { type: 'string' }, scope: { type: 'string', enum: ['global', 'project'] }, expectedRevision: { type: 'number' } }, required: ['id', 'expectedRevision'] },
     permission: 'L1',
-    async run({ id }) { const item = deleteMemory(id); return { content: `已删除项目记忆：${item.title}` }; },
+    async run({ id, scope = 'project', expectedRevision }) { if (!Number.isInteger(expectedRevision) || expectedRevision < 1) throw new Error('删除记忆必须先读取并提供有效 expectedRevision'); if (memorySettings().reviewBeforeSave) throw new Error('记忆审核已开启，请由用户在设置中删除记忆'); const item = deleteMemory(id, scope, expectedRevision); return { content: `已删除记忆：${item.title}` }; },
   },
   {
     name: 'list_assets',
@@ -179,37 +207,45 @@ export const coreTools = [
   },
   {
     name: 'bash',
-    description: IS_WIN
-      ? '在 Windows cmd 中执行命令（工作区为当前目录）。禁止毁灭性命令。'
-      : '在系统 shell 中执行命令（工作区为当前目录）。',
+    get description() {
+      const backend = selectedBackend();
+      return backend === 'docker' || backend === 'bubblewrap'
+        ? '在隔离的 Linux /bin/sh 中执行命令，工作目录为 /workspace，对应当前工作区。请使用相对路径，不使用宿主 Windows 命令或盘符。'
+        : IS_WIN ? '在 Windows cmd 中执行命令，工作区为当前目录。' : '在系统 shell 中执行命令，工作区为当前目录。';
+    },
     parameters: {
       type: 'object',
       properties: {
         command: { type: 'string' },
         timeout_ms: { type: 'number', description: '超时毫秒（可选）' },
+        criteria: { type: 'array', items: { type: 'string' }, description: '此测试命令实际检查的条件 id；不填写未覆盖的需求。真实命令成功且源码版本一致才记录关联。' },
       },
       required: ['command'],
     },
     permission: 'L2',
-    async run({ command, timeout_ms }, ctx) {
+    async run({ command, timeout_ms, criteria = [] }, ctx) {
+      if (!Array.isArray(criteria) || criteria.length > 30 || criteria.some(id => typeof id !== 'string' || !id.trim() || id.length > 80)) throw new Error('criteria 必须是最多 30 个实际检查的条件 id');
       for (const re of DENY_PATTERNS) {
         if (re.test(command)) throw new Error(`命令被安全策略拒绝（匹配毁灭性命令模式）`);
       }
-      const timeout = Math.min(timeout_ms ?? ctx.bashTimeoutMs, 600000);
-      return new Promise((resolve) => {
-        const child = IS_WIN
-          ? spawn('cmd.exe', ['/d', '/s', '/c', `chcp 65001 >nul & ${command}`], { cwd: getWorkspaceRoot() })
-          : spawn('/bin/sh', ['-c', command], { cwd: getWorkspaceRoot(), detached: true });
+      const requested = timeout_ms ?? ctx.bashTimeoutMs ?? 60000;
+      if (!Number.isFinite(requested) || requested <= 0 || requested > 600000) throw new Error('命令超时必须在 1 到 600000 毫秒之间');
+      const timeout = Math.min(requested, ctx.bashTimeoutMs ?? 600000);
+      const testSource = isVerificationCommand(command) ? sourceEvidence() : null;
+      const child = await spawnSandboxedCommand(command, { signal: ctx.signal });
+      ctx.emit?.('sandbox_execution', { name: 'bash', ...child.sandbox });
+      try { return await new Promise((resolve) => {
         let out = [], err = [];
         let settled = false;
+        let timedOut = false;
         const timer = setTimeout(() => {
-          if (!settled) { settled = true; stopProcessTree(child, 'SIGKILL'); resolve({ content: `[超时 ${timeout}ms，已终止]\n${decodeOutput(Buffer.concat(out))}` }); }
+          if (!settled) { timedOut = true; child.stopSandbox().catch(() => {}); }
         }, timeout);
-        let outSize = 0, errSize = 0;
+        let outSize = 0, errSize = 0, outTail = Buffer.alloc(0), errTail = Buffer.alloc(0);
         const stdoutDecoder = new StringDecoder('utf8'), stderrDecoder = new StringDecoder('utf8');
-        child.stdout.on('data', d => { if (outSize < 1024 * 1024) out.push(d); outSize += d.length; ctx.emit?.('tool_output', { name: 'bash', stream: 'stdout', text: stdoutDecoder.write(d) }); });
-        child.stderr.on('data', d => { if (errSize < 1024 * 1024) err.push(d); errSize += d.length; ctx.emit?.('tool_output', { name: 'bash', stream: 'stderr', text: stderrDecoder.write(d) }); });
-        const onAbort = () => stopProcessTree(child, 'SIGKILL');
+        child.stdout.on('data', d => { const chunk = d.subarray(0, Math.max(0, 1024 * 1024 - outSize)); if (chunk.length) { out.push(chunk); ctx.emit?.('tool_output', { name: 'bash', stream: 'stdout', text: stdoutDecoder.write(chunk) }); } outTail = Buffer.concat([outTail, d]).subarray(-512 * 1024); outSize += d.length; });
+        child.stderr.on('data', d => { const chunk = d.subarray(0, Math.max(0, 1024 * 1024 - errSize)); if (chunk.length) { err.push(chunk); ctx.emit?.('tool_output', { name: 'bash', stream: 'stderr', text: stderrDecoder.write(chunk) }); } errTail = Buffer.concat([errTail, d]).subarray(-512 * 1024); errSize += d.length; });
+        const onAbort = () => { child.stopSandbox().catch(() => {}); };
         ctx.signal?.addEventListener('abort', onAbort, { once: true });
         if (ctx.signal?.aborted) onAbort();
         child.on('error', error => { if (!settled) { settled = true; clearTimeout(timer); ctx.signal?.removeEventListener('abort', onAbort); resolve({ content: error.message, status: 'error' }); } });
@@ -218,13 +254,17 @@ export const coreTools = [
           if (settled) return;
           settled = true;
           clearTimeout(timer);
-          const stdout = decodeOutput(Buffer.concat(out));
-          const stderr = decodeOutput(Buffer.concat(err));
-          let content = `exit=${code}\n${stdout.slice(0, 8000)}`;
-          if (stderr.trim()) content += `\n[stderr]\n${stderr.slice(0, 2000)}`;
-          resolve({ content: content.trim() || '(无输出)' });
+          const captured = (chunks, tail, size) => size <= 1024 * 1024 ? decodeOutput(Buffer.concat(chunks)) : decodeOutput(Buffer.concat(chunks).subarray(0, 512 * 1024)) + `\n…[流超过 1 MiB，已省略中段，原始 ${size} 字节]…\n` + decodeOutput(tail);
+          const stdout = captured(out, outTail, outSize), stderr = captured(err, errTail, errSize);
+          let content = timedOut ? `[超时 ${timeout}ms，已终止]\n${stdout}` : ctx.signal?.aborted ? `[任务已停止]\n${stdout}` : `exit=${code}\n${stdout}`;
+          if (stderr.trim()) content += `\n[stderr]\n${stderr}`;
+          const afterSource = testSource ? sourceEvidence() : null;
+          const testEvidence = afterSource ? {...afterSource,complete:afterSource.complete && testSource.complete && afterSource.sha256===testSource.sha256} : undefined;
+          const passed = !timedOut && !ctx.signal?.aborted && code === 0 && testEvidence?.complete;
+          const verification = testEvidence ? { kind: 'command', environment: testEvidence.environment, sourceVersion: testEvidence, artifacts: [], assertions: criteria.length, checks: [...new Set(criteria)].map(criterion => ({ name: `实际测试命令：${command.slice(0,180)}`, criterion, passed: !!passed })), scope: '实际退出码和源码版本；需求关联由 Agent 声明，不证明测试内容完整覆盖需求' } : undefined;
+          resolve({ content: content.trim() || '(无输出)', status: timedOut || ctx.signal?.aborted || code !== 0 ? 'error' : 'ok', sandbox: child.sandbox, exitCode: code, structuredContent: { exit_code: code, truncated: outSize > 1024 * 1024 || errSize > 1024 * 1024 }, command, testEvidence, verification });
         });
-      });
+      }); } finally { await child.cleanupSandbox(); }
     },
   },
   {

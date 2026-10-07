@@ -1,6 +1,6 @@
 {
   "name": "mli-agent",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "魔力工作台：本地 Agent 运行时、React 工作台、Electron 桌面入口与可扩展插件系统",
   "type": "module",
   "main": "electron/main.cjs",
@@ -14,7 +14,7 @@
     "build:tui": "node scripts/build-tui.mjs",
     "test:tui": "node scripts/test-tui.mjs",
     "check": "node scripts/check.mjs",
-    "test": "node --test test/*.test.mjs",
+    "test": "node --test --test-concurrency=4 test/*.test.mjs",
     "dev:web": "vite --host 127.0.0.1",
     "build:web": "vite build",
     "build:web:legacy": "vite build --mode legacy",
@@ -43,6 +43,7 @@
     "url": "https://github.com/ponysb/mlimli/issues"
   },
   "dependencies": {
+    "@anthropic-ai/sandbox-runtime": "0.0.78",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.12",
     "@codemirror/lang-javascript": "^6.2.5",
@@ -58,6 +59,7 @@
     "@xterm/xterm": "^5.5.0",
     "dingtalk-stream": "2.1.5",
     "dotenv": "17.2.2",
+    "electron-updater": "6.8.9",
     "lucide-react": "latest",
     "pdfjs-dist": "4.8.69",
     "qrcode.react": "^4.2.0",

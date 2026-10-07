@@ -9,6 +9,8 @@ media-secrets/
 !.env.example
 config.json
 **/.agent/
+**/.security/
+**/Partitions/
 **/.agents/
 **/account-session.json
 node_modules/
@@ -16,10 +18,27 @@ dist/
 dist-legacy/
 logs/
 workspace/
+/local-speech/
+/meetings/
+/voice-profiles.json
 release/
 *.log
 *.pem
 *.key
+*.p12
+*.pfx
+*.sqlite
+*.sqlite3
+*.db
+*.bak
+*.tmp
+*.old
+*.pyc
+*.pyo
+__pycache__/
+.cache/
+.pytest_cache/
+.venv/
 
 # Private services are never part of the public client repository
 /server/

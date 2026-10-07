@@ -1,0 +1,14 @@
+.action-popover { position: fixed; z-index: 2000; box-sizing: border-box; margin: 0; padding: 10px; color: var(--ink); border: 1px solid var(--line-strong); border-radius: 6px; background: #fff; box-shadow: 0 4px 16px #2026301c; text-align: left; }
+.action-popover::before { content: ''; position: absolute; left: calc(var(--confirm-arrow-left) - 4px); top: var(--confirm-arrow-top); bottom: var(--confirm-arrow-bottom); width: 8px; height: 8px; border-top: 1px solid var(--line-strong); border-left: 1px solid var(--line-strong); background: #fff; transform: rotate(var(--confirm-arrow-rotate)); }
+.action-popover > b { display: block; max-height: 150px; overflow-y: auto; overflow-wrap: anywhere; font-size: 12px; line-height: 1.5; font-weight: 500; }
+.action-popover > p { margin: 4px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.action-popover > input { display: block; box-sizing: border-box; width: 100%; height: 28px; margin-top: 8px; padding: 0 7px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--ink); background: #fff; font-size: 12px; }
+.action-popover-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 9px; }
+.action-popover-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 44px; height: 24px; padding: 0 7px; border: 1px solid var(--line); border-radius: 4px; font-size: 11px; font-weight: 400; }
+.action-popover-cancel { color: var(--muted); background: #fff; }
+.action-popover-cancel:hover { color: var(--ink); background: #f3f5f6; }
+.action-popover-danger { color: #b3414b; background: #fff3f4; }
+.action-popover-danger:hover { background: #fbe4e7; }
+.action-popover-accept { color: var(--green, #267255); background: #f0f7f3; }
+.action-popover-accept:hover { background: #e1f0e8; }
+.action-popover :is(button, input):focus-visible { outline: 2px solid #85bba2; outline-offset: 2px; }

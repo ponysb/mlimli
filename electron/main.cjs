@@ -1,5 +1,11 @@
 const path = require('path');
 const fs = require('fs');
+const verifierMode = process.argv.find(argument => argument.startsWith('--mli-verifier='))?.slice('--mli-verifier='.length);
+if (verifierMode) {
+  if (!['document', 'browser'].includes(verifierMode)) throw new Error('未知验收组件');
+  require(path.join(require('electron').app.isPackaged ? path.join(process.resourcesPath, 'client') : path.join(__dirname, '..'), 'core', `${verifierMode}-verifier.cjs`));
+  return;
+}
 const smokeArgument = process.argv.find(argument => argument.startsWith('--mli-smoke-report='));
 function smokeStage(stage) {
   if (smokeArgument) fs.appendFileSync(`${path.resolve(smokeArgument.slice('--mli-smoke-report='.length))}.startup.log`, `${stage}\n`);
@@ -10,6 +16,10 @@ smokeStage('electron');
 const { acquireRuntime } = require('./runtime.cjs');
 const { registerDebugConsole, observeDebugConsole } = require('./debug-console.cjs');
 const { userDataRoot } = require('../core/user-data.cjs');
+const { registerDesktopUpdater, configuredUpdateServer } = require('./updater.cjs');
+const { loadClientEnvironment } = require('../core/client-env.cjs');
+const { registerSandboxSetup } = require('./sandbox-setup.cjs');
+const { createAppBrowser, registerAppBrowser } = require('./app-center.cjs');
 require('./compat.cjs').installCompatibility();
 smokeStage('modules');
 let server;
@@ -17,6 +27,7 @@ let serverUrl;
 let mainWindow;
 let quitting = false;
 let runtimeConnection;
+let appBrowser;
 const appIcon = path.join(__dirname, 'assets', 'icon.png');
 const dataArgument = process.argv.find(argument => argument.startsWith('--mli-data-dir='));
 const legacyRuntime = Number(process.versions.electron.split('.')[0]) <= 22;
@@ -27,15 +38,27 @@ const ownsInstance = app.requestSingleInstanceLock();
 smokeStage(`instance:${ownsInstance}`);
 if (!ownsInstance) app.quit();
 app.on('second-instance', () => { if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.show(); mainWindow.focus(); } });
+const { registerDisplayCapture } = require('./display-capture.cjs');
+const configureDisplayCapture = registerDisplayCapture(ipcMain, () => mainWindow);
 async function createWindow() {
   const win = new BrowserWindow({ width: 1440, height: 920, minWidth: 1024, minHeight: 680, backgroundColor: '#ffffff', icon: appIcon, autoHideMenuBar: true, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false } });
   mainWindow = win;
   observeDebugConsole(win.webContents);
+  // Keep capture grants scoped to the local workbench; the OS/browser still
+  // handles microphone/camera permission prompts.
+  const captureSession = win.webContents.session;
+  const fromWorkbench = details => {
+    try { return new URL(details.securityOrigin || details.requestingUrl || details.url).origin === serverUrl; } catch { return false; }
+  };
+  const appPermissions = ['media', 'display-capture', 'notifications', 'clipboard-read', 'clipboard-sanitized-write', 'fullscreen', 'pointerLock'];
+  captureSession.setPermissionCheckHandler((_contents, permission, origin) => appPermissions.includes(permission) && origin.replace(/\/$/, '') === serverUrl);
+  captureSession.setPermissionRequestHandler((_contents, permission, callback, details) => callback(appPermissions.includes(permission) && fromWorkbench(details)));
+  configureDisplayCapture(win, serverUrl);
   if (process.platform === 'win32' && fs.existsSync(appIcon)) win.setIcon(appIcon);
   win.setMenuBarVisibility(false);
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (event, url) => { if (new URL(url).origin !== serverUrl) event.preventDefault(); });
-  win.on('closed', () => { smokeStage('window-closed'); mainWindow = null; });
+  win.on('closed', () => { smokeStage('window-closed'); appBrowser?.bounds(null); mainWindow = null; });
   await win.loadURL(serverUrl);
   const reportArgument = process.argv.find(argument => argument.startsWith('--mli-smoke-report='));
   if (reportArgument) {
@@ -113,14 +136,42 @@ if (ownsInstance) app.whenReady().then(async () => {
   app.setAppUserModelId(legacyRuntime ? 'com.molichuangzuo.app.legacy' : 'com.molichuangzuo.app');
   Menu.setApplicationMenu(null);
   const runtimeRoot = app.isPackaged ? path.join(process.resourcesPath, 'client') : path.join(__dirname, '..');
+  loadClientEnvironment({ runtimeRoot, dataRoot, packaged: app.isPackaged });
   const runtime = await acquireRuntime({ executable: process.execPath, runtimeRoot, dataRoot, packaged: app.isPackaged });
   runtimeConnection = runtime;
   smokeStage('runtime');
   server = runtime.child;
   serverUrl = runtime.url;
+  appBrowser = createAppBrowser({ electron: require('electron'), getWindow: () => mainWindow, serverUrl, dataRoot });
+  registerAppBrowser({ ipcMain, controller: appBrowser, getWindow: () => mainWindow, serverUrl });
+  appBrowser.start();
   server?.on('error', error => { if (!quitting) { dialog.showErrorBox('本地服务出错', error.message); app.quit(); } });
   server?.on('exit', () => { if (!quitting) { dialog.showErrorBox('本地服务已停止', `请重新打开应用。启动日志：${runtime.logFile}`); app.quit(); } });
+  const desktopUpdater = registerDesktopUpdater({ app, ipcMain, getWindow: () => mainWindow,
+    baseUrl: configuredUpdateServer({ runtimeRoot, dataRoot }),
+    beforeInstall: async () => {
+      quitting = true;
+      try { await runtimeConnection.prepareUpdate(); }
+      catch (error) { quitting = false; throw error; }
+      appBrowser?.destroy();
+    },
+    logger: Object.fromEntries(['info', 'warn', 'error', 'debug'].map(level => [level, message => {
+      fs.appendFileSync(path.join(dataRoot, 'desktop.log'), `[update:${level}] ${String(message)}\n`);
+    }])),
+  });
+  registerSandboxSetup({ipcMain,getWindow:()=>mainWindow,serverUrl,
+    preflight:async()=>{
+      const response=await fetch(`${serverUrl}/api/sandbox/install-preflight`,{method:'POST'});
+      const result=await response.json();if(!response.ok)throw new Error(result.error||'无法确认沙箱安装状态');
+    },
+    install:async()=>{
+      const {pathToFileURL}=require('node:url');
+      const {installNativeWindowsSandbox}=await import(pathToFileURL(path.join(runtimeRoot,'core/windows-sandbox.mjs')).href);
+      return installNativeWindowsSandbox();
+    },
+  });
   await createWindow();
+  if (!smokeArgument) desktopUpdater.start();
   app.on('activate', () => { if (!mainWindow) createWindow().catch(error => dialog.showErrorBox('窗口启动失败', error.message)); });
 }).catch(async error => {
   quitting = true;
@@ -135,6 +186,7 @@ app.on('before-quit', event => {
   if (quitting || !runtimeConnection) return;
   event.preventDefault();
   quitting = true;
+  appBrowser?.destroy();
   runtimeConnection.release().finally(() => { smokeStage('runtime-released'); app.quit(); });
 });
 app.on('will-quit', () => smokeStage('will-quit'));

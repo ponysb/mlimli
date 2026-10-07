@@ -5,7 +5,7 @@
 <h1 align="center">MLI Agent · 魔力工作台</h1>
 <p align="center">An open-source, local-first Agent workbench</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v0.2.0-245b43" alt="v0.2.0" />
+  <img src="https://img.shields.io/badge/version-v0.3.0-245b43" alt="v0.3.0" />
   <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="Apache-2.0" />
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-64748b" alt="Windows / macOS / Linux" />
 </p>

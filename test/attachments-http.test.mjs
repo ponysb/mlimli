@@ -32,7 +32,7 @@ test('HTTP attachment flow lets a text-only agent read and modify a file with or
       const reference = parts.find(part => part.text.includes('可编辑的工作区副本')).text;
       workingPath = JSON.parse(reference.match(/可编辑的工作区副本：(".*?")。/)[1]);
     }
-    const tool = toolReplies.length === 0 ? { name: 'read_attachment', args: { path: workingPath } } : toolReplies.length === 1 ? { name: 'write_file', args: { path: workingPath, content: 'Modified using attached content: hello input' } } : null;
+    const tool = toolReplies.length === 0 ? { name: 'read_attachment', args: { path: workingPath } } : toolReplies.length === 1 ? { name: 'write_file', args: { path: workingPath, content: 'Modified using attached content: hello input' } } : toolReplies.length === 2 ? { name: 'verify_artifact', args: { path: workingPath, checks: [{ type: 'contains', value: 'Modified using attached content: hello input' }] } } : null;
     if (toolReplies.length === 1) assert.ok(toolReplies[0].content.includes('hello input'));
     const delta = tool ? { tool_calls: [{ index: 0, id: `call-${toolReplies.length}`, type: 'function', function: { name: tool.name, arguments: JSON.stringify(tool.args) } }] } : { content: 'File updated.' };
     res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -64,5 +64,7 @@ test('HTTP attachment flow lets a text-only agent read and modify a file with or
   const download = await fetch(url + attachment.url);
   assert.equal(await download.text(), 'hello input');
   assert.ok(download.headers.get('content-disposition').startsWith('attachment;'));
-  assert.equal(requests.length, 3);
+  // Background memory learning is a separate non-streaming request.
+  assert.equal(requests.filter(request => request.stream).length, 4);
+  assert.equal(snapshot.entries.findLast(entry => entry.type === 'task_summary').quality.status, 'checked');
 });

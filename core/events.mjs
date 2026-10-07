@@ -1,5 +1,6 @@
 // core/events.mjs —— 全局事件总线：循环、服务端 SSE、权限引擎都挂在它上面
 import { EventEmitter } from 'node:events';
+import { getRunContext } from './run-context.mjs';
 
 export const bus = new EventEmitter();
 bus.setMaxListeners(100);
@@ -8,7 +9,9 @@ export function eventSequence() { return sequence; }
 
 /** 发出一个事件：{type, ts, ...data}，返回该事件对象 */
 export function emit(type, data = {}) {
-  const evt = { type, ts: Date.now(), ...data, seq: ++sequence };
+  const context = getRunContext();
+  const identity = data.sessionId && data.sessionId === context?.agentId ? { rootSessionId: context.rootSessionId, agentId: context.agentId, taskId: context.taskId, isSubagent: Boolean(context.taskId) } : {};
+  const evt = { ...identity, type, ts: Date.now(), ...data, seq: ++sequence };
   bus.emit('event', evt);
   return evt;
 }
