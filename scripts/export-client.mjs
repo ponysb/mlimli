@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 export const CLIENT_FILES = [
   'docs/ACP.md', 'test/acp.test.mjs', 'test/acp-client.test.mjs', 'test/acp-settings.test.mjs', 'test/fixtures/acp-peer.mjs', 'test/fixtures/acp-settings-smoke.cjs',
-  'README.md', 'README.en.md', '.gitignore', '.gitattributes', '.env.example', 'config.example.json', 'package.json', 'package-lock.json', 'build-windows.cmd',
+  'README.md', 'README.en.md', 'docs/task-recovery-ui.png', '.gitignore', '.gitattributes', '.env.example', 'config.example.json', 'package.json', 'package-lock.json', 'build-windows.cmd',
   'vite.config.js', 'server.mjs', 'PLUGIN-COMPATIBILITY.md',
   'scripts/check.mjs', 'scripts/export-client.mjs', 'scripts/package-win.mjs', 'scripts/verify-win.mjs', 'scripts/clean-release.mjs', 'docs/WINDOWS-PACKAGING.md',
   'scripts/terminal-package.mjs', 'scripts/package-linux.mjs', 'scripts/package-mac.mjs', 'docs/TERMINAL.md', 'test/cli.test.mjs',

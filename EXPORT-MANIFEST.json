@@ -598,6 +598,11 @@
       "sha256": "5f9b4ed5db07b627141f77ed86fd9a1088f9ebf960c2a3354170b74c8f947ca0"
     },
     {
+      "path": "docs/task-recovery-ui.png",
+      "bytes": 323593,
+      "sha256": "b837bd0ec35f41ef467eec820deda9094ef261d426a5fe11a6bc7ce3bc92d5c8"
+    },
+    {
       "path": "docs/TERMINAL.md",
       "bytes": 6901,
       "sha256": "e61931460f1534f6518c035020466d032ecf1479be2647f0d4a281e346e7c6e0"
@@ -5034,8 +5039,8 @@
     },
     {
       "path": "scripts/export-client.mjs",
-      "bytes": 11153,
-      "sha256": "7ea12af196e1cbc1eca4ef4cdb409645324f0d096972c702d4dfc4d2b538687e"
+      "bytes": 11182,
+      "sha256": "8a3f401ab4d3fcb8ea12accc70e743d829f6b51314270e5e06f6d163f8b33d25"
     },
     {
       "path": "scripts/package-linux.mjs",
