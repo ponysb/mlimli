@@ -11,6 +11,7 @@ sys.dont_write_bytecode = True
 sys.stdout.reconfigure(encoding='utf-8')
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / 'plugins/local-speech'))
 from diarization import SpeakerDiarizer, WINDOW, STEP
+from speech_policy import MAX_UTTERANCE_SECONDS, MIN_SILENCE_SECONDS
 
 root = pathlib.Path(sys.argv[1])
 extractor = sherpa_onnx.SpeakerEmbeddingExtractor(sherpa_onnx.SpeakerEmbeddingExtractorConfig(
@@ -32,15 +33,15 @@ def read(file):
 def speech_chunks(audio):
     config = sherpa_onnx.VadModelConfig()
     config.silero_vad.model = str(root / 'silero_vad.onnx')
-    config.silero_vad.min_silence_duration = .45
+    config.silero_vad.min_silence_duration = MIN_SILENCE_SECONDS
     config.silero_vad.min_speech_duration = .2
-    config.silero_vad.max_speech_duration = 12
+    config.silero_vad.max_speech_duration = MAX_UTTERANCE_SECONDS
     config.sample_rate = 16000
     vad = sherpa_onnx.VoiceActivityDetector(config, buffer_size_in_seconds=30)
     for offset in range(0, len(audio), 512):
         block = audio[offset:offset + 512]
         vad.accept_waveform(np.pad(block, (0, 512 - len(block))))
-        if vad.is_speech_detected() and offset + 512 - vad.current_segment.start >= 12 * 16000:
+        if vad.is_speech_detected() and offset + 512 - vad.current_segment.start >= MAX_UTTERANCE_SECONDS * 16000:
             vad.flush()
         while not vad.empty():
             segment = vad.front
@@ -56,7 +57,8 @@ def speech_chunks(audio):
 def detect(audio, with_vad=False):
     diarizer = SpeakerDiarizer(embedding)
     turns, live = [], []
-    chunks = speech_chunks(audio) if with_vad else ((start, audio[start:start + 12 * 16000]) for start in range(0, len(audio), 12 * 16000))
+    chunk_samples = MAX_UTTERANCE_SECONDS * 16000
+    chunks = speech_chunks(audio) if with_vad else ((start, audio[start:start + chunk_samples]) for start in range(0, len(audio), chunk_samples))
     for start, chunk in chunks:
         for end in range(WINDOW, len(chunk) + 1, STEP):
             record = diarizer.observe(chunk[end - WINDOW:end], start + end - WINDOW)

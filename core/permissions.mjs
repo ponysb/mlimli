@@ -134,7 +134,7 @@ function buildPreview(tool, args) {
  * 权限裁决。返回 {ok, reason, decision}。
  * - ok=false 时调用方应把拒绝原因作为工具结果回灌给模型。
  */
-export async function authorize({ session, tool, args, timeoutMs }) {
+export async function authorize({ session, tool, args, timeoutMs, allowRemember = true }) {
   try { assertAgentTool(tool, args); } catch (error) { return { ok: false, decision: 'blocked', reason: error.message }; }
   const level = tool.permission ?? 'L0';
   const argsStr = argsSummary(tool.name, args);
@@ -157,7 +157,7 @@ export async function authorize({ session, tool, args, timeoutMs }) {
     (level === 'L3' && tool.autoApproveInAutoAll === true)
   )) return { ok: true, decision: 'auto' };
 
-  if (checkRules(session, tool.name, args, argsStr)) return { ok: true, decision: 'rule' };
+  if (allowRemember && checkRules(session, tool.name, args, argsStr)) return { ok: true, decision: 'rule' };
 
   const reqId = crypto.randomUUID().slice(0, 12);
   const request = {
@@ -183,6 +183,7 @@ export async function authorize({ session, tool, args, timeoutMs }) {
   emit('permission_resolved', { sessionId: session.id, reqId, decision });
 
   const pattern = rememberPattern(tool, args);
+  if (!allowRemember && ['allow_session', 'allow_always'].includes(decision)) return { ok: true, decision: 'allow' };
   if (decision === 'allow') return { ok: true, decision };
   if (decision === 'allow_session') {
     addSessionRule(session.id, tool.name, pattern);

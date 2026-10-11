@@ -1,9 +1,10 @@
 const path = require('path');
 const fs = require('fs');
+const developmentMode = process.argv.includes('--mli-development') || !require('electron').app.isPackaged;
 const verifierMode = process.argv.find(argument => argument.startsWith('--mli-verifier='))?.slice('--mli-verifier='.length);
 if (verifierMode) {
   if (!['document', 'browser'].includes(verifierMode)) throw new Error('未知验收组件');
-  require(path.join(require('electron').app.isPackaged ? path.join(process.resourcesPath, 'client') : path.join(__dirname, '..'), 'core', `${verifierMode}-verifier.cjs`));
+  require(path.join(developmentMode ? path.join(__dirname, '..') : path.join(process.resourcesPath, 'client'), 'core', `${verifierMode}-verifier.cjs`));
   return;
 }
 const smokeArgument = process.argv.find(argument => argument.startsWith('--mli-smoke-report='));
@@ -11,7 +12,7 @@ function smokeStage(stage) {
   if (smokeArgument) fs.appendFileSync(`${path.resolve(smokeArgument.slice('--mli-smoke-report='.length))}.startup.log`, `${stage}\n`);
 }
 smokeStage('entry');
-const { app, BrowserWindow, dialog, ipcMain, Menu, Notification, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, Notification, shell, powerMonitor, nativeImage } = require('electron');
 smokeStage('electron');
 const { acquireRuntime } = require('./runtime.cjs');
 const { registerDebugConsole, observeDebugConsole } = require('./debug-console.cjs');
@@ -20,6 +21,7 @@ const { registerDesktopUpdater, configuredUpdateServer } = require('./updater.cj
 const { loadClientEnvironment } = require('../core/client-env.cjs');
 const { registerSandboxSetup } = require('./sandbox-setup.cjs');
 const { createAppBrowser, registerAppBrowser } = require('./app-center.cjs');
+const { registerWindowControls } = require('./window-controls.cjs');
 require('./compat.cjs').installCompatibility();
 smokeStage('modules');
 let server;
@@ -28,12 +30,18 @@ let mainWindow;
 let quitting = false;
 let runtimeConnection;
 let appBrowser;
-const appIcon = path.join(__dirname, 'assets', 'icon.png');
+const windowsIcon = path.join(__dirname, 'assets', 'icon.ico');
+const appIconPath = process.platform === 'win32' && fs.existsSync(windowsIcon) ? windowsIcon : path.join(__dirname, 'assets', 'icon.png');
+const appIcon = nativeImage.createFromPath(appIconPath);
+const macDockIcon = path.join(__dirname, 'assets', 'icon-mac.png');
 const dataArgument = process.argv.find(argument => argument.startsWith('--mli-data-dir='));
 const legacyRuntime = Number(process.versions.electron.split('.')[0]) <= 22;
 const dataRoot = dataArgument ? path.resolve(dataArgument.slice('--mli-data-dir='.length)) : userDataRoot({ legacy: legacyRuntime });
 fs.mkdirSync(dataRoot, { recursive: true });
 app.setPath('userData', dataRoot);
+app.setName('魔力工作台');
+// A dev AUMID tied to the branded dev exe keeps its taskbar icon separate from an installed copy's shortcut.
+app.setAppUserModelId(developmentMode && process.platform === 'win32' ? process.execPath : legacyRuntime ? 'com.molichuangzuo.app.legacy' : 'com.molichuangzuo.app');
 const ownsInstance = app.requestSingleInstanceLock();
 smokeStage(`instance:${ownsInstance}`);
 if (!ownsInstance) app.quit();
@@ -41,7 +49,7 @@ app.on('second-instance', () => { if (mainWindow) { if (mainWindow.isMinimized()
 const { registerDisplayCapture } = require('./display-capture.cjs');
 const configureDisplayCapture = registerDisplayCapture(ipcMain, () => mainWindow);
 async function createWindow() {
-  const win = new BrowserWindow({ width: 1440, height: 920, minWidth: 1024, minHeight: 680, backgroundColor: '#ffffff', icon: appIcon, autoHideMenuBar: true, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false } });
+  const win = new BrowserWindow({ width: 1440, height: 920, minWidth: 1024, minHeight: 680, backgroundColor: '#f6f7f8', icon: appIconPath, ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 13, y: 12 } } : { frame: false }), autoHideMenuBar: true, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false } });
   mainWindow = win;
   observeDebugConsole(win.webContents);
   // Keep capture grants scoped to the local workbench; the OS/browser still
@@ -54,11 +62,13 @@ async function createWindow() {
   captureSession.setPermissionCheckHandler((_contents, permission, origin) => appPermissions.includes(permission) && origin.replace(/\/$/, '') === serverUrl);
   captureSession.setPermissionRequestHandler((_contents, permission, callback, details) => callback(appPermissions.includes(permission) && fromWorkbench(details)));
   configureDisplayCapture(win, serverUrl);
-  if (process.platform === 'win32' && fs.existsSync(appIcon)) win.setIcon(appIcon);
+  if (process.platform === 'win32' && !appIcon.isEmpty()) win.setIcon(appIcon);
   win.setMenuBarVisibility(false);
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (event, url) => { if (new URL(url).origin !== serverUrl) event.preventDefault(); });
   win.on('closed', () => { smokeStage('window-closed'); appBrowser?.bounds(null); mainWindow = null; });
+  const sendWindowState = () => { if (!win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.send('window-state-changed', { maximized: win.isMaximized(), fullScreen: win.isFullScreen(), platform: process.platform }); };
+  for (const event of ['maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) win.on(event, sendWindowState);
   await win.loadURL(serverUrl);
   const reportArgument = process.argv.find(argument => argument.startsWith('--mli-smoke-report='));
   if (reportArgument) {
@@ -71,7 +81,7 @@ async function createWindow() {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     if (!rendererText.includes('工作台')) throw new Error('前端工作台未成功渲染');
-    const report = { url: serverUrl, serverPid: runtimeConnection.pid, appPid: process.pid, dataRoot, packaged: app.isPackaged, title: win.getTitle(), arch: process.arch, electron: process.versions.electron, node: process.versions.node, chrome: process.versions.chrome, renderer: 'passed' };
+    const report = { url: serverUrl, serverPid: runtimeConnection.pid, appPid: process.pid, dataRoot, packaged: !developmentMode, title: win.getTitle(), arch: process.arch, electron: process.versions.electron, node: process.versions.node, chrome: process.versions.chrome, renderer: 'passed' };
     fs.writeFileSync(reportFile, JSON.stringify(report, null, 2));
     const closeFile = `${reportFile}.close`;
     fs.watchFile(closeFile, { interval: 100 }, current => { if (current.mtimeMs > 0 && !win.isDestroyed()) win.close(); });
@@ -79,6 +89,7 @@ async function createWindow() {
   }
 }
 registerDebugConsole(ipcMain, () => mainWindow);
+registerWindowControls({ ipcMain, getWindow: () => mainWindow, getServerUrl: () => serverUrl });
 ipcMain.handle('choose-directory', async () => {
   const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] });
   return result.canceled ? null : result.filePaths[0];
@@ -133,11 +144,17 @@ ipcMain.handle('open-workspace-file', async (_event, relativePath) => {
 });
 if (ownsInstance) app.whenReady().then(async () => {
   smokeStage('ready');
-  app.setAppUserModelId(legacyRuntime ? 'com.molichuangzuo.app.legacy' : 'com.molichuangzuo.app');
+  if (process.platform === 'darwin') {
+    // Packaged builds take the Dock icon from the bundle icns; this only covers a bare `electron .` launch.
+    if (developmentMode && fs.existsSync(macDockIcon)) app.dock.setIcon(macDockIcon);
+    for (const event of ['suspend', 'resume']) powerMonitor.on(event, () => {
+      if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) mainWindow.webContents.send('system-power-changed', event);
+    });
+  }
   Menu.setApplicationMenu(null);
-  const runtimeRoot = app.isPackaged ? path.join(process.resourcesPath, 'client') : path.join(__dirname, '..');
-  loadClientEnvironment({ runtimeRoot, dataRoot, packaged: app.isPackaged });
-  const runtime = await acquireRuntime({ executable: process.execPath, runtimeRoot, dataRoot, packaged: app.isPackaged });
+  const runtimeRoot = developmentMode ? path.join(__dirname, '..') : path.join(process.resourcesPath, 'client');
+  loadClientEnvironment({ runtimeRoot, dataRoot, packaged: !developmentMode });
+  const runtime = await acquireRuntime({ executable: process.execPath, runtimeRoot, dataRoot, packaged: !developmentMode });
   runtimeConnection = runtime;
   smokeStage('runtime');
   server = runtime.child;
@@ -147,7 +164,7 @@ if (ownsInstance) app.whenReady().then(async () => {
   appBrowser.start();
   server?.on('error', error => { if (!quitting) { dialog.showErrorBox('本地服务出错', error.message); app.quit(); } });
   server?.on('exit', () => { if (!quitting) { dialog.showErrorBox('本地服务已停止', `请重新打开应用。启动日志：${runtime.logFile}`); app.quit(); } });
-  const desktopUpdater = registerDesktopUpdater({ app, ipcMain, getWindow: () => mainWindow,
+  const desktopUpdater = registerDesktopUpdater({ app, ipcMain, getWindow: () => mainWindow, development: developmentMode,
     baseUrl: configuredUpdateServer({ runtimeRoot, dataRoot }),
     beforeInstall: async () => {
       quitting = true;

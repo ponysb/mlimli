@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import { getRunContext } from './run-context.mjs';
 import { parseOpenAIStream, parseResponsesStream, parseAnthropicStream, mockStream } from './stream.mjs';
 import { PROTOCOLS, createId, defaultBaseUrl, keyHint, normalizeProtocol } from './providers.mjs';
@@ -84,7 +85,8 @@ function resolvedKey(provider, override) {
   return process.env.MLI_API_KEY || '';
 }
 function publicProvider(provider) { return { id: provider.id, name: provider.name, protocol: provider.protocol, baseUrl: provider.baseUrl, apiKeyEnv: provider.apiKeyEnv || '', hasKey: !!resolvedKey(provider), keyHint: provider.id === MANAGED_PROVIDER_ID ? '账户登录' : provider.apiKey ? keyHint(provider.apiKey) : (resolvedKey(provider) ? '已配置' : ''), managed: provider.id === MANAGED_PROVIDER_ID }; }
-function publicModel(model) { return { id: model.id, providerId: model.providerId, name: model.name || model.model, model: model.model, contextWindow: Number(model.contextWindow || 128000), pricing: normalizePricing(model.pricing), capabilities: model.capabilities || null, ...(model.providerId === MANAGED_PROVIDER_ID ? { displayMultiplier: Number(model.displayMultiplier ?? 1) } : {}) }; }
+// scopeType 让界面区分官方模型与企业模型；个人自配模型没有该字段。
+function publicModel(model) { return { id: model.id, providerId: model.providerId, name: model.name || model.model, model: model.model, contextWindow: Number(model.contextWindow || 128000), pricing: normalizePricing(model.pricing), capabilities: model.capabilities || null, ...(model.providerId === MANAGED_PROVIDER_ID ? { displayMultiplier: Number(model.displayMultiplier ?? 1), scopeType: model.scopeType === 'enterprise' ? 'enterprise' : 'official', scopeId: model.scopeId || null } : {}) }; }
 
 export function providerInfo() {
   const { provider, model } = activePair();
@@ -95,7 +97,7 @@ export function providerPresets() { return PROTOCOLS; }
 export function publicSettings() { return { protocols: PROTOCOLS, providers: config.providers.map(publicProvider), models: config.models.map(publicModel), activeModelId: config.activeModelId, provider: providerInfo() }; }
 export async function refreshManagedCatalog({ force = false } = {}) {
   ensureCatalog();
-  if (!force && Date.now() - catalogRefreshedAt < 30000) return;
+  if (!force && Date.now() - catalogRefreshedAt < 30000) return false;
   const result = await listManagedModels();
   const hadManaged = config.models.some((model) => model.providerId === MANAGED_PROVIDER_ID);
   const previous = config.models.filter((model) => model.providerId !== MANAGED_PROVIDER_ID);
@@ -104,6 +106,9 @@ export async function refreshManagedCatalog({ force = false } = {}) {
     contextWindow: model.contextWindow,
     capabilities: { image: model.supportsImage, video: model.supportsVideo, thinking: model.supportsThinking, webSearch: model.supportsWebSearch },
     displayMultiplier: Number(model.billingMultiplier || 1),
+    // 企业主体下服务端会返回该企业的模型；scopeType 用于界面区分官方与企业。
+    scopeType: model.scopeType === 'enterprise' ? 'enterprise' : 'official',
+    scopeId: model.scopeType === 'enterprise' ? (model.scopeId || null) : null,
     pricing: { inputPer1M: 0, outputPer1M: 0, cacheCreationPer1M: 0, cacheReadPer1M: 0, cacheCreationEnabled: false, cacheReadEnabled: false, priceDetails: model.priceDetails || '', currency: 'CNY' }
   }));
   config.models = [...managed, ...previous];
@@ -111,6 +116,7 @@ export async function refreshManagedCatalog({ force = false } = {}) {
   if (managed.length && !hadManaged) config.activeModelId = managed[0].id;
   catalogRefreshedAt = Date.now();
   syncLegacyProvider();
+  return true;
 }
 
 export function applyCatalogPatch(patch = {}) {
@@ -176,9 +182,19 @@ export function applyCatalogPatch(patch = {}) {
 export function applyProviderPatch(patch = {}) { return applyCatalogPatch(patch); }
 export function saveConfigFile(file) { ensureCatalog(); const stored = { ...config, providers: config.providers.filter((provider) => provider.id !== MANAGED_PROVIDER_ID), models: config.models.filter((model) => model.providerId !== MANAGED_PROVIDER_ID) }; fs.writeFileSync(file, JSON.stringify(stored, null, 2) + '\n', 'utf8'); }
 
-function authHeaders(provider, key) {
-  if (provider.protocol === 'anthropic') return { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' };
-  return { 'content-type': 'application/json', authorization: key ? `Bearer ${key}` : '' };
+export function sessionRoutingKey(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  if (raw.length <= 64 && /^[A-Za-z0-9._:-]+$/.test(raw)) return raw;
+  return createHash('sha256').update(raw).digest('hex');
+}
+function authHeaders(provider, key, sessionId) {
+  const sessionKey = sessionRoutingKey(sessionId);
+  const headers = provider.protocol === 'anthropic'
+    ? { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' }
+    : { 'content-type': 'application/json', authorization: key ? `Bearer ${key}` : '' };
+  if (sessionKey) headers['x-session-id'] = sessionKey;
+  return headers;
 }
 export async function listRemoteModels({ providerId, baseUrl, apiKey: override, protocol } = {}) {
   const existing = config.providers.find((p) => p.id === providerId);
@@ -229,11 +245,12 @@ function toOpenAI(messages) { return messages.map((m) => m.role === 'assistant' 
 function responseParts(content) { return Array.isArray(content) ? content.map(p => p.type === 'image' ? { type: 'input_image', image_url: p.dataUrl } : p.type === 'file' ? { type: 'input_file', filename: p.name, file_data: p.dataUrl } : { type: 'input_text', text: p.text || '' }) : String(content ?? ''); }
 function toResponses(messages) { const out = []; for (const m of messages) { if (m.role === 'assistant') { if (m.text) out.push({ role: 'assistant', content: m.text }); for (const c of m.toolCalls || []) out.push({ type: 'function_call', call_id: c.id, name: c.name, arguments: JSON.stringify(c.args || {}) }); } else if (m.role === 'tool') out.push({ type: 'function_call_output', call_id: m.toolCallId, output: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }); else out.push({ role: m.role, content: responseParts(m.content) }); } return out; }
 function toAnthropic(messages) { const out = []; for (const m of messages) { if (m.role === 'assistant') { const content = []; if (m.text) content.push({ type: 'text', text: m.text }); for (const c of m.toolCalls || []) content.push({ type: 'tool_use', id: c.id, name: c.name, input: c.args || {} }); out.push({ role: 'assistant', content }); } else if (m.role === 'tool') out.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: m.toolCallId, content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }] }); else out.push({ role: m.role === 'system' ? 'user' : m.role, content: anthropicParts(m.content) }); } return out; }
-export function buildRequest(provider, model, messages, system, tools, stream, maxOutputTokens) {
+export function buildRequest(provider, model, messages, system, tools, stream, maxOutputTokens, sessionId) {
   messages = prepareModelMessages(messages, model, provider.protocol);
-  if (provider.protocol === 'openai-responses') { const body = { model: model.model, input: toResponses(messages), instructions: system || undefined, stream, store: false }; if (tools.length) body.tools = responseTools(tools); applyOutputLimit(body, provider, model, maxOutputTokens); return { url: `${provider.baseUrl}/responses`, body }; }
-  if (provider.protocol === 'anthropic') { const body = { model: model.model, messages: toAnthropic(messages), system: system || undefined, max_tokens: 4096, stream }; if (tools.length) body.tools = anthropicTools(tools); applyOutputLimit(body, provider, model, maxOutputTokens); return { url: `${provider.baseUrl}/messages`, body }; }
-  const body = { model: model.model, messages: toOpenAI(system ? [{ role: 'system', content: system }, ...messages] : messages), stream }; if (tools.length) body.tools = openAITools(tools); if (stream) body.stream_options = { include_usage: true }; applyOutputLimit(body, provider, model, maxOutputTokens); return { url: `${provider.baseUrl}/chat/completions`, body };
+  const sessionKey = sessionRoutingKey(sessionId);
+  if (provider.protocol === 'openai-responses') { const body = { model: model.model, input: toResponses(messages), instructions: system || undefined, stream, store: false, ...(sessionKey ? { prompt_cache_key: sessionKey } : {}) }; if (tools.length) body.tools = responseTools(tools); applyOutputLimit(body, provider, model, maxOutputTokens); return { url: `${provider.baseUrl}/responses`, body }; }
+  if (provider.protocol === 'anthropic') { const body = { model: model.model, messages: toAnthropic(messages), system: system || undefined, max_tokens: 4096, stream, ...(sessionKey ? { metadata: { user_id: sessionKey } } : {}) }; if (tools.length) body.tools = anthropicTools(tools); applyOutputLimit(body, provider, model, maxOutputTokens); return { url: `${provider.baseUrl}/messages`, body }; }
+  const body = { model: model.model, messages: toOpenAI(system ? [{ role: 'system', content: system }, ...messages] : messages), stream, ...(sessionKey ? { prompt_cache_key: sessionKey } : {}) }; if (tools.length) body.tools = openAITools(tools); if (stream) body.stream_options = { include_usage: true }; applyOutputLimit(body, provider, model, maxOutputTokens); return { url: `${provider.baseUrl}/chat/completions`, body };
 }
 function applyOutputLimit(body, provider, model, value) {
   if (!Number.isFinite(Number(value)) || Number(value) <= 0) return;
@@ -297,7 +314,7 @@ function responseMetadata(response) {
 export async function* chat({ messages, system, tools = [], signal, sessionId, step, modelSelection = getRunContext()?.modelSelection } = {}) {
   const { provider, model } = modelSelection || activePair();
   if (!provider || !model) { yield { type: 'error', message: '请先添加服务商和模型' }; return; }
-  const request = buildRequest(provider, model, messages, system, tools, true, getRunContext()?.config?.agent?.runControl?.maxOutputTokens);
+  const request = buildRequest(provider, model, messages, system, tools, true, getRunContext()?.config?.agent?.runControl?.maxOutputTokens, sessionId);
   const startedAt = performance.now(), firstOutputAt = { value: null }, responseEvents = [];
   let res;
   let outputText = '', thinkingText = '', usage = null, streamMetadata = {}, billedFromStream = null, parsedError = null;
@@ -318,7 +335,7 @@ export async function* chat({ messages, system, tools = [], signal, sessionId, s
   const maxAttempts = 5;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      res = await fetch(request.url, { method: 'POST', headers: authHeaders(provider, key), body: JSON.stringify(request.body), signal });
+      res = await fetch(request.url, { method: 'POST', headers: authHeaders(provider, key, sessionId), body: JSON.stringify(request.body), signal });
       if (!retryableStatus(res.status, provider.protocol) || attempt === maxAttempts) break;
       const delayMs = retryAfter(res, retryDelay(attempt));
       try { await res.body?.cancel(); } catch { /* 丢弃本次可重试响应 */ }
@@ -353,7 +370,7 @@ export async function* chat({ messages, system, tools = [], signal, sessionId, s
 export async function completeOnce({ messages, signal, sessionId, maxOutputTokens, requireComplete = false, modelSelection = getRunContext()?.modelSelection } = {}) {
   const { provider, model } = modelSelection || activePair();
   if (!provider || !model) throw new Error('请先添加服务商和模型');
-  const request = buildRequest(provider, model, messages, '', [], false), startedAt = performance.now(), pricing = normalizePricing(model.pricing);
+  const request = buildRequest(provider, model, messages, '', [], false, undefined, sessionId), startedAt = performance.now(), pricing = normalizePricing(model.pricing);
   if (maxOutputTokens != null) {
     const field = provider.protocol === 'openai-responses' ? 'max_output_tokens' : provider.protocol === 'openai-chat' && /^(gpt-[56]|o[134])/.test(model.model) ? 'max_completion_tokens' : 'max_tokens';
     request.body[field] = Math.max(128, Math.min(4096, Number(maxOutputTokens) || 1800));
@@ -372,7 +389,7 @@ export async function completeOnce({ messages, signal, sessionId, maxOutputToken
   const maxAttempts = 5;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      res = await fetch(request.url, { method: 'POST', headers: authHeaders(provider, key), body: JSON.stringify(request.body), signal });
+      res = await fetch(request.url, { method: 'POST', headers: authHeaders(provider, key, sessionId), body: JSON.stringify(request.body), signal });
       raw = await res.text();
       if (!retryableStatus(res.status, provider.protocol) || attempt === maxAttempts) break;
       await waitForRetry(retryAfter(res, retryDelay(attempt)), signal);

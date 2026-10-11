@@ -1,238 +1,198 @@
+<h1 align="center">
+  <img src="electron/assets/icon.png" alt="MLI Agent" width="64" valign="middle" /> MLI Agent
+</h1>
+
 <p align="center">
-  <img src="electron/assets/icon.png" width="96" alt="MLI Agent" />
+  <strong>A local Agent workbench that reads files, creates content, handles office work, and operates tools.</strong><br/>
+  Choose a workspace, describe the outcome in plain language, and let the Agent execute and verify the task.
 </p>
 
-<h1 align="center">MLI Agent · 魔力工作台</h1>
-<p align="center">An open-source, local-first Agent workbench</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v0.3.0-245b43" alt="v0.3.0" />
+  <img src="https://img.shields.io/badge/version-v0.4.0-245b43" alt="v0.4.0" />
   <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="Apache-2.0" />
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-64748b" alt="Windows / macOS / Linux" />
+  <img src="https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-64748b" alt="Windows / macOS / Linux" />
 </p>
+
 <p align="center">
-  <a href="README.md">简体中文</a> · English · <a href="https://github.com/ponysb/mlimli/issues">Issues</a> · <a href="docs/TERMINAL.md">TUI / CLI</a> · <a href="PLUGIN-COMPATIBILITY.md">Plugins</a>
+  <a href="README.md">简体中文</a> · English · <a href="https://github.com/ponysb/mlimli/issues">Issues</a> · <a href="docs/TERMINAL.md">Terminal</a>
 </p>
 
-MLI Agent is an open-source workbench for creative work, office workflows and software development. It supports Windows, macOS and Linux, with desktop, browser and terminal interfaces. Custom API endpoints, your own API keys and three model protocols let you combine providers, Skills and tool plugins. The project uses the Apache-2.0 license and supports customization and extension.
-
-## Key features
-
-- **Open model integration**: OpenAI Chat Completions, OpenAI Responses and Anthropic Messages. Configure API endpoints, keys, model names and context windows, and switch between multiple providers and models.
-- **Flexible AIGC workflows**: provide an image or video model's API documentation URL or a Skill to organize API calls, prompt iteration, job polling and asset downloads. Choose your creative models and turn successful workflows into reusable Skills.
-- **Creative work, documents and code**: novels, scripts, illustrated video stories, AI video production and narration editing; Word, Excel, PowerPoint and PDF workflows; code editing, shell execution, Git, TUI and LSP diagnostics and navigation.
-- **Extensible capabilities**: expert presets, Skills, tool plugins, MCP, execution hooks, language servers and messaging adapters. Combine methods and tools for each workflow.
-- **Task management**: local session persistence, project memory, context compaction, queued messages, concurrent sessions, scheduled tasks and completion notifications. Scheduled runs create separate sessions with visible execution progress.
-- **A content-focused workbench**: file and artifact previews, an embedded browser, whiteboards, attachment drag-and-drop, permission approvals and interactive questions, plus Feishu and DingTalk channels.
-
-Cross-platform builds provide Windows installers, a macOS PKG and Linux TUI / CLI archives. Media tools use FFmpeg for trimming, concatenation, transcoding and audio tracks. Document tools combine native OOXML, LibreOffice and Windows Office / WPS for reading, editing and conversion. Windows desktop automation provides screenshots, window inspection, mouse and keyboard control.
-
-## Follow me
-
-<p>
-  <a href="https://space.bilibili.com/7318180" title="Visit my Bilibili channel"><img src="https://img.shields.io/badge/Bilibili-Follow%20my%20channel-00A1D6?style=for-the-badge" alt="Bilibili: follow my channel" /></a>
-  <a href="https://xhslink.cn/o/7exC6HysEHH" title="Visit my Xiaohongshu profile"><img src="https://img.shields.io/badge/Xiaohongshu-Latest%20updates-FF2442?style=for-the-badge" alt="Xiaohongshu: latest updates" /></a>
-  <a href="electron/assets/dyh.png" title="Open the WeChat QR code and scan to follow"><img src="https://img.shields.io/badge/WeChat-Scan%20to%20follow-07C160?style=for-the-badge" alt="WeChat: click to view QR code" /></a>
-  <a href="electron/assets/qq.png" title="Open the QQ group QR code and scan to join"><img src="https://img.shields.io/badge/QQ%20Community-Scan%20to%20join-12B7F5?style=for-the-badge" alt="QQ community: click to view QR code" /></a>
+<p align="center">
+  <img src="docs/task-recovery-ui.png" alt="MLI Agent workspace" width="960" />
 </p>
 
-## Development
+<p align="center">
+  <strong>Code workspace (editor · Git · LSP)</strong> · <strong>TUI / CLI</strong> · <strong>Multi-agent orchestration</strong> · <strong>ACP clients</strong><br/>
+  <strong>Personal assistant</strong> · <strong>Feishu / DingTalk</strong> · Office work · Content creation · Web and app operations
+</p>
 
-Requirements: **Node.js ≥ 22.12** and npm. Install Git, FFmpeg, LibreOffice and other tools as needed for the features you develop.
+## What it can do
 
-For a fresh checkout, run from the repository root:
+| Task | Try asking |
+| --- | --- |
+| Organize files | “Sort this folder by topic and create a linked index.” |
+| Documents | “Turn these materials into a Word report and check the heading and table formatting.” |
+| Spreadsheets | “Analyze this sales sheet, flag anomalies, add formulas, and create charts.” |
+| Presentations | “Turn this proposal into a 10-slide presentation and keep the data sources.” |
+| Writing | “Continue chapter three using the existing character notes and check continuity.” |
+| Images and video | “Create a shot list, asset list, and generation prompts from this script.” |
+| Web apps | “Open my authorized app, summarize today's tasks, and save the result in the project.” |
+| Code and websites | “Run this project, fix the mobile layout, use LSP to check diagnostics and references, and verify the main interactions.” |
+| Multi-agent orchestration | “Inspect auth, error handling, and test gaps in parallel; combine the evidence and propose fixes.” |
+| Personal assistant | “Summarize my schedule and project progress every morning, and remind me when new messages arrive.” |
 
-~~~sh
+Tasks do not stop at a chat response. With your approval, the Agent can read and edit workspace files, run commands, use Skills and plugins, and save deliverables directly into the project.
+
+## Get started
+
+### 1. Install and open
+
+Choose the build for your system from [Releases](https://github.com/ponysb/mlimli/releases). Windows and macOS packages include the desktop app and the `mli` command. Linux packages provide the TUI and CLI. Installed builds can check for updates under **Settings → App Updates**.
+
+If no package is currently available, follow [Run from source](#run-from-source).
+
+### 2. Configure a model
+
+Open **Settings → Model Configuration → Add Model**, then enter:
+
+- A protocol: OpenAI Chat Completions, OpenAI Responses, or Anthropic Messages
+- The API endpoint, API key, and model name
+- Optional settings such as the context window
+
+You can add several providers and switch models below the composer. Usage fees and data handling are determined by the provider you choose.
+
+### 3. Add a workspace
+
+Select **Add Workspace** and choose the folder for the task. Sessions, project memory, and outputs are organized around that folder, keeping separate projects isolated.
+
+### 4. Describe the task
+
+State the goal, source material, output format, and acceptance criteria. For example:
+
+> Read the files under `research/` and create `weekly-report.docx`. Include progress, risks, next steps, and owners. List missing information instead of guessing. Reopen the finished file and check its layout.
+
+The default **Manual Approval** mode asks before writing files, running commands, or performing sensitive actions. You can change the permission mode for uninterrupted work after checking the workspace and scope.
+
+## Everyday operations
+
+- **Add context:** select `+` beside the composer to reference files, folders, Skills, or plugins. Images can be dragged in directly.
+- **Inspect results:** switch between Sessions and Files in the sidebar to preview outputs. Tool activity can be expanded when needed.
+- **Revise:** continue in the same session with requests such as “Shorten section two to 300 words and keep the table unchanged.”
+- **Work in parallel:** use **Delegate Task** so sub-agents can research, produce, or review independently while the main task collects their results.
+- **Orchestrate multiple agents:** the main Agent can delegate to explorer, researcher, reviewer, and worker roles, run them asynchronously, wait for results, send follow-ups, or stop the group. Each task has its own context and reports back to the main task.
+- **Schedule work:** create a Scheduled Task with its instructions, time, and workspace. Each run appears as a separate session.
+- **Use it as a personal assistant:** combine project memory, history, schedules, and messaging channels so the Agent remembers preferences, follows up on work, and sends reminders.
+- **Use experts and Skills:** choose an Expert for a working style. Skills are loaded only when relevant to the task.
+- **Use signed-in websites:** add a site in App Center, sign in yourself, and confirm access before the Agent reads or operates the page.
+- **Connect Feishu and DingTalk:** configure bot credentials, a workspace, and user / group allowlists under **Settings → Channels**. Start tasks from messages, receive results, and require an @mention in group chats.
+- **Dictate or record meetings:** hold the microphone button to dictate; click it to record, transcribe, and summarize a meeting.
+- **Manage memory:** review, edit, or disable saved preferences and project knowledge under **Settings → Memory**.
+- **Use the terminal:** run `mli` for the TUI or `mli exec "task"` for a one-off job. See the [terminal guide](docs/TERMINAL.md) for all commands.
+
+## Highlights
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### Code workflow: editor, LSP, terminal
+
+Code editing, the built-in terminal, Git, LSP diagnostics, and code navigation live in one workspace. Built-in language services currently cover TypeScript / JavaScript and Python, with definition, reference, hover, implementation, symbol, and call-hierarchy queries. Language servers can be installed locally when needed.
+
+</td>
+<td width="50%" valign="top">
+
+### Bring your own model
+
+Use three common model protocols, custom endpoints, and your own API keys. Configure multiple models and switch per task without being tied to one provider.
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### Context that lasts
+
+Sessions stay local. Project memory applies only to its workspace, while global preferences can be reused. Memories can be reviewed, edited, disabled, and restored.
+
+</td>
+<td width="50%" valign="top">
+
+### Multi-agent orchestration
+
+The main Agent splits work into independent branches. Sub-agents research, write, and review in parallel with isolated contexts. See status, usage, and results in the panel, send follow-ups, stop tasks, and let the main task assemble the final answer.
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### Website sign-ins stay local
+
+App Center keeps each login in an isolated embedded browser. Passwords, verification codes, and cookies are not given to the model, and page access requires your confirmation.
+
+</td>
+<td width="50%" valign="top">
+
+### Personal assistant and messaging
+
+Memory, scheduled tasks, meetings, and messaging channels turn MLI into a personal assistant: follow projects from the workbench, or receive reminders, send tasks, and read results through Feishu or DingTalk.
+
+</td>
+</tr>
+</table>
+
+### Terminal, ACP, and external clients
+
+Use the same capabilities from the `mli` TUI / CLI with session resume, a command palette, permission approvals, and JSON output. Run `mli acp` to let an external ACP client create sessions, send prompts, receive tool events, and handle approvals. MLI can also delegate work to configured external ACP agents.
+
+## Permissions and data
+
+- Files, sessions, memories, and app sign-ins are stored locally by default.
+- Context required for a task is sent to the model or tool service you configure. Review that service's data policy.
+- In Manual Approval mode, read-only operations can proceed automatically; writes, commands, and sensitive actions ask first.
+- Agent commands use a workspace sandbox. Commands are blocked if the sandbox is unavailable. Windows requires a one-time sandbox setup from Settings.
+- App Center does not expose passwords, verification codes, cookies, or browser storage to the model. Publishing, deleting, purchasing, and similar actions still require explicit authorization.
+- Third-party plugins and MCP services add trusted capabilities. Review their source and permissions before installing them.
+
+For details, see [Runtime Sandbox](docs/SANDBOX.md), [App Center](docs/APP-CENTER.md), and [Delivery Quality](docs/CLIENT-QUALITY.md).
+
+## Guides
+
+- [Terminal and CLI](docs/TERMINAL.md)
+- [LSP language services](docs/LSP.md)
+- [Voice input and meetings](docs/VOICE-MEETINGS.md)
+- [Memory](docs/MEMORY.md)
+- [Sub-agents](docs/SUBAGENTS.md)
+- [ACP integration](docs/ACP.md)
+- [Plugin compatibility](PLUGIN-COMPATIBILITY.md)
+
+## Run from source
+
+Source builds require **Node.js 22.12 or later** and npm:
+
+```sh
 git clone https://github.com/ponysb/mlimli.git
 cd mlimli
 npm ci
 cp config.example.json config.json
 npm run build:web
-npm start
-~~~
+npm run electron
+```
 
-The browser workbench defaults to `http://127.0.0.1:3000`. The example configuration includes a mock model for development. Add an API endpoint, API key and model name in model settings to connect your provider, or manage the configuration directly in `config.json`.
+On Windows PowerShell, use `Copy-Item config.example.json config.json` instead of `cp`. For browser mode, run `npm start` and open `http://127.0.0.1:3000`. Packaging and contribution details live in the [Windows packaging guide](docs/WINDOWS-PACKAGING.md), the [terminal guide](docs/TERMINAL.md), and the repository's development documentation.
 
-For desktop development, run `npm run electron`; Electron starts or reuses its managed local runtime. TUI and CLI use the same core:
+## Community and support
 
-~~~sh
-npm run tui
-npm run cli -- --help
-npm run cli -- --version
-npm run cli -- exec --auto --json "Inspect the project and write a summary"
-~~~
+<p>
+  <a href="https://space.bilibili.com/7318180"><img src="https://img.shields.io/badge/Bilibili-Videos%20and%20guides-00A1D6?style=for-the-badge" alt="Bilibili" /></a>
+  <a href="https://xhslink.cn/o/7exC6HysEHH"><img src="https://img.shields.io/badge/Xiaohongshu-Usage%20notes-FF2442?style=for-the-badge" alt="Xiaohongshu" /></a>
+  <a href="electron/assets/dyh.png"><img src="https://img.shields.io/badge/WeChat-Scan%20to%20follow-07C160?style=for-the-badge" alt="WeChat" /></a>
+  <a href="electron/assets/qq.png"><img src="https://img.shields.io/badge/QQ%20Group-Scan%20to%20join-12B7F5?style=for-the-badge" alt="QQ group" /></a>
+</p>
 
-The frontend uses Vite. After editing `react/`, run `npm run build:web` to update the `dist/` files served by the local Agent. `npm run dev:web` provides the frontend development server; /api requests need a proxy to the running local Agent. Use `node --watch server.mjs` for runtime development. See [TUI / CLI documentation](docs/TERMINAL.md) for terminal interaction, data directories and shared runtime behavior.
+Report problems and request features through [GitHub Issues](https://github.com/ponysb/mlimli/issues).
 
-### Configuration and data
+## License
 
-- `config.json`: providers, models, context budgets, permissions and MCP. Use [config.example.json](config.example.json) as a credential-free template.
-- `MLI_AGENT_PORT` / `MLI_AGENT_HOST`: local HTTP service address; binds to `127.0.0.1` by default.
-- `MLI_AGENT_DATA_DIR`: runtime configuration and user plugin directory; source mode defaults to the repository directory.
-- `MLI_AGENT_WORKSPACE`: working directory; project sessions, memory and permission records live in its `.agent/` directory.
-
-Desktop and TUI clients share configuration, user plugins and project sessions. Use separate `MLI_AGENT_DATA_DIR` directories for concurrent projects; the terminal also accepts `--data-dir` to select a data directory.
-
-## Project layout
-
-~~~text
-core/          Runtime, model protocols, sessions, permissions, LSP, MCP, channels, scheduler
-server.mjs     Local REST / SSE service and frontend static hosting
-react/         React workbench and Vite frontend
-cli/           CLI, OpenTUI / Solid terminal interface and non-interactive execution
-electron/      Electron main process, preload bridge, runtime launcher and installers
-plugins/       Tool implementations, Skills, language servers and channel adapters
-scripts/       Checks, builds and cross-platform packaging
-test/          Client unit and integration tests
-docs/          Terminal, packaging and plugin development documentation
-~~~
-
-React, Electron and terminal clients access the runtime through local REST / SSE APIs. `core/loop.mjs` runs tasks, `core/stream.mjs` handles model streams, `core/session.mjs` persists sessions, `core/permissions.mjs` enforces authorization and `core/plugins.mjs` registers extensions.
-
-## Extensions
-
-### Skills and expert presets
-
-A Skill describes methods, APIs and working constraints in Markdown. Use it to introduce an AIGC API or reuse writing and document workflows. The runtime discovers a Skill index; the Agent reads full instructions on demand. For a one-off integration, provide an accessible API documentation URL so the Agent can read the interface and call it through execution tools; turn the workflow into a Skill when you want to reuse it.
-
-~~~text
-skills/my-video-api/
-  SKILL.md
-  scripts/              Optional API calls and result processing
-  references/           Optional API documentation and reference material
-~~~
-
-~~~markdown
----
-name: my-video-api
-description: Create video jobs, poll their status and download results through a specific API.
----
-
-Describe the API URL, authentication environment variables, request and response schemas,
-job states and output paths. Document failure handling and retry rules.
-Manage credentials through environment variables.
-~~~
-
-Workspace Skills can live in `skills/`, `.agent/skills/` or `.agents/skills/`. Plugins may also include `skills/`. Expert presets add task-specific methods and prompt configuration for writing, editing or analysis.
-
-### Tool plugins
-
-Place a new execution capability in `plugins/<name>/`. Recommended layout:
-
-~~~text
-plugins/example/
-  .codex-plugin/plugin.json
-  plugin.mjs
-  skills/               Optional
-  assets/               Optional
-~~~
-
-~~~json
-{
-  "name": "example",
-  "version": "0.2.0",
-  "description": "Example tool plugin",
-  "capabilities": []
-}
-~~~
-
-~~~js
-export default function setup(ctx) {
-  ctx.registerTool({
-    name: 'example_echo',
-    description: 'Return the supplied text.',
-    parameters: {
-      type: 'object',
-      properties: { text: { type: 'string' } },
-      required: ['text'],
-    },
-    permission: 'L0',
-    async run({ text }) {
-      return { content: String(text) };
-    },
-  });
-  ctx.registerCommand('/echo', {
-    description: 'Run the example tool',
-    template: 'Use example_echo to return: {{args}}',
-  });
-}
-~~~
-
-Tool permissions are L0 for read-only operations, L1 for workspace writes, L2 for system execution and L3 for sensitive operations. Ask for user input with `ctx.requestUi`. Hooks include `authorize_tool_call`, `process_tool_result` and `on_event`; register cleanup with `ctx.registerCleanup`. Load or reload plugins through `POST /api/plugins/reload`.
-
-Use `ctx.registerLanguageServer` and `ctx.registerChannelAdapter` to extend LSP and channels. LSP uses project or system servers first, then offers an authorized installation into the Agent cache when needed. JavaScript / TypeScript and Python are currently bundled as server definitions. See `plugins/lsp`, `plugins/feishu` and `plugins/dingtalk` for implementations.
-
-User plugins live in the runtime data directory's `plugins/` folder and override bundled plugins of the same name. A root `plugin.json` remains supported. Skill-only plugins can omit `plugin.mjs`. See [plugin compatibility notes](PLUGIN-COMPATIBILITY.md).
-
-### MCP
-
-Declare stdio services in `config.json` under `mcp.servers`:
-
-~~~json
-{
-  "mcp": {
-    "servers": [
-      {
-        "name": "my-service",
-        "command": "node",
-        "args": ["/absolute/path/to/mcp-server.mjs"]
-      }
-    ]
-  }
-}
-~~~
-
-The runtime supports MCP tool discovery, descriptions and calls. Configure service processes and authentication to connect external data sources and tools to your Agent workflows.
-
-## Build and deployment
-
-~~~sh
-# Local browser client: Node hosts the Agent and compiled frontend
-npm run build:web
-npm start
-
-# Windows modern and compatibility editions
-npm run dist:win
-npm run dist:win:modern
-npm run dist:win:legacy
-
-# macOS PKG; build on macOS
-npm run dist:mac -- --arch arm64
-
-# Linux TUI / CLI with a standalone Node runtime
-npm run dist:linux -- --arch x64
-~~~
-
-Artifacts are written to `release/` and take their version from the root `package.json`. Windows packaging includes build and launch verification. The modern edition targets Windows 10 / 11 x64; the compatibility edition targets Win7 SP1 / ia32 environments. See [Windows packaging](docs/WINDOWS-PACKAGING.md) for dependencies and verification, and [TUI / CLI documentation](docs/TERMINAL.md) for terminal packages.
-
-The local runtime binds to loopback. Use SSH port forwarding to access the workbench for remote development.
-
-## Tests and contributions
-
-~~~sh
-npm test
-npm run check
-npm run test:tui
-npm run build:web
-~~~
-
-Contributions through issues and PRs are welcome. Include your platform, reproduction steps, scope and validation. Add focused tests for runtime, protocol and plugin interface changes; check streaming, approvals and session switching for UI changes. Manage development settings and credentials through local configuration files or environment variables.
-
-## Acknowledgements and license
-
-Thanks to [OpenCode](https://github.com/anomalyco/opencode), [Claude Code](https://github.com/anthropics/claude-code), [Pi Agent](https://github.com/earendil-works/pi) and [Cherry Studio](https://github.com/CherryHQ/cherry-studio) for ideas and inspiration in Agent engineering, interaction design and extensibility.
-
-We also thank the following major open-source projects and their contributors for the foundations of this workbench:
-
-- **UI and build tools**: [React](https://react.dev/), [Vite](https://vite.dev/) and [esbuild](https://github.com/evanw/esbuild).
-- **Desktop and packaging**: [Electron](https://github.com/electron/electron) and [electron-builder](https://github.com/electron-userland/electron-builder).
-- **Terminal interfaces**: [OpenTUI](https://github.com/anomalyco/opentui), [SolidJS](https://github.com/solidjs/solid) and [Terminal Kit](https://github.com/cronvel/terminal-kit).
-- **Whiteboard creation**: [Excalidraw](https://github.com/excalidraw/excalidraw).
-- **Code editing and terminal panels**: [CodeMirror](https://github.com/codemirror/dev), [React CodeMirror](https://github.com/uiwjs/react-codemirror) and [xterm.js](https://github.com/xtermjs/xterm.js).
-- **Markdown and PDF**: [Streamdown](https://github.com/vercel/streamdown) and [PDF.js](https://github.com/mozilla/pdf.js).
-- **Icons and QR codes**: [Lucide](https://github.com/lucide-icons/lucide) and [qrcode.react](https://github.com/zpao/qrcode.react).
-- **Messaging channels**: [Feishu / Lark Node SDK](https://github.com/larksuite/node-sdk) and [DingTalk Stream SDK](https://github.com/open-dingtalk/dingtalk-stream-sdk-nodejs).
-- **Media and document tools**: [FFmpeg](https://ffmpeg.org/) and [LibreOffice](https://www.libreoffice.org/).
-
-Bundled third-party Skills, plugins and assets retain their own licenses and notices.
-
-Project code is licensed under [Apache-2.0](LICENSE). Third-party components remain subject to their respective licenses.
+MLI Agent is open source under the [Apache-2.0](LICENSE) license. Bundled third-party Skills, plugins, and assets retain their respective licenses and notices.

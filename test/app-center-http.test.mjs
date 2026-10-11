@@ -29,7 +29,7 @@ test('app registry HTTP API persists records and restricts the privileged browse
   const token = fs.readFileSync(path.join(directory, '.security', 'app-center', 'bridge-token'), 'utf8');
   const headers = { 'x-mli-browser-token': token };
   assert.equal((await request('/bridge/poll', { clientId: 'testDesktop' }, headers)).status, 200);
-  assert.equal((await request('/bridge/authorize', { appId: id, url: 'https://example.com/login' }, headers)).status, 400);
+  assert.equal((await request('/bridge/authorize', { appId: id, url: 'https://example.com/login' }, headers)).status, 200);
   assert.equal((await request('/bridge/authorize', { appId: id, url: 'https://example.com/home' }, headers)).status, 200);
   assert.equal((await request('')).data.apps[0].status, 'authorized');
   await stop(); url = await start();

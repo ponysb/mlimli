@@ -14,8 +14,8 @@ npm run dist:win
 
 不想输入命令时，也可双击项目根目录的 `build-windows.cmd`。它会检查 Node.js 版本，在依赖未安装时执行 `npm ci`，然后运行同一个双版本打包命令。
 
-- `MoliCreation-Modern-Setup-0.3.0-x64.exe`：现代版，Electron 44.4.5，面向 Win10 / Win11 64 位。
-- `MoliCreation-Legacy-Win7-Setup-0.3.0-ia32.exe`：兼容版，Electron 22.3.27，面向 Win7 SP1 32/64 位及 Win10 32 位；64 位新系统也可通过 WOW64 运行。
+- `MoliCreation-Modern-Setup-0.4.0-x64.exe`：现代版，Electron 44.4.5，面向 Win10 / Win11 64 位。
+- `MoliCreation-Legacy-Win7-Setup-0.4.0-ia32.exe`：兼容版，Electron 22.3.27，面向 Win7 SP1 32/64 位及 Win10 32 位；64 位新系统也可通过 WOW64 运行。
 - `SHA256SUMS.txt`：最终安装包的 SHA-256 校验值。
 
 `npm run dist:win:all` 是上述命令的别名。分别构建：`npm run dist:win:modern`、`npm run dist:win:legacy`。默认不生成免安装包；需要时执行 `npm run dist:win -- --portable`。
@@ -128,4 +128,4 @@ node --test test/desktop-update.test.mjs
 
 客户端测试限制为 4 个并发文件，避免同时启动大量 Electron、Chromium 和本地服务导致超时。更新单元测试覆盖主窗口 IPC 校验、开发/安装版本显示、并发检查和下载、失败重试、任务及共享终端阻止安装，另在两套真实 Electron 引擎中验证下载及损坏文件拒绝。
 
-上线时检查上述两个 `latest.yml` 地址：返回 YAML/JSON 更新清单表示已发布可用安装包；JSON 404 且提示「尚未发布可自动更新的安装版」表示需发布符合文件名规则的包；HTML 404 通常表示更新接口尚未部署或被反向代理路由拦截。已安装 `0.3.0` 客户端需要更高版本才能触发更新，同版本不会重复安装。
+上线时检查上述两个 `latest.yml` 地址：返回 YAML/JSON 更新清单表示已发布可用安装包；JSON 404 且提示「尚未发布可自动更新的安装版」表示需发布符合文件名规则的包；HTML 404 通常表示更新接口尚未部署或被反向代理路由拦截。已安装 `0.4.0` 客户端需要更高版本才能触发更新，同版本不会重复安装。

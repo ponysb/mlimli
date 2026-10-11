@@ -13,6 +13,8 @@ sys.stdout.reconfigure(encoding='utf-8')
 import numpy as np
 from diarization import SpeakerDiarizer, WINDOW, STEP
 from asr import create_final
+from speech_policy import (MAX_UTTERANCE_SECONDS, MIN_SILENCE_SECONDS,
+                           MIN_SPEECH_SECONDS, SAMPLE_RATE)
 
 root = pathlib.Path(sys.argv[1])
 options = json.loads(sys.argv[sys.argv.index('--options') + 1]) if '--options' in sys.argv else {}
@@ -68,10 +70,10 @@ if options.get('kind') == 'dictation' and recognizer is not None and '--check' n
 final_recognizer = create_final(root, options, sherpa_onnx)
 config = sherpa_onnx.VadModelConfig()
 config.silero_vad.model = str(root / 'silero_vad.onnx')
-config.silero_vad.min_silence_duration = 0.45
-config.silero_vad.min_speech_duration = 0.2
-config.silero_vad.max_speech_duration = 12
-config.sample_rate = 16000
+config.silero_vad.min_silence_duration = MIN_SILENCE_SECONDS
+config.silero_vad.min_speech_duration = MIN_SPEECH_SECONDS
+config.silero_vad.max_speech_duration = MAX_UTTERANCE_SECONDS
+config.sample_rate = SAMPLE_RATE
 vad = sherpa_onnx.VoiceActivityDetector(config, buffer_size_in_seconds=30)
 extractor = sherpa_onnx.SpeakerEmbeddingExtractor(
     sherpa_onnx.SpeakerEmbeddingExtractorConfig(
@@ -197,7 +199,9 @@ def accept_block(block):
                 match_profile(index)
         # sherpa's max_speech_duration only tightens VAD thresholds; it is not
         # a hard limit. Explicitly flush continuous speech to bound latency.
-        if cursor - start >= 12 * 16000:
+        # Live Zipformer results still update continuously; only final text
+        # waits for this larger context window.
+        if cursor - start >= MAX_UTTERANCE_SECONDS * SAMPLE_RATE:
             vad.flush()
     drain_segments()
 

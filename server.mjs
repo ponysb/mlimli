@@ -22,8 +22,9 @@ import { disposeLogReader, getApiLogAsync, queryApiLogsAsync } from './core/api-
 import { disposeSessionReader, readSessionView } from './core/session-view-service.mjs';
 import { copyWorkspaceItem, createWorkspaceItem, deleteWorkspaceItem, listDirectory, moveWorkspaceItem, openWorkspaceItem, rawWorkspaceFile, readWorkspaceFile, renameWorkspaceItem, revealWorkspaceItem, writeWorkspaceFile } from './core/workspace-files.mjs';
 import { addAsset, addAssetFromFile, assetFile, deleteAsset, listAssets } from './core/assets.mjs';
-import { checkAccountEmail, createPurchaseOrder, getAccountCaptcha, listPurchasePackages, listPlatformLibrary, listAccountPlugins, installAccountPlugin, loginAccount, logoutAccount, publicAccountStatus, queryPurchaseOrder, refreshAccount, registerAccount, requireAccount, resetAccountPassword, sendRegisterCode, sendResetCode, setAccountConfig, updateAccountNickname, verifyAccountCaptcha } from './core/account.mjs';
+import { checkAccountEmail, createPurchaseOrder, getAccountCaptcha, listPurchasePackages, listPlatformLibrary, listTeamMemory, listAccountPlugins, installAccountPlugin, loginAccount, logoutAccount, publicAccountStatus, queryPurchaseOrder, recordClientLaunch, refreshAccount, registerAccount, requireAccount, resetAccountPassword, sendRegisterCode, sendResetCode, setAccountConfig, updateAccountNickname, verifyAccountCaptcha } from './core/account.mjs';
 import { getMarketingConfig, getMarketingSummary, claimDailyCheckin } from './core/account.mjs';
+import { listSubjects, switchSubject } from './core/account.mjs';
 import { DENY_PATTERNS } from './core/tools.mjs';
 import { listExperts, getExpert, saveExpert, deleteExpert, setPlatformExperts } from './core/experts.mjs';
 import { saveLocalSkill, deleteLocalSkill, listLocalSkills } from './core/local-skills.mjs';
@@ -32,6 +33,8 @@ import { CONFIG_FILE, initializeRuntime, activeSequences, runningSessions, runSe
 import { pendingUiRequests } from './core/plugins.mjs';
 import { agentManager } from './core/agent-manager.mjs';
 import { agentProfiles } from './core/agent-profiles.mjs';
+import { acpSettings, updateAcpSettings } from './core/acp-settings.mjs';
+import { discoverAcpAgents } from './core/acp-client.mjs';
 import { contextForSession } from './core/runtime.mjs';
 import { withRunContext } from './core/run-context.mjs';
 import { approveMemory, deleteMemory, getMemory, listMemories, memoryLocations, restoreMemory, saveMemory } from './core/memory.mjs';
@@ -46,6 +49,7 @@ import { listChannels, channelEvents, channelAdapters, upsertChannel, removeChan
 
 const cfg = await initializeRuntime();
 appCenter();
+recordClientLaunch().catch(() => {});
 
 const PORT = Number(process.env.MLI_AGENT_PORT || cfg.server?.port || 3000);
 const HOST = process.env.MLI_AGENT_HOST || cfg.server?.host || '127.0.0.1';
@@ -78,13 +82,14 @@ if (runtimeHost) {
 let platformLibraryLoadedAt = 0;
 let platformLibraryRefresh = null;
 async function refreshPlatformLibrary(force = false) {
-  if (!force && Date.now() - platformLibraryLoadedAt < 30000) return;
+  if (!force && Date.now() - platformLibraryLoadedAt < 30000) return false;
   if (platformLibraryRefresh) return platformLibraryRefresh;
   platformLibraryRefresh = (async () => {
     const { items } = await listPlatformLibrary();
     setPlatformExperts(items);
     setPlatformSkills(items);
     platformLibraryLoadedAt = Date.now();
+    return true;
   })().finally(() => { platformLibraryRefresh = null; });
   return platformLibraryRefresh;
 }
@@ -298,8 +303,15 @@ async function route(req, res, url) {
   }
 
   if (pathname === '/api/info') {
-    Promise.all([refreshManagedCatalog(), refreshPlatformLibrary()]).then(() => emit('catalog_updated', { ok: true })).catch(() => {});
-    return json(res, 200, { ...runtimeInfo(), ...publicSettings(), account: publicAccountStatus(), uiPreferences: uiPreferences(), subagentsEnabled: cfg.agent?.subagents?.enabled !== false, plugins: pluginsInfo(), commands: getCommands(), experts: listExperts(), localSkills: listLocalSkills(), workspace: getWorkspaceRoot(), workspaces: listWorkspaces(), channels: listChannels(), channelAdapters: channelAdapters() });
+    Promise.all([refreshManagedCatalog(), refreshPlatformLibrary()])
+      .then((results) => { if (results.some(Boolean)) emit('catalog_updated', { ok: true }); })
+      .catch(() => {});
+    let teamMemory = { available: false, organizationId: null, memoryCount: 0, repositoryCount: 0 };
+    try {
+      const data = await listTeamMemory({ timeoutMs: 1200 });
+      teamMemory = { available: data.scope?.subjectType === 'enterprise', organizationId: data.scope?.organizationId || null, organizationName: data.scope?.organizationName || null, memoryCount: data.memories?.length || 0, repositoryCount: data.repositories?.length || 0 };
+    } catch { /* 账户服务不可用时不阻断本地工作台 */ }
+    return json(res, 200, { ...runtimeInfo(), ...publicSettings(), account: publicAccountStatus(), teamMemory, uiPreferences: uiPreferences(), subagentsEnabled: cfg.agent?.subagents?.enabled !== false, plugins: pluginsInfo(), commands: getCommands(), experts: listExperts(), localSkills: listLocalSkills(), workspace: getWorkspaceRoot(), workspaces: listWorkspaces(), channels: listChannels(), channelAdapters: channelAdapters() });
   }
   if (pathname === '/api/channels' && req.method === 'GET') return json(res, 200, { channels: listChannels(), adapters: channelAdapters(), events: channelEvents() });
   if (pathname === '/api/channels' && req.method === 'POST') {
@@ -404,9 +416,31 @@ async function route(req, res, url) {
       return json(res, error.status === 401 || error.status === 403 ? error.status : 502, { error: error.message, code: error.code });
     }
   }
+  if (pathname === '/api/account/subjects' && req.method === 'GET') {
+    try { return json(res, 200, { subjects: await listSubjects() }); }
+    catch (error) { return json(res, 502, { error: error.message, code: error.code }); }
+  }
+  if (pathname === '/api/account/subject' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const account = await switchSubject(body.organizationId);
+      // 切换主体后模型目录与平台库都随主体变化，必须像登录一样强制刷新。
+      await refreshManagedCatalog({ force: true }).catch(() => {});
+      await refreshPlatformLibrary(true).catch(() => {});
+      emit('account_updated', { account });
+      emit('catalog_updated', { ok: true, reason: 'subject_changed' });
+      return json(res, 200, account);
+    } catch (error) {
+      return json(res, [400, 401, 403].includes(error.status) ? error.status : 502, { error: error.message, code: error.code });
+    }
+  }
   if (pathname === '/api/account/plugins' && req.method === 'GET') {
     try { return json(res, 200, { plugins: await listAccountPlugins() }); }
     catch (error) { return json(res, 502, { error: error.message }); }
+  }
+  if (pathname === '/api/library/team' && req.method === 'GET') {
+    try { return json(res, 200, await listTeamMemory()); }
+    catch (error) { return json(res, [401, 403].includes(error.status) ? error.status : 502, { error: error.message, code: error.code }); }
   }
   if ((match = m(/^\/api\/account\/plugins\/([^/]+)\/install$/)) && req.method === 'POST') {
     try {
@@ -429,7 +463,7 @@ async function route(req, res, url) {
   if (pathname === '/api/account/orders' && req.method === 'POST') {
     try {
       const body = await readBody(req);
-      return json(res, 200, await createPurchaseOrder(body.packageId, body.payType, body.wallet || 'magic'));
+      return json(res, 200, await createPurchaseOrder(body.packageId, body.payType));
     } catch (error) { return json(res, error.status === 400 || error.status === 401 ? error.status : 502, { error: error.message }); }
   }
   if ((match = m(/^\/api\/account\/orders\/([A-Za-z0-9-]+)$/)) && req.method === 'GET') {
@@ -738,6 +772,39 @@ async function route(req, res, url) {
       return json(res, 200, result);
     } catch (error) { return badRequest(res, error.message); }
   }
+  if (pathname === '/api/acp/settings' && ['GET', 'POST'].includes(req.method)) {
+    const host = String(req.headers.host || '');
+    if (!/^(127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/.test(host)) return json(res, 403, { error: 'ACP 配置仅允许本机访问' });
+    if (req.headers.origin) {
+      let origin;
+      try { origin = new URL(req.headers.origin); } catch { return json(res, 403, { error: '无效来源' }); }
+      if (origin.host !== host || !['http:', 'https:'].includes(origin.protocol)) return json(res, 403, { error: 'ACP 配置不允许跨站访问' });
+    }
+    if (req.headers['sec-fetch-site'] === 'cross-site') return json(res, 403, { error: 'ACP 配置不允许跨站访问' });
+    if (req.method === 'GET') return json(res, 200, { agents: acpSettings(getConfig()) });
+    if (!String(req.headers['content-type'] || '').startsWith('application/json')) return json(res, 415, { error: '需要 application/json' });
+    assertWorkspaceIdle();
+    const body = await readBody(req), previous = getConfig().acp;
+    try {
+      getConfig().acp = updateAcpSettings(getConfig(), body);
+      try { saveConfigFile(CONFIG_FILE); } catch (error) { getConfig().acp = previous; throw error; }
+      return json(res, 200, { agents: acpSettings(getConfig()) });
+    } catch (error) { return badRequest(res, error.message); }
+  }
+  if (pathname === '/api/acp/discover' && req.method === 'POST') {
+    const host = String(req.headers.host || '');
+    if (!/^(127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/.test(host)) return json(res, 403, { error: 'ACP 检测仅允许本机访问' });
+    if (req.headers.origin) {
+      let origin;
+      try { origin = new URL(req.headers.origin); } catch { return json(res, 403, { error: '无效来源' }); }
+      if (origin.host !== host || !['http:', 'https:'].includes(origin.protocol)) return json(res, 403, { error: 'ACP 检测不允许跨站访问' });
+    }
+    if (req.headers['sec-fetch-site'] === 'cross-site') return json(res, 403, { error: 'ACP 检测不允许跨站访问' });
+    try {
+      const agents = await discoverAcpAgents();
+      return json(res, 200, { agents });
+    } catch (error) { return badRequest(res, error.message); }
+  }
   if ((match = m(/^\/api\/session\/([\w-]+)\/entries$/)) && req.method === 'GET') {
     const before = url.searchParams.get('before');
     if (before != null && !/^\d+$/.test(before)) return badRequest(res, '无效历史游标');
@@ -757,14 +824,15 @@ async function route(req, res, url) {
   }
   if ((match = m(/^\/api\/session\/([\w-]+)$/))) {
     const paged = req.method === 'GET' && (url.searchParams.has('limit') || url.searchParams.has('before'));
+    const all = req.method === 'GET' && url.searchParams.get('all') === '1';
     if (paged && url.searchParams.has('before') && !/^\d+$/.test(url.searchParams.get('before'))) return badRequest(res, '无效历史游标');
-    const s = paged ? (runningSessions.get(match[1]) || Session.loadLight(match[1])) : getSessionOr400(res, match[1]); if (!s) { if (paged) notFound(res, '会话不存在'); return; }
+    const s = paged || all ? (runningSessions.get(match[1]) || Session.loadLight(match[1])) : getSessionOr400(res, match[1]); if (!s) { if (paged || all) notFound(res, '会话不存在'); return; }
     if (req.method === 'GET') {
       const group = agentManager.view(s);
       const ids = [group.rootSessionId, s.id, ...group.tasks.map(task => task.sessionId)].filter((id, index, all) => all.indexOf(id) === index);
       const permissions = ids.map(pendingRequest).filter(Boolean);
       const contextWindow = agentManager.executionFor(s)?.context.modelSelection?.model?.contextWindow || cfg.provider?.contextWindow || 128000;
-      const snapshot = paged ? await readSessionView(s.id, 'snapshot', { contextWindow, limit: url.searchParams.get('limit') || 120, before: url.searchParams.get('before') }, s.directory) : { ...s.snapshot(contextWindow), queue: s.queued() };
+      const snapshot = paged || all ? await readSessionView(s.id, 'snapshot', { contextWindow, all, limit: url.searchParams.get('limit') || 120, before: url.searchParams.get('before') }, s.directory) : { ...s.snapshot(contextWindow), queue: s.queued() };
       if (!snapshot) return notFound(res, '会话不存在');
       if (!snapshot.meetingId && snapshot.expertId === 'meeting-secretary') snapshot.meetingId = listMeetings().find(meeting => meeting.summarySessionId === s.id)?.id || null;
       return json(res, 200, { ...snapshot, running: isRunning(s.id) || activeSequences.has(s.id), activeStep: runningStep(s.id), eventSeq: eventSequence(), group, permissions, permission: permissions[0] || null, uiRequests: ids.flatMap(pendingUiRequests) });

@@ -23,7 +23,14 @@ export default function ExpertSkillLibrary({ info, current, pending, running, on
   const allSkills = useMemo(() => { const items = [...(info?.localSkills || []), ...(info?.plugins?.skills || [])]; return items.filter((item, index) => items.findIndex((other) => skillKey(other) === skillKey(item)) === index); }, [info]);
   const pluginCards = useMemo(() => plugins.map((plugin) => ({ ...plugin, kind: 'plugin', skills: allSkills.filter((skill) => skill.plugin === plugin.name || skill.path?.toLowerCase().includes(`plugins\\${plugin.name.toLowerCase()}\\`) || skill.path?.toLowerCase().includes(`plugins/${plugin.name.toLowerCase()}/`)) })), [plugins, allSkills]);
   const platformSkills = allSkills.filter((item) => item.source === 'platform'), mineSkills = allSkills.filter((item) => item.local || item.source === 'workspace' || (item.source === 'platform' && saved[`skill:${skillKey(item)}`]));
-  const sourceLabel = (item, kind) => kind === 'expert' ? (item.local ? '我的专家' : item.platform ? '平台专家' : '专家') : item.source === 'plugin' ? `插件 · ${item.plugin || '已加载'}` : (item.local || item.source === 'workspace' ? '我的 Skill' : '平台 Skill');
+  // scopeType 由服务端随主体下发：enterprise 表示当前企业主体提供的资源。
+  const sourceLabel = (item, kind) => {
+    const enterprise = item.scopeType === 'enterprise';
+    if (kind === 'expert') return item.local ? '我的专家' : enterprise ? '企业专家' : item.platform ? '平台专家' : '专家';
+    if (item.source === 'plugin') return enterprise ? `企业插件 · ${item.plugin || '已加载'}` : `插件 · ${item.plugin || '已加载'}`;
+    if (item.local || item.source === 'workspace') return '我的 Skill';
+    return enterprise ? '企业 Skill' : '平台 Skill';
+  };
   const items = tab === 'experts' ? experts.map((item) => ({ ...item, kind: 'expert' })) : tab === 'skills' ? platformSkills.map((item) => ({ ...item, kind: 'skill' })) : tab === 'mine' ? [...experts.filter((item) => item.local || saved[`expert:${item.id}`]).map((item) => ({ ...item, kind: 'expert' })), ...mineSkills.map((item) => ({ ...item, kind: 'skill' }))] : [];
   const displayed = items.filter((item) => `${item.name} ${item.description || ''} ${item.category || ''} ${item.plugin || ''}`.toLowerCase().includes(query.trim().toLowerCase()));
   const installedNames = new Set(plugins.map((item) => item.name));

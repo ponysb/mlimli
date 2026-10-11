@@ -12,7 +12,7 @@ function registerDebugConsole(ipcMain, getWindow) {
   ipcMain.handle('set-debug-console', (event, enabled) => {
     if (typeof enabled !== 'boolean') throw new Error('调试开关参数无效');
     const target = contents(event);
-    if (enabled) target.openDevTools({ mode: 'detach', activate: true });
+    if (enabled) target.openDevTools({ mode: 'right', activate: true });
     else target.closeDevTools();
     return { open: target.isDevToolsOpened() };
   });

@@ -99,6 +99,13 @@ export function DesktopUpdateSidebar() {
   </div>;
 }
 
+export function DesktopUpdateStatus() {
+  const [state] = useDesktopUpdate();
+  if (!state?.version || !['available', 'checking', 'downloading', 'downloaded', 'installing', 'error'].includes(state.status)) return null;
+  const label = state.status === 'checking' ? '检查更新中' : state.status === 'downloading' ? `下载中 ${Math.round(state.percent || 0)}%` : state.status === 'downloaded' ? '更新已就绪' : state.status === 'installing' ? '正在安装' : state.status === 'error' ? '更新失败' : '发现新版';
+  return <button className="desktop-update-status" type="button" title="查看应用更新" onClick={() => window.dispatchEvent(new CustomEvent('mli:open-settings', { detail: { tab: 'updates' } }))}><span>{label}</span><small>v{state.version}</small></button>;
+}
+
 function viewportListeners(method, listener) {
   window.visualViewport?.[method]('resize', listener);
   window.visualViewport?.[method]('scroll', listener);

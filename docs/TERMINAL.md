@@ -1,5 +1,7 @@
 # Terminal Edition
 
+External ACP clients can run `mli acp` over stdio. MLI can also delegate worker tasks to configured external ACP agents. See [ACP integration](ACP.md) for configuration, capabilities and safety boundaries.
+
 Windows and macOS installers include both the desktop app and the `mli` command.
 Linux packages contain the TUI/CLI, compatible plugins and a bundled Node.js runtime.
 Released packages do not require a separate Node.js or Bun installation or a frontend build.

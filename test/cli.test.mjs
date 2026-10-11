@@ -243,5 +243,7 @@ test('Linux staging excludes desktop resources and includes terminal dependencie
   for (const name of ['dist', 'server', 'config.json', '.agent']) assert.ok(!fs.existsSync(path.join(stage.client, name)));
   const config = macBuildConfig({ appDirectory: '/app', runtimeDirectory: '/client', destination: '/stage', manifest: { devDependencies: { electron: '44.4.5' } } }, 'arm64');
   assert.deepEqual(config.mac.target, ['pkg']);
+  assert.equal(config.mac.icon, path.join(ROOT, 'electron', 'assets', 'icon-mac.icns'));
+  assert.ok(fs.existsSync(config.mac.icon));
   assert.equal(config.pkg.installLocation, '/Applications');
 });

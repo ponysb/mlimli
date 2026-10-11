@@ -81,6 +81,7 @@ app.whenReady().then(async () => {
   assert.equal(await remote().executeJavaScript('typeof window.desktop'), 'undefined');
   await remote().executeJavaScript("document.querySelector('#login').click()", true);
   await until(async () => remote() && (await remote().executeJavaScript('location.pathname')) === '/home', '模拟用户登录失败');
+  await controller.authorize(record.id);
   const opened = await pending; assert.equal(opened.ok, true); assert.equal(JSON.parse(opened.result.content).status, 'authorized');
   // Grant this fixture's known test actions through the existing permission API.
   await api('/api/permissions', { allow: [{ tool: 'app_action', pattern: '' }] });
@@ -95,7 +96,7 @@ app.whenReady().then(async () => {
   const completed = JSON.parse((await tool('app_snapshot', { app_id: record.id })).result.content);
   assert.match(completed.text, /Agent 登录后继续完成/);
   let denied = false;
-  try { await tool('app_action', { app_id: record.id, action: 'navigate', url: 'https://evil.example/work' }); } catch { denied = true; }
+  try { await tool('app_action', { app_id: record.id, action: 'navigate', url: 'https://127.0.0.1/work' }); } catch { denied = true; }
   assert.equal(denied, true);
   await appSession.cookies.flushStore(); await appSession.flushStorageData();
   controller.destroy(); controller = createAppBrowser({ electron, getWindow: () => win, serverUrl: url, dataRoot, testAllowLocal: true }); controller.start();

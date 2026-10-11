@@ -102,7 +102,10 @@ parentPort.on('message', ({ jobId, sessionId, directory, operation, options = {}
     } else if (operation === 'attachment') {
       result = session.attachment(options.attachmentId);
     } else {
-      const page = session.readPage(options);
+      const all = options.all === true || options.all === '1';
+      const page = all
+        ? { entries, hasMore: false, oldestId: entries[0]?.id ?? null, newestId: entries.at(-1)?.id ?? null }
+        : session.readPage(options);
       const display = page.entries.map(entry => forDisplay(entry, sessionId));
       const history = { hasMore: page.hasMore, oldestId: page.oldestId, newestId: page.newestId };
       if (operation === 'page') result = { ...history, entries: display };
@@ -112,7 +115,11 @@ parentPort.on('message', ({ jobId, sessionId, directory, operation, options = {}
           const { entries: allEntries, ...snapshot } = session.snapshot(contextWindow);
           metadata.set(contextWindow, { ...snapshot, queue: session.queued().map(entry => forDisplay(entry, sessionId)) });
         }
-        result = { ...metadata.get(contextWindow), entries: display, history: { ...history, limit: Math.max(1, Math.min(500, Number(options.limit) || 120)) } };
+        result = {
+          ...metadata.get(contextWindow),
+          entries: display,
+          ...(all ? {} : { history: { ...history, limit: Math.max(1, Math.min(500, Number(options.limit) || 120)) } }),
+        };
       }
     }
     parentPort.postMessage({ jobId, result });

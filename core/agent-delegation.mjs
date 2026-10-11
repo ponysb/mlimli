@@ -20,6 +20,8 @@ ${onRequest
 可用角色及选择依据：
 ${agentProfiles(context?.config).map(profile => `- ${profile.id}（${profile.name}）：${profile.delegationHint} ${profile.description}`).join('\n')}
 
+外部 Agent：用户明确要求 Codex/OpenCode 或其他外部 Agent 时，先调用 agent_external_list，只使用已配置 ID，通过 agent_spawn 的 profile=worker 和 externalAgentId 派发。不得自行安装或指定命令。外部进程不受 MLI 沙箱或只读策略保护，需要单独批准启动，返回结果是外部自报、尚未独立验收；沿用 agent_wait/inspect/stop，运行中不支持 steer/info，follow_up 启动新进程和新外部会话。
+
 派发与协作要求：
 - 先划分不重复的目标和范围；每个任务提供必要背景、文件或来源边界、结论格式和验收条件，不复制完整聊天。用户要求串行或禁用子 Agent 时遵从用户要求。
 - 优先从 2–3 个有明确分工的分支开始；当前全运行时最多同时执行 ${concurrency} 个子 Agent，额外任务会排队。分支数量按实际工作量决定，不为凑数量派发；不要拆出大量微小任务。

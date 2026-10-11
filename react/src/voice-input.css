@@ -1,11 +1,11 @@
 .composer { container-type: inline-size; }
-#voice-input-slot { display: inline-flex; align-items: center; gap: 6px; min-width: 29px; }
-.composer-actions .voice-button { display: grid; place-items: center; box-sizing: border-box; width: 29px; height: 29px; min-width: 29px; min-height: 29px; padding: 0; flex: 0 0 29px; border: 1px solid var(--line, #e5e7eb); border-radius: 7px; background: transparent; color: var(--muted, #667085); cursor: pointer; touch-action: none; user-select: none; }
+#voice-input-slot { display: inline-flex; align-items: center; gap: 6px; min-width: 27px; }
+.composer-actions .voice-button { display: grid; place-items: center; box-sizing: border-box; width: 27px; height: 27px; min-width: 27px; min-height: 27px; padding: 0; flex: 0 0 27px; border: 1px solid var(--line, #e5e7eb); border-radius: 50%; background: transparent; color: var(--muted, #667085); cursor: pointer; touch-action: none; user-select: none; }
 .voice-button:hover { background: #f1f5f3; color: #245b43; }
 .voice-button.active { background: #fff0ee; color: #c73d35; border-color: #f4c5bf; }
 .voice-button.prepared { color: #245b43; border-color: #80b599; }
 .voice-button:disabled { opacity: .45; cursor: default; }
-.voice-button-wrap { position: relative; display: inline-flex; width: 29px; height: 29px; flex: 0 0 29px; }
+.voice-button-wrap { position: relative; display: inline-flex; width: 27px; height: 27px; flex: 0 0 27px; }
 .voice-button-tooltip { position: absolute; z-index: 40; right: 0; bottom: calc(100% + 10px); display: grid; gap: 6px; width: max-content; padding: 10px 12px; border-radius: 6px; color: #eef1f5; background: #282d36; box-shadow: 0 4px 14px #18202b26; font-size: 12px; font-weight: 400; line-height: 1.5; white-space: nowrap; pointer-events: none; opacity: 0; visibility: hidden; transition: opacity .12s ease .2s, visibility .12s ease .2s; }
 .voice-button-tooltip::after { content: ''; position: absolute; right: 10px; top: 100%; border: 4px solid transparent; border-top-color: #282d36; }
 .voice-button-wrap[data-busy="false"]:hover .voice-button-tooltip, .voice-button-wrap[data-busy="false"]:focus-within .voice-button-tooltip { opacity: 1; visibility: visible; }
@@ -91,7 +91,7 @@
 .voice-history > button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .voice-history button:hover { background: #f3f6f3; }
 .voice-history small { font-size: 11px; color: #88928b; }
-.voice-live { display: inline-flex; align-items: center; gap: 6px; height: 29px; max-width: min(320px, calc(100cqw - 106px)); padding: 0 4px; color: var(--green, #267255); font-size: 11px; }
+.voice-live { display: inline-flex; align-items: center; gap: 6px; height: 27px; max-width: min(320px, calc(100cqw - 102px)); padding: 0 4px; color: var(--green, #267255); font-size: 11px; }
 .voice-live button { display: flex; align-items: center; justify-content: center; width: 23px; height: 23px; flex: 0 0 23px; padding: 0; color: inherit; background: none; border: 0; border-radius: 4px; cursor: pointer; font-size: inherit; }
 .voice-live button:hover { background: #edf5f0; }
 .voice-live .voice-status-action { justify-content: flex-start; width: auto; flex: 0 1 auto; min-width: 0; gap: 5px; text-align: left; }
@@ -124,7 +124,13 @@
 .meeting-timer-card strong { font-size: 34px; font-variant-numeric: tabular-nums; letter-spacing: 0; }
 .meeting-timer-card small { line-height: 1.6; }
 .meeting-state-copy { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; }
-.meeting-loading-note { display: block; margin-top: 8px; color: #7d8981; font-size: 11px; line-height: 1.6; }
+.meeting-loading-progress { display: grid; gap: 8px; margin-top: 12px; color: #87928b; font-size: 11px; }
+.meeting-loading-progress > div { display: flex; align-items: center; gap: 8px; }
+.meeting-loading-progress > div svg { flex-shrink: 0; }
+.meeting-loading-progress .done { color: #397959; }
+.meeting-loading-progress .current { color: #344b3d; font-weight: 600; }
+.meeting-loading-progress .current svg, .meeting-transcript-loading > svg { color: #2c8d5e; animation: spin 1s linear infinite; }
+.meeting-loading-progress small { padding-top: 8px; border-top: 1px solid #edf1ee; color: #7d8981; line-height: 1.6; }
 .meeting-option-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid #edf1ee; }
 .meeting-option-row:last-child { border-bottom: 0; }
 .meeting-option-row b { font-size: 12px; font-weight: 600; }
@@ -153,6 +159,11 @@
 .meeting-participant .voice-remember:disabled { color: #98a29c; cursor: default; }
 .meeting-transcript { flex: 1; min-height: 0; overflow: auto; padding: 22px 30px 40px; }
 .meeting-transcript article { max-width: 860px; margin: 0 auto 16px; padding: 12px 14px; border: 1px solid #e1e9e3; border-radius: 9px; background: #fff; }.meeting-transcript article small { color: #6b8173; font-size: 11px; }.meeting-transcript article p { margin: 7px 0 0; line-height: 1.75; font-size: 14px; }.meeting-partial { opacity: .62; }.meeting-empty { max-width: 860px; margin: 80px auto; color: #8b978f; text-align: center; font-size: 13px; }
+.meeting-transcript-loading { display: grid; justify-items: center; gap: 9px; max-width: 520px; margin: clamp(54px, 12vh, 110px) auto 0; color: #7b8980; text-align: center; }
+.meeting-transcript-loading strong { color: #344b3d; font-size: 15px; }
+.meeting-transcript-loading p { margin: 0; font-size: 13px; line-height: 1.7; }
+.meeting-transcript-loading small { color: #8a968e; font-size: 11px; }
+@media (prefers-reduced-motion: reduce) { .meeting-loading-progress .current svg, .meeting-transcript-loading > svg { animation: none; } }
 @media(max-width: 600px) { .voice-body { padding: 16px; } .voice-settings { grid-template-columns: 1fr; } .voice-modes { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; } .voice-participants > div { grid-template-columns: 80px 1fr; } .voice-participants .voice-remember { grid-column: 2; } .voice-profile-row { grid-template-columns: 1fr 1fr; } }
 @media(max-width: 800px) { .meeting-workspace-main { grid-template-columns: 1fr; overflow: auto; }.meeting-control-panel { max-height: 42vh; border-right: 0; border-bottom: 1px solid var(--line, #e1e7e2); }.meeting-transcript { min-height: 42vh; }.meeting-workspace-header { padding: 12px 16px; }.meeting-transcript-header, .meeting-transcript { padding-left: 16px; padding-right: 16px; } }
 .meeting-history-page { min-width: 0; min-height: 0; flex: 1; overflow: auto; padding: 28px; }

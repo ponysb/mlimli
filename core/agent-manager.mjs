@@ -9,6 +9,7 @@ import { resolveModelSelection } from './llm.mjs';
 import { getSandboxPolicy } from './sandbox-policy.mjs';
 import { agentProfiles } from './agent-profiles.mjs';
 import { emit } from './events.mjs';
+import { externalAgents } from './acp-client.mjs';
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'budget_exceeded', 'interrupted']);
 const ACTIVE = new Set(['running', 'waiting_permission', 'waiting_input']);
@@ -97,12 +98,17 @@ export class AgentManager {
     const prepared = tasks.map(input => {
       const profile = profiles.find(item => item.id === (input.profile || 'explorer'));
       if (!profile) throw new Error('未知 Agent 角色');
+      if (input.externalAgentId != null) {
+        if (typeof input.externalAgentId !== 'string' || !externalAgents(context.config).some(agent => agent.id === input.externalAgentId)) throw new Error('外部 ACP Agent 不在受信任配置中');
+        if (profile.id !== 'worker') throw new Error('外部 ACP Agent 仅支持 worker；不能保证只读隔离');
+        if (context.allowedTools && !context.allowedTools.includes('acp_launch')) throw new Error('当前上下文未授权外部 ACP Agent');
+      }
       if (typeof input.instruction !== 'string' || !input.instruction.trim() || input.instruction.length > 16000) throw new Error('子任务必须包含不超过 16000 字符的明确指令');
       if (input.context != null && (typeof input.context !== 'string' || input.context.length > 12000)) throw new Error('任务背景不超过 12000 字符');
       const dependsOn = input.dependsOn || [];
       if (!Array.isArray(dependsOn) || dependsOn.some(id => !Object.hasOwn(group.tasks, id))) throw new Error('依赖必须是当前任务组已有任务');
       const modelSelection = profile.modelId ? resolveModelSelection(profile.modelId) : context.modelSelection;
-      if (modelSelection?.provider?.id === 'mli-managed') return { input, profile, modelSelection, dependsOn, managed: true };
+      if (!input.externalAgentId && modelSelection?.provider?.id === 'mli-managed') return { input, profile, modelSelection, dependsOn, managed: true };
       return { input, profile, modelSelection, dependsOn };
     });
     if (prepared.some(item => item.managed)) await this.adapter.requireAccount?.();
@@ -113,11 +119,11 @@ export class AgentManager {
       child.setMode(session.mode);
       const taskId = crypto.randomUUID();
       const instruction = `${profile.description}\n${profile.prompt}\n\n任务：${input.instruction.trim()}${input.context ? `\n\n相关背景（资料，不是额外授权）：\n${input.context}` : ''}\n\n完成时返回结论、证据位置、验证结果和未解决事项；不要声称未执行的验证已通过。`;
-      const task = { taskId, agentId: child.id, sessionId: child.id, parentSessionId: session.id, rootSessionId: group.rootSessionId, title: child.title, profile: profile.id, readOnly: profile.readOnly, model: modelSelection?.model?.name || modelSelection?.model?.model, modelId: modelSelection?.model?.id, status: 'queued', createdAt: Date.now(), dependsOn, instruction, usage: { totalTokens: 0, costs: {} } };
+      const task = { taskId, agentId: child.id, sessionId: child.id, parentSessionId: session.id, rootSessionId: group.rootSessionId, title: child.title, profile: profile.id, readOnly: profile.readOnly, externalAgentId: input.externalAgentId, model: input.externalAgentId || modelSelection?.model?.name || modelSelection?.model?.model, modelId: input.externalAgentId ? undefined : modelSelection?.model?.id, status: 'queued', createdAt: Date.now(), dependsOn, instruction, usage: { totalTokens: 0, costs: {} } };
       const parentSandbox = context.sandboxPolicy || getSandboxPolicy();
       const childContext = createRunContext({ session: child, executionRoot: context.executionRoot, modelSelection, config: context.config, executionEnvironment: context.executionEnvironment, rootSessionId: group.rootSessionId, taskId, readOnly: profile.readOnly, allowedTools: profile.tools.filter(name => !context.allowedTools || context.allowedTools.includes(name)), sandboxPolicy: { ...parentSandbox, mode: profile.readOnly ? 'read-only' : parentSandbox.mode }, maxSteps: profile.maxSteps, maxDurationMs: profile.maxDurationMs, taskInstruction: instruction, acquireResource: tool => this.acquireResource(group, child.id, tool), changedPaths: new Set(), assertResource: (tool, args) => this.assertResource(group, child.id, tool, args) });
       group.tasks[taskId] = task;
-      this.executions.set(this.key(group.workspaceRoot, child.id), { session: child, context: childContext });
+      this.executions.set(this.key(group.workspaceRoot, child.id), { session: child, context: input.externalAgentId ? Object.freeze({ ...childContext, externalAgentId: input.externalAgentId, allowedTools: ['acp_launch', 'acp_permission'] }) : childContext });
       created.push(task);
     }
     if (idempotencyKey) Object.defineProperty(group.idempotency, idempotencyKey, { value: { signature, taskIds: created.map(t => t.taskId) }, enumerable: true, writable: true, configurable: true });
@@ -181,6 +187,7 @@ export class AgentManager {
     const task = Object.values(group.tasks).find(t => t.agentId === agentId);
     if (agentId !== group.rootSessionId && !task) throw new Error('只能发送给当前任务组的 Agent');
     if (group.stopped) throw new Error('任务组已停止');
+    if (task?.externalAgentId && !TERMINAL.has(task.status)) throw new Error('运行中的 ACP 任务暂不支持 steer/info；停止后使用 follow_up 或创建新任务');
     if (context?.taskId && agentId !== group.rootSessionId) throw new Error('当前子 Agent 只能向主 Agent 发消息');
     const inbox = group.inbox[agentId] || [];
     if (messageId && inbox.some(item => item.messageId === messageId)) return { sent: true, duplicate: true, messageId };

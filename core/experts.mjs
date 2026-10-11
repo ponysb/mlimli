@@ -39,8 +39,23 @@ const definitions = [
 
 export const EXPERTS = definitions.map(([id, name, category, description, tags, prompt]) => ({ id, name, category, description, tags, prompt }));
 let platformExperts = [];
+// scopeType 由服务端下发：official 为官方专家，enterprise 为企业自建专家。
+// 客户端据此显示「官方 / 企业」来源标签。
 export function setPlatformExperts(items) {
-  platformExperts = items.filter((item) => item.kind === 'expert').map((item) => ({ id: `platform-${item.id}`, name: item.name, category: item.category || '平台', description: item.description || '', tags: item.tags || [], prompt: item.content, platform: true }));
+  platformExperts = items.filter((item) => item.kind === 'expert').map((item) => {
+    const scopeType = item.scopeType === 'enterprise' ? 'enterprise' : 'official';
+    return {
+      id: `platform-${item.id}`,
+      name: item.name,
+      category: item.category || (scopeType === 'enterprise' ? '企业' : '平台'),
+      description: item.description || '',
+      tags: item.tags || [],
+      prompt: item.content,
+      platform: true,
+      scopeType,
+      scopeId: scopeType === 'enterprise' ? (item.scopeId || null) : null
+    };
+  });
 }
 function localFile() { return path.join(agentDataDir(), 'experts.json'); }
 export function listExperts() {

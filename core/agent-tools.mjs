@@ -1,13 +1,21 @@
 import { agentManager } from './agent-manager.mjs';
+import { publicExternalAgents } from './acp-client.mjs';
+import { getRunContext } from './run-context.mjs';
 
 const json = value => ({ content: JSON.stringify(value) });
 const publicTask = task => ({ ...task, instruction: undefined });
 const schema = (properties, required = []) => ({ type: 'object', properties, required, additionalProperties: false });
 export const agentTools = [
   {
+    name: 'agent_external_list', permission: 'L0',
+    description: '列出用户配置的受信任外部 ACP Agent，不包含命令参数或凭据。使用 agent_spawn 的 worker + externalAgentId 派发；外部 Agent 使用自身沙箱，启动需要审批。',
+    parameters: schema({}),
+    run() { return json({ agents: publicExternalAgents(getRunContext()?.config) }); },
+  },
+  {
     name: 'agent_spawn', permission: 'L0',
     description: '派发独立上下文的子 Agent，创建并排队后立即返回句柄。适合主动拆分复杂任务中的独立探索、调研和验证；多个独立分支放在同一次 tasks 数组中派发。角色：explorer（只读代码探索）、researcher（资料研究）、reviewer（只读审查）、worker（文件实现）。是否主动派发遵循系统协作策略与用户要求；仅主 Agent 可派生，共享目录同时只有一个写入者。不要复制完整聊天，提供目标、范围、必要背景和验收条件。',
-    parameters: schema({ tasks: { type: 'array', minItems: 1, maxItems: 8, items: schema({ profile: { type: 'string', enum: ['explorer', 'researcher', 'reviewer', 'worker'] }, title: { type: 'string' }, instruction: { type: 'string' }, context: { type: 'string' }, dependsOn: { type: 'array', items: { type: 'string' } } }, ['instruction']) }, idempotencyKey: { type: 'string' } }, ['tasks']),
+    parameters: schema({ tasks: { type: 'array', minItems: 1, maxItems: 8, items: schema({ profile: { type: 'string', enum: ['explorer', 'researcher', 'reviewer', 'worker'] }, externalAgentId: { type: 'string', description: '可选：agent_external_list 返回的配置 ID，仅支持 worker；不传则使用内置 Agent' }, title: { type: 'string' }, instruction: { type: 'string' }, context: { type: 'string' }, dependsOn: { type: 'array', items: { type: 'string' } } }, ['instruction']) }, idempotencyKey: { type: 'string' } }, ['tasks']),
     async run(args, ctx) { return json({ tasks: (await agentManager.spawn(ctx.session, args)).map(publicTask) }); },
   },
   {

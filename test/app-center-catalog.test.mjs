@@ -55,7 +55,15 @@ test('catalog updates deduplicate concurrent requests, cache success and retain 
 });
 test('client HTTP displays published backend apps, merges URL-only user apps and hides withdrawn entries', { timeout: 20000 }, async t => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'mli-catalog-http-')); let items = [entry];
-  const backend = http.createServer((req, res) => { assert.equal(req.url, '/api/v2/apps'); assert.equal(req.headers.authorization, undefined); res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ success: true, data: { items } })); });
+  const backend = http.createServer((req, res) => {
+    assert.equal(req.headers.authorization, undefined);
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (req.url === '/api/v2/client-analytics/session') res.end(JSON.stringify({ success: true }));
+    else {
+      assert.equal(req.url, '/api/v2/apps');
+      res.end(JSON.stringify({ success: true, data: { items } }));
+    }
+  });
   backend.listen(0, '127.0.0.1'); await once(backend, 'listening');
   const instance = runtime.startRuntime({ executable: process.execPath, runtimeRoot: fileURLToPath(new URL('..', import.meta.url)), dataRoot: directory, environment: { MLI_ACCOUNT_ENABLED: 'true', MLI_ACCOUNT_SERVER_URL: `http://127.0.0.1:${backend.address().port}`, MLI_ACCOUNT_APP_SECRET: '' } });
   t.after(async () => { if (instance.child.exitCode === null) { const done = once(instance.child, 'exit'); instance.child.kill(); await done; } backend.closeAllConnections(); await new Promise(resolve => backend.close(resolve)); fs.rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); });

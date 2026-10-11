@@ -11,7 +11,7 @@ function fixture(context) {
   context.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const modules = path.join(root, 'node_modules');
   fs.mkdirSync(modules);
-  for (const name of ['terminal-kit', '@larksuiteoapi/node-sdk', 'dingtalk-stream', 'pdfjs-dist', '@anthropic-ai/sandbox-runtime']) {
+  for (const name of ['terminal-kit', '@larksuiteoapi/node-sdk', 'dingtalk-stream', 'pdfjs-dist', '@anthropic-ai/sandbox-runtime', '@agentclientprotocol/sdk', 'zod']) {
     const directory = path.join(modules, name);
     fs.mkdirSync(directory, { recursive: true });
     fs.writeFileSync(path.join(directory, 'package.json'), JSON.stringify({ name, version: '1.0.0', main: 'index.js', dependencies: name === 'terminal-kit' ? { 'linked-package': '1.0.0' } : {} }));
@@ -33,6 +33,8 @@ test('staging resolves package-manager directory links for packages without a ma
   const { root, output } = fixture(context);
   const copied = copyTerminalDependencies(output, root);
   assert.equal(copied['linked-package'], '1.0.0');
+  assert.equal(copied['@agentclientprotocol/sdk'], '1.0.0');
+  assert.equal(copied.zod, '1.0.0');
   assert.equal(fs.readFileSync(path.join(output, 'node_modules', 'linked-package', 'data.json'), 'utf8'), '{"value":1}');
   assert.equal(fs.lstatSync(path.join(output, 'node_modules', 'linked-package')).isSymbolicLink(), false);
   assert.equal(fs.readFileSync(path.join(output, 'node_modules', '@anthropic-ai/sandbox-runtime', 'vendor', 'srt-win', 'x64', 'srt-win.exe'), 'utf8'), 'native-helper-fixture');

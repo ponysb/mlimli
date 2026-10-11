@@ -198,3 +198,16 @@ test('mock、子任务和未完成任务不回顾；失败和重启保持任务�
   const restarted = new MemoryLearner(); assert.equal(restarted.status(context.sessionStorageRoot)[0].status, 'interrupted'); restarted.dispose();
   run(() => assert.equal(listMemories({ scope: 'all' }).length, 0));
 });
+
+test('企业团队记忆只从本轮冻结快照注入提示词', () => {
+  const context = {
+    config: getConfig(),
+    teamMemorySnapshot: { organizationId: 'org-1', organizationName: '测试企业', body: '[team/m-1 · 发布规范 · v2]\n发布前必须运行完整回归测试。', ids: ['m-1'] }
+  };
+  const prompt = withRunContext(context, () => buildSystemPrompt({ taskPrompt: '准备发布' }));
+  assert.match(prompt, /# 企业团队记忆/);
+  assert.match(prompt, /测试企业/);
+  assert.match(prompt, /发布前必须运行完整回归测试/);
+  assert.match(prompt, /只读知识/);
+  assert.doesNotMatch(buildSystemPrompt({ taskPrompt: '准备发布' }), /# 企业团队记忆/);
+});

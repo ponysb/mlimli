@@ -33,8 +33,9 @@ test('后台托管模型倍率从账户目录传递到界面，并在刷新后�
     assert.equal(item.pricing.inputPer1M, 0);
   }
   multiplier = undefined;
-  await refreshManagedCatalog({ force: true });
+  assert.equal(await refreshManagedCatalog({ force: true }), true);
   assert.equal(publicSettings().models[0].displayMultiplier, 1);
+  assert.equal(await refreshManagedCatalog(), false);
 });
 
 test('邀请注册透传邀请码，签到后更新客户端和保存会话余额', async t => {

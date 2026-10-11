@@ -73,7 +73,6 @@
 .expert-reference > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .expert-reference button { display: grid; place-items: center; flex: none; padding: 2px; border: 0; border-radius: 3px; background: transparent; color: inherit; cursor: pointer; }
 .expert-reference button:hover { background: #d5e6da; }
-.main-nav button:has(.lucide-library) { display: none; }
 .composer-queue { display: grid; gap: 6px; padding: 10px 12px; border-bottom: 1px solid #e2e8e7; background: #f5f8f6; font-size: 12px; }
 .composer-queue > b { color: #316d53; }
 .composer-queue > div { display: flex; align-items: center; gap: 6px; min-width: 0; }

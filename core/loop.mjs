@@ -13,6 +13,7 @@ import { primaryTaskArtifact } from './task-artifacts.mjs';
 import crypto from 'node:crypto';
 import { getRunContext, withRunContext } from './run-context.mjs';
 import { createMemorySnapshot, recordMemoryRecall } from './memory.mjs';
+import { createTeamMemorySnapshot } from './team-memory.mjs';
 import { agentManager } from './agent-manager.mjs';
 import { qualityPolicy, assessTaskQuality, qualityFeedback } from './task-quality.mjs';
 import { RunControl, runLimits, runDeadline } from './run-control.mjs';
@@ -73,9 +74,12 @@ function emitAssistantText(session, text) {
 export async function runTurn(session, userText, attachments = [], { clientMessageId, queuedId, savedAttachments: queuedAttachments, resumeCheckpointId } = {}) {
   const parent = getRunContext();
   let memorySnapshot = { body: '', ids: [] };
+  let teamMemorySnapshot = { body: '', ids: [], organizationId: null };
   try { memorySnapshot = createMemorySnapshot(userText); recordMemoryRecall(memorySnapshot); }
   catch (error) { emit('memory_warning', { sessionId: session.id, message: error.message }); }
-  return withRunContext(Object.freeze({ ...parent, memorySnapshot }), () => runBoundTurn(session, userText, attachments, { clientMessageId, queuedId, savedAttachments: queuedAttachments, resumeCheckpointId }));
+  try { teamMemorySnapshot = await createTeamMemorySnapshot(userText); }
+  catch (error) { emit('memory_warning', { sessionId: session.id, message: `团队记忆加载失败：${error.message}` }); }
+  return withRunContext(Object.freeze({ ...parent, memorySnapshot, teamMemorySnapshot }), () => runBoundTurn(session, userText, attachments, { clientMessageId, queuedId, savedAttachments: queuedAttachments, resumeCheckpointId }));
 }
 
 async function runBoundTurn(session, userText, attachments = [], { clientMessageId, queuedId, savedAttachments: queuedAttachments, resumeCheckpointId } = {}) {

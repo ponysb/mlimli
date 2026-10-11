@@ -123,7 +123,7 @@ app.whenReady().then(async () => {
   win.webContents.sendInputEvent({type:'mouseMove',x:20,y:20});
   await waitFor("getComputedStyle(document.querySelector('#voice-button-tooltip')).visibility==='hidden'");
   const sizes = await evaluate("[...document.querySelectorAll('.voice-button,.send-button')].map(button => { const r = button.getBoundingClientRect(); return [r.width,r.height]; })");
-  if (sizes.some(size => size[0] !== 29 || size[1] !== 29)) throw new Error('Composer button sizes differ: ' + JSON.stringify(sizes));
+  if (sizes.some(size => size[0] !== 27 || size[1] !== 27)) throw new Error('Composer button sizes differ: ' + JSON.stringify(sizes));
   // A short pointer click must release capture and create no speech session.
   win.webContents.sendInputEvent({ type: 'mouseDown', button: 'left', clickCount: 1, ...bounds });
   await delay(80);

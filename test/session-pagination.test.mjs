@@ -68,6 +68,9 @@ test('UI 分页保留早期状态、队列、恢复和上下文；长内容和�
   assert.ok(preview.content[0].text.length < text.length);
   assert.equal(preview.content[1].dataUrl, undefined);
   assert.match(preview.content[1].url, /\/media\?path=/);
+  const complete = await readSessionView(session.id, 'snapshot', { all: true }, directory);
+  assert.equal(complete.entries.length, session.chain().length);
+  assert.equal(complete.history, undefined);
   const full = await readSessionView(session.id, 'entry', { entryId: message.id }, directory);
   assert.equal(full.content[0].text, text);
   const media = await readSessionView(session.id, 'media', { entryId: message.id, path: '["content",1]' }, directory);

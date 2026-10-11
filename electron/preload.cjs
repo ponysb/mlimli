@@ -1,6 +1,19 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('desktop', {
   isElectron: true,
+  platform: process.platform,
+  windowControl: action => ipcRenderer.invoke('window-control', action),
+  getWindowState: () => ipcRenderer.invoke('window-state'),
+  onWindowStateChanged: callback => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on('window-state-changed', listener);
+    return () => ipcRenderer.removeListener('window-state-changed', listener);
+  },
+  onSystemPowerChanged: callback => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on('system-power-changed', listener);
+    return () => ipcRenderer.removeListener('system-power-changed', listener);
+  },
   listDisplaySources: () => ipcRenderer.invoke('display-sources'),
   setDisplaySource: (sourceId, audio) => ipcRenderer.sendSync('display-source-selection', { sourceId, audio }),
   installWindowsSandbox: () => ipcRenderer.invoke('install-windows-sandbox'),

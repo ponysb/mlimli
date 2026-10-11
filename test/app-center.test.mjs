@@ -35,33 +35,43 @@ test('unconfirmed application suspends and resumes the same call after human aut
   center.authorize(app.id, 'https://example.com/workspace');
   assert.equal((await waiting).id, app.id); assert.equal(center.list().pending.length, 0);
 });
-test('trusted desktop observation resumes after login without a second authorization click', async t => {
+test('document observations cannot grant login without a user confirmation', t => {
   const { center, app } = fixture(t);
-  const waiting = center.waitLogin(app.id, { sessionId: 'session-auto' });
-  center.observe(app.id, 'https://example.com/login');
-  assert.equal(center.get(app.id).status, 'needs-login');
   center.observe(app.id, 'https://example.com/workspace', 'signed-in');
-  assert.equal((await waiting).status, 'authorized');
-  assert.equal(center.get(app.id).loginState, 'signed-in');
+  assert.equal(center.get(app.id).status, 'needs-login');
+});
+test('manual login confirmation survives inconclusive observations and survives login pages', t => {
+  const { center, app } = fixture(t);
+  center.observe(app.id, app.url, 'unknown');
+  assert.equal(center.get(app.id).status, 'needs-login');
+  center.authorize(app.id, app.url);
+  center.observe(app.id, app.url, 'unknown');
+  assert.equal(center.get(app.id).status, 'authorized');
+  center.observe(app.id, 'https://example.com/login', 'required');
+  assert.equal(center.get(app.id).status, 'authorized');
+});
+test('application browser exposes a manual login confirmation button through the trusted desktop bridge', () => {
+  const source = fs.readFileSync(new URL('../react/src/AppCenter.jsx', import.meta.url), 'utf8');
+  assert.match(source, /await desktop\.authorizeApp\(appId\); await refresh\(\)/);
+  assert.match(source, /className="app-center-card-confirm"[^>]*onClick=\{onConfirm\}>确认登录<\/button>/);
+  assert.match(source, /onConfirm=\{\(\) => confirmLogin\(item.id\)\}/);
+  assert.doesNotMatch(source, /我已登录，确认/);
 });
 test('agent permission is sticky and can be restored for an already signed-in app', async t => {
   const { center, app } = fixture(t);
-  center.observe(app.id, app.url, 'signed-in');
+  center.authorize(app.id, app.url);
   center.permission(app.id, false);
   assert.equal(center.get(app.id).agentAllowed, false);
   const waiting = center.waitLogin(app.id);
   center.permission(app.id, true);
   assert.equal((await waiting).status, 'authorized');
 });
-test('login-page and external-origin confirmation are rejected and live redirects expire authorization', t => {
+test('user confirmation does not require a visible page, login detection or a domain whitelist', t => {
   const { center, app } = fixture(t);
-  assert.throws(() => center.authorize(app.id, 'https://example.com/login'), /完成登录/);
-  assert.throws(() => center.authorize(app.id, 'https://evil.example/app'), /完成登录/);
-  center.authorize(app.id, 'https://example.com/workspace');
-  center.observe(app.id, 'https://example.com/login?return=secret');
-  assert.equal(center.get(app.id).status, 'needs-login');
-  center.authorize(app.id, 'https://example.com/workspace');
-  center.observe(app.id, 'https://accounts.example/sso'); assert.equal(center.get(app.id).status, 'needs-login');
+  assert.equal(center.authorize(app.id).status, 'authorized');
+  assert.equal(center.authorize(app.id, 'https://www.example.com/login').status, 'authorized');
+  center.observe(app.id, 'https://accounts.example/sso', 'required');
+  assert.equal(center.get(app.id).status, 'authorized');
 });
 test('editing the authorized origin scope requires fresh user confirmation', t => {
   const { center, app } = fixture(t); center.authorize(app.id, app.url);

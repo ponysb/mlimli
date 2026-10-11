@@ -34,8 +34,20 @@ const state = {
 
 const uiPending = new Map();
 let platformSkills = [];
+// scopeType 由服务端下发：official 为官方 Skill，enterprise 为企业自建 Skill。
 export function setPlatformSkills(items) {
-  platformSkills = items.filter((item) => item.kind === 'skill').map((item) => ({ name: item.name, description: item.description || '平台 Skill', content: item.content, path: `platform:${item.id}`, source: 'platform' }));
+  platformSkills = items.filter((item) => item.kind === 'skill').map((item) => {
+    const scopeType = item.scopeType === 'enterprise' ? 'enterprise' : 'official';
+    return {
+      name: item.name,
+      description: item.description || (scopeType === 'enterprise' ? '企业 Skill' : '平台 Skill'),
+      content: item.content,
+      path: `platform:${item.id}`,
+      source: 'platform',
+      scopeType,
+      scopeId: scopeType === 'enterprise' ? (item.scopeId || null) : null
+    };
+  });
 }
 
 const UI_DEFAULTS = {

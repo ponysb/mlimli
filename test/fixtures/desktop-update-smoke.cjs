@@ -38,7 +38,7 @@ app.whenReady().then(async () => {
       beforeInstall: async () => { throw new Error('development never installs'); } });
     await handlers.get('desktop-update-check')(event);
     const state = controller.snapshot();
-    if (state.status !== 'available' || state.version !== '0.3.1' || state.canInstall !== false) throw new Error(`development check: ${JSON.stringify(state)}`);
+    if (state.status !== 'available' || state.version !== '0.4.1' || state.canInstall !== false) throw new Error(`development check: ${JSON.stringify(state)}`);
     await handlers.get('desktop-update-download')(event);
     await handlers.get('desktop-update-install')(event);
     if (controller.snapshot().status !== 'available') throw new Error('development changed to installation mode');

@@ -9,6 +9,7 @@ import { deleteMemory, getMemory, listMemories, memoryCatalog, saveMemory, searc
 import { memorySettings } from './memory-policy.mjs';
 import { searchHistory } from './memory-history.mjs';
 import { getRunContext } from './run-context.mjs';
+import { readTeamMemory, searchTeamMemories } from './team-memory.mjs';
 import { verificationTools } from './verification.mjs';
 import { isVerificationCommand, sourceEvidence } from './task-quality.mjs';
 import { readAttachedDocument } from './attachment-content.mjs';
@@ -73,6 +74,18 @@ export const coreTools = [
     description: '按中英文关键词召回全局和当前项目的相关有效记忆，返回来源、证据和版本；不返回待审核或停用内容。',
     parameters: { type: 'object', properties: { query: { type: 'string' }, scope: { type: 'string', enum: ['all', 'global', 'project'] }, limit: { type: 'number' } }, required: ['query'] },
     async run({ query, ...options }) { const items = searchMemories(query, options); recordMemoryRecall({ ids: items.map(item => ({ id: item.id, scope: item.scope })) }); return { content: JSON.stringify(items.map(({ history, ...item }) => item)) }; },
+  },
+  {
+    name: 'read_team_memory', permission: 'L0',
+    description: '按 ID 读取当前企业主体本轮冻结的团队记忆。团队记忆只读，不能写入个人记忆。',
+    parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+    async run({ id }) { const item = readTeamMemory(id); if (!item) throw new Error('团队记忆不存在或当前不在企业主体'); return { content: JSON.stringify(item) }; },
+  },
+  {
+    name: 'search_team_memories', permission: 'L0',
+    description: '搜索当前企业主体本轮冻结的团队记忆与已启用记忆仓库。只返回当前企业数据。',
+    parameters: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'number' } }, required: ['query'] },
+    async run({ query, limit }) { return { content: JSON.stringify(searchTeamMemories(query, limit)) }; },
   },
   {
     name: 'search_history', permission: 'L0',

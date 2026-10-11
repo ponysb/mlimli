@@ -91,29 +91,17 @@ export class AppCenter {
   }
   remove(id) { this.revoke(id); this.apps.delete(id); this.save(); }
   authorize(id, currentUrl) {
-    const app = this.get(id), url = policy.appUrl(currentUrl);
-    if (!app.origins.includes(url.origin) || policy.loginPage(url.href, app.loginPaths)) throw new Error('请先完成登录并回到应用页面，然后确认授权');
+    const app = this.get(id), url = policy.appUrl(currentUrl || app.lastUrl || app.url);
+
     app.agentAllowed = true; app.loginState = 'signed-in'; app.status = 'authorized'; app.authorizedAt = this.now(); app.lastUrl = policy.publicPageUrl(url.href); this.save();
     for (const w of [...this.waiters.values()]) if (w.appId === id) w.finish(null, { ...app });
     this.event('app_login_completed', { appId: id }); return { ...app };
   }
   observe(id, currentUrl, loginState) {
     const app = this.get(id), url = policy.appUrl(currentUrl);
-    const before = JSON.stringify(app), wasReady = app.status === 'authorized';
+    const previousUrl = app.lastUrl;
     app.lastUrl = policy.publicPageUrl(url.href);
-    if (!app.origins.includes(url.origin) || policy.loginPage(url.href, app.loginPaths) || loginState === 'required') {
-      app.loginState = 'required'; app.status = 'needs-login'; app.authorizedAt = null;
-    } else if (['signed-in', 'unknown'].includes(loginState)) {
-      // Only the token-authenticated desktop bridge supplies document observations.
-      // A public page can be usable without claiming that the user is signed in.
-      app.loginState = loginState;
-      if (loginState === 'signed-in' && app.agentAllowed !== false && app.catalogActive !== false) { app.status = 'authorized'; app.authorizedAt ||= this.now(); }
-    }
-    if (before !== JSON.stringify(app)) this.save();
-    if (!wasReady && app.status === 'authorized') {
-      for (const w of [...this.waiters.values()]) if (w.appId === id) w.finish(null, { ...app });
-      this.event('app_login_completed', { appId: id });
-    }
+    if (previousUrl !== app.lastUrl) this.save();
     return { ...app };
   }
   connected() { return this.bridge && this.now() - this.bridge.touched < 10000; }

@@ -9,6 +9,7 @@ import { readLogPage, readRecentLogs } from './api-log-reader.mjs';
 function logFile() {
   return path.join(agentDataDir(), 'api-logs.jsonl');
 }
+function summaryFile() { return path.join(agentDataDir(), 'api-logs-summary.jsonl'); }
 
 export function appendApiLog(entry) {
   const context = getRunContext();
@@ -19,6 +20,8 @@ export function appendApiLog(entry) {
   }
   if (truncated) row.snapshotTruncated = true;
   fs.appendFileSync(logFile(), JSON.stringify(row) + '\n', 'utf8');
+  const { request: _request, response: _response, ...summary } = row;
+  fs.appendFileSync(summaryFile(), JSON.stringify(summary) + '\n', 'utf8');
   context?.recordUsage?.(row.metrics || {});
   return row;
 }

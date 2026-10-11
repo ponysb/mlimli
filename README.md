@@ -1,246 +1,199 @@
+<h1 align="center">
+  <img src="electron/assets/icon.png" alt="魔力工作台" width="64" valign="middle" /> 魔力工作台
+</h1>
+
 <p align="center">
-  <img src="electron/assets/icon.png" width="96" alt="MLI Agent" />
+  <strong>一个能读文件、做内容、处理办公任务并操作工具的本地 Agent 工作台。</strong><br/>
+  选好工作目录，用自然语言说明目标，剩下的交给 Agent 执行和检查。
 </p>
 
-<h1 align="center">魔力工作台 · MLI Agent</h1>
-<p align="center">开源、本地优先的通用 Agent 工作台</p>
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v0.3.0-245b43" alt="v0.3.0" />
+  <img src="https://img.shields.io/badge/version-v0.4.0-245b43" alt="v0.4.0" />
   <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="Apache-2.0" />
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-64748b" alt="Windows / macOS / Linux" />
+  <img src="https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-64748b" alt="Windows / macOS / Linux" />
 </p>
+
 <p align="center">
-  简体中文 · <a href="README.en.md">English</a> · <a href="https://github.com/ponysb/mlimli/issues">Issues</a> · <a href="docs/TERMINAL.md">TUI / CLI</a> · <a href="PLUGIN-COMPATIBILITY.md">插件说明</a>
+  简体中文 · <a href="README.en.md">English</a> · <a href="https://github.com/ponysb/mlimli/issues">问题反馈</a> · <a href="docs/TERMINAL.md">终端版</a>
 </p>
 
-MLI Agent 是面向创作、办公与开发的开源 Agent 工作台，支持 Windows、macOS、Linux，提供桌面、浏览器与终端入口。支持自定义 API 地址、自有 API Key 和三种主流模型协议，可自由组合模型、Skill 与工具插件。项目采用 Apache-2.0 许可证，支持二次开发与扩展。
-
-交付验收：默认在任务结束前检查实际交付物和工具证据，缺失时在同轮内补齐或修复；代码运行测试，文字与 Office 重读核对，网页可用隔离 Chromium 执行交互断言。未完成的验收会明确标记，证据和限制可在任务摘要展开查看。机制、配置与适用范围见 [交付质量与验收](docs/CLIENT-QUALITY.md)。
-
-运行安全：Agent 命令默认使用工作区沙箱，命令联网默认关闭。Linux 使用 Bubblewrap，macOS 使用 Seatbelt，Windows 接入 Anthropic Sandbox Runtime 的原生后端（Alpha，首次需要管理员安装）；Docker 为可选后端。后端不可用时阻止命令执行。启用方式、审批与沙箱的区别，以及插件和宿主工具的边界见 [运行沙箱](docs/SANDBOX.md)。
-
-应用台：mac 风格图标卡片展示后台发布与用户自建的应用，只输入网址即可添加，自动获取网站图标。桌面内置浏览器独立保存本机登录；Agent 先查询授权，未登录时自动打开应用台，登录确认后继续原任务。支持授权域名内的页面读取、点击、填写，以及撤销授权和清除登录。使用与边界见 [应用台](docs/APP-CENTER.md)。
-
-## 核心特性
-
-- **开放的模型接入**：支持 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 三协议；自定义 API 地址、API Key、模型名称与上下文窗口，支持多服务商、多模型切换。
-- **灵活的 AIGC 工作流**：提供图片、视频模型的 API 文档链接或 Skill，即可让 Agent 组织接口调用、提示词调试、任务轮询与素材下载；自由选择创作模型，并将成熟流程沉淀为可复用技能。
-- **创作、办公与开发**：小说与剧本创作、漫剧和 AI 视频制作、口播剪辑；Word、Excel、PPT、PDF 工作流；代码编辑、命令执行、Git、TUI 与 LSP 诊断和代码导航。
-- **可扩展的能力体系**：专家库、Skill 技能库、工具插件、MCP、执行钩子，以及语言服务和消息渠道适配器；按场景组合方法与执行能力。
-- **完整的任务管理**：本地会话持久化、项目记忆、上下文压缩、消息排队、多会话运行、定时任务与完成通知；定时任务创建独立会话，执行进度在界面中可见。
-- **子 Agent 协作**：独立上下文、异步派发、并行探索与审查、持久化消息及主任务汇总；子任务嵌入主会话面板，默认两个并发，共享目录限制一个写入者。见 [子 Agent 使用说明](docs/SUBAGENTS.md)。
-- **记忆与经验沉淀**：全局用户偏好、隔离的项目记忆、相关内容召回、历史检索和任务后回顾；设置中支持开关、搜索编辑、审核、停用与版本恢复。见 [记忆使用说明](docs/MEMORY.md)。
-- **聚焦内容的工作台**：文件与产物预览、内置浏览器、白板、附件拖放、权限审批与交互式提问；支持飞书、钉钉消息渠道。
-- **语音与会议**：发送按钮旁长按语音输入、单击会议录制；支持语音会议或视频会议，视频会议使用浏览器原生 `getDisplayMedia` 共享窗口 / 屏幕并接入麦克风，再由 `MediaRecorder` 保存视频，按需安装本地流式转写与声纹插件，结束后生成会议纪要。见 [语音与会议说明](docs/VOICE-MEETINGS.md)。
-
-跨平台构建覆盖 Windows 安装包、macOS PKG 和 Linux TUI / CLI 归档。媒体工具通过 FFmpeg 完成裁剪、拼接、转码与音轨处理；文档工具结合原生 OOXML、LibreOffice，以及 Windows Office / WPS 完成读写和格式转换。Windows 桌面自动化提供截图、窗口读取、鼠标与键盘操作。
-
-## 关注我
-
-<p>
-  <a href="https://space.bilibili.com/7318180" title="点击进入 B 站主页"><img src="https://img.shields.io/badge/B站-关注我的频道-00A1D6?style=for-the-badge" alt="B站：关注我的频道" /></a>
-  <a href="https://xhslink.cn/o/7exC6HysEHH" title="点击进入小红书主页"><img src="https://img.shields.io/badge/小红书-查看最新分享-FF2442?style=for-the-badge" alt="小红书：查看最新分享" /></a>
-  <a href="electron/assets/dyh.png" title="点击查看微信公众号二维码，扫码关注"><img src="https://img.shields.io/badge/微信公众号-扫码关注-07C160?style=for-the-badge" alt="微信公众号：点击查看二维码" /></a>
-  <a href="electron/assets/qq.png" title="点击查看 QQ 群二维码，扫码加入"><img src="https://img.shields.io/badge/QQ交流群-扫码加入-12B7F5?style=for-the-badge" alt="QQ交流群：点击查看二维码" /></a>
+<p align="center">
+  <img src="docs/task-recovery-ui.png" alt="魔力工作台主界面" width="960" />
 </p>
 
-## 本地开发
+<p align="center">
+  <strong>代码工作台（编辑 · Git · LSP）</strong> · <strong>TUI / CLI</strong> · <strong>多 Agent 编排</strong> · <strong>ACP 客户端接入</strong><br/>
+  <strong>个人助理</strong> · <strong>飞书 / 钉钉</strong> · 文档办公 · 内容创作 · 网页与应用操作
+</p>
 
-要求 **Node.js ≥ 22.12**、npm。Git、FFmpeg、LibreOffice 等按所开发的功能安装。
+## 它能做什么
 
-首次检出后，在仓库根目录执行：
+| 场景 | 你可以直接这样说 |
+| --- | --- |
+| 资料整理 | “整理这个文件夹，按主题归类，并生成一份带链接的目录。” |
+| 文档办公 | “读取这些材料，整理成一份 Word 报告，并检查标题和表格格式。” |
+| 表格数据 | “分析这份销售表，找出异常数据，补充公式并生成图表。” |
+| 演示文稿 | “把这份方案做成 10 页汇报 PPT，保留数据来源。” |
+| 写作创作 | “根据人物设定续写第三章，保持现有语气，并检查前后矛盾。” |
+| 图片与视频 | “按这份脚本整理分镜、素材清单和生成提示词，再输出成片方案。” |
+| 网页与应用 | “登录我已授权的应用，汇总今天的待办，并把结果写入项目文件。” |
+| 代码与网站 | “运行这个项目，修复首页在手机上的布局问题，用 LSP 检查诊断和引用，再验证主要交互。” |
+| 多 Agent 编排 | “并行检查登录、错误处理和测试缺口，主任务汇总证据并给出修复方案。” |
+| 个人助理 | “每天早上汇总我的日程和项目进展，整理成简报；有新消息时提醒我。” |
 
-~~~sh
+任务不只停在回答里。获得授权后，Agent 可以读取和修改工作目录、执行命令、调用 Skill 与插件，并把产物直接放回项目中。
+
+## 开始使用
+
+### 1. 安装并打开
+
+在 [Releases](https://github.com/ponysb/mlimli/releases) 中选择与你系统匹配的版本。Windows 与 macOS 安装包包含桌面端和 `mli` 命令；Linux 提供 TUI / CLI 压缩包。已安装版本可在 **设置 → 应用更新** 检查更新。
+
+如果 Releases 暂无可用安装包，可使用下方的[源码运行](#源码运行)。
+
+### 2. 配置模型
+
+打开 **设置 → 模型配置 → 添加模型**，填写：
+
+- 协议：OpenAI Chat Completions、OpenAI Responses 或 Anthropic Messages
+- API 地址、API Key 和模型名称
+- 可选的上下文窗口等参数
+
+你可以配置多个服务商和模型，之后在输入框下方随时切换。API 费用和数据处理规则由你选择的服务商决定。
+
+### 3. 添加工作目录
+
+点击工作台中的 **添加工作目录**，选择本次任务使用的文件夹。会话、项目记忆和任务产物都围绕这个目录组织，不同项目互不混用。
+
+### 4. 描述任务
+
+在输入框说明目标、已有材料、输出格式和验收标准，然后发送。写得越具体，结果越稳定，例如：
+
+> 阅读 `资料/` 下的文件，整理一份项目周报。输出 `本周周报.docx`，包含进展、风险、下周计划和负责人；缺失信息单独列出，不要猜测。完成后重新打开文件检查排版。
+
+默认的 **人工审批** 模式会在写文件、执行命令或进行敏感操作前询问你。需要连续执行时可切换权限模式，但建议先确认工作目录和任务范围。
+
+## 常用操作
+
+- **添加材料**：点击输入框左侧的 `+`，引用文件、文件夹、Skill 或插件；图片也可以直接拖入。
+- **查看结果**：在左侧切换“会话 / 文件”，预览 Agent 生成或修改的文件；工具过程可展开查看。
+- **继续修改**：直接在当前会话补充要求，例如“第二部分压缩到 300 字，表格不要改”。
+- **并行处理**：点击 **派发子任务**，让不同子 Agent 分别检索、制作或检查，主任务会汇总结果。
+- **多 Agent 编排**：主 Agent 可以按角色派发 explorer、researcher、reviewer 和 worker，异步并行执行、等待结果、追加指令或整组停止；每个子任务拥有独立上下文，结果回到主任务统一汇总。
+- **定时执行**：打开 **定时任务**，设置任务内容、运行时间和工作目录；每次运行都会生成独立会话。
+- **个人助理**：结合项目记忆、历史会话、定时任务和消息渠道，让 Agent 持续记住你的偏好、跟进事项并按时提醒。
+- **使用专家与 Skill**：在 **专家库** 选择适合的工作方式，Agent 会按任务需要读取 Skill，而不是把全部内容塞进上下文。
+- **操作已登录网站**：在 **应用台** 添加网站，亲自登录并确认授权，再让 Agent 读取或操作页面。
+- **连接飞书与钉钉**：在 **设置 → 连接渠道** 配置机器人凭据、工作区和群聊 / 用户白名单；可以在消息中发起任务、接收结果，并要求群聊必须 @机器人。
+- **语音与会议**：长按输入框旁的麦克风进行语音输入；单击可录制会议、实时转写并生成纪要。
+- **记住偏好**：在 **设置 → 记忆** 查看、编辑或停用已保存的偏好和项目经验。
+- **终端使用**：运行 `mli` 打开 TUI，或用 `mli exec "任务"` 执行一次性任务。完整命令见 [终端版说明](docs/TERMINAL.md)。
+
+## 主要功能
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### 代码工作流：编辑、LSP、终端
+
+代码编辑、内置终端、Git、LSP 诊断和代码导航放在同一个工作区。当前内置 TypeScript / JavaScript 与 Python 语言服务，支持定义、引用、悬停、实现、符号和调用层级查询；需要时可在本机安装语言服务器。
+
+</td>
+<td width="50%" valign="top">
+
+### 自己选择模型
+
+支持三种常见模型协议、自定义 API 地址和自有 API Key。多个模型可以按任务切换，不绑定单一服务商。
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### 任务会继续记住上下文
+
+会话保存在本地；项目记忆只用于当前工作目录，全局偏好可跨项目使用。记忆支持审核、编辑、停用和版本恢复。
+
+</td>
+<td width="50%" valign="top">
+
+### 多 Agent 编排
+
+主 Agent 根据任务拆分独立分支，子 Agent 使用独立上下文并行检索、编写和审查。你可以在面板查看状态、用量和结果，追加指令或停止任务，最后由主任务统一汇总。
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### 网站登录留在本机
+
+应用台使用隔离的内置浏览器保存登录状态。密码、验证码和 Cookie 不交给模型；Agent 只能在你确认授权后操作页面。
+
+</td>
+<td width="50%" valign="top">
+
+### 个人助理与消息渠道
+
+记忆、定时任务、语音会议和消息渠道组合成个人助理：在工作台里持续跟进项目，也可以通过飞书或钉钉接收提醒、发送任务和查看结果。
+
+</td>
+</tr>
+</table>
+
+### 终端、ACP 与外部客户端
+
+除了桌面工作台，还可以使用 `mli` TUI / CLI 在终端完成同一套任务，支持会话恢复、命令面板、权限审批和 JSON 输出。运行 `mli acp` 后，外部 ACP 客户端可以创建会话、发送提示、接收工具调用和处理审批；MLI 也能把任务委派给已配置的外部 ACP Agent。
+
+
+## 权限与数据
+
+- 文件、会话、记忆和应用登录默认保存在本机。
+- 任务需要的上下文会发送给你配置的模型或工具服务，请以相应服务的数据政策为准。
+- 人工审批模式下，只读操作可直接进行；文件写入、命令和敏感操作会请求确认。
+- Agent 命令使用工作区沙箱；沙箱不可用时会阻止命令执行。Windows 首次使用需在设置中安装原生沙箱。
+- 应用台不会向模型提供密码、验证码、Cookie 或浏览器存储；发布、删除、购买等操作仍需明确授权。
+- 第三方插件和 MCP 服务属于额外能力，安装前应确认来源和权限。
+
+详细边界见 [运行沙箱](docs/SANDBOX.md)、[应用台](docs/APP-CENTER.md) 和 [交付质量与验收](docs/CLIENT-QUALITY.md)。
+
+## 更多指南
+
+- [终端版与 CLI](docs/TERMINAL.md)
+- [LSP 语言服务](docs/LSP.md)
+- [语音输入与会议](docs/VOICE-MEETINGS.md)
+- [记忆](docs/MEMORY.md)
+- [子 Agent](docs/SUBAGENTS.md)
+- [ACP 接入](docs/ACP.md)
+- [插件兼容说明](PLUGIN-COMPATIBILITY.md)
+
+## 源码运行
+
+源码运行需要 **Node.js 22.12 或更高版本** 与 npm：
+
+```sh
 git clone https://github.com/ponysb/mlimli.git
 cd mlimli
 npm ci
 cp config.example.json config.json
 npm run build:web
-npm start
-~~~
+npm run electron
+```
 
-浏览器工作台默认位于 `http://127.0.0.1:3000`。示例配置提供 mock 模型，便于开发调试；在模型设置中填写 API 地址、API Key 和模型名称，即可接入自己的服务商。配置也可直接通过 `config.json` 管理。
+Windows PowerShell 可用 `Copy-Item config.example.json config.json` 代替 `cp`。浏览器模式运行 `npm start` 后访问 `http://127.0.0.1:3000`。构建安装包和参与贡献的说明见 [Windows 打包](docs/WINDOWS-PACKAGING.md)、[终端版说明](docs/TERMINAL.md) 与仓库中的开发文档。
 
-桌面开发使用 `npm run electron`，Electron 会启动或复用它管理的本地运行时。TUI 与 CLI 复用相同内核：
+## 交流与支持
 
-~~~sh
-npm run tui
-npm run cli -- --help
-npm run cli -- --version
-npm run cli -- exec --auto --json "Inspect the project and write a summary"
-~~~
+<p>
+  <a href="https://space.bilibili.com/7318180"><img src="https://img.shields.io/badge/B站-视频与教程-00A1D6?style=for-the-badge" alt="B站" /></a>
+  <a href="https://xhslink.cn/o/7exC6HysEHH"><img src="https://img.shields.io/badge/小红书-使用分享-FF2442?style=for-the-badge" alt="小红书" /></a>
+  <a href="electron/assets/dyh.png"><img src="https://img.shields.io/badge/微信公众号-扫码关注-07C160?style=for-the-badge" alt="微信公众号" /></a>
+  <a href="electron/assets/qq.png"><img src="https://img.shields.io/badge/QQ交流群-扫码加入-12B7F5?style=for-the-badge" alt="QQ交流群" /></a>
+</p>
 
-前端使用 Vite；修改 `react/` 后运行 `npm run build:web` 更新本地服务托管的 `dist/`。`npm run dev:web` 提供前端开发服务器，/api 请求需要代理到正在运行的本地 Agent。内核调试可使用 `node --watch server.mjs`。终端快捷键、数据目录和运行时共享规则见 [TUI / CLI 文档](docs/TERMINAL.md)。
+遇到问题或有功能建议，请提交 [Issue](https://github.com/ponysb/mlimli/issues)。
 
-### 配置与数据
+## 许可证
 
-- `config.json`：服务商、模型、上下文预算、权限与 MCP 配置；无凭据模板为 [config.example.json](config.example.json)。
-- `MLI_AGENT_PORT` / `MLI_AGENT_HOST`：本地 HTTP 服务地址；默认监听 `127.0.0.1`。
-- `MLI_AGENT_DATA_DIR`：运行时配置及用户插件目录；源码模式默认使用项目目录。
-- `MLI_AGENT_WORKSPACE`：工作目录；项目会话、记忆和权限记录保存在该目录的 `.agent/` 下。
-
-桌面与 TUI 共享配置、用户插件和项目会话。多项目并行可通过独立的 `MLI_AGENT_DATA_DIR` 组织配置与运行时，终端也支持使用 `--data-dir` 指定数据目录。
-
-## 工程结构
-
-~~~text
-core/          Agent 运行时、模型协议、会话、权限、LSP、MCP、渠道与调度
-server.mjs     本地 REST / SSE 服务与前端静态资源入口
-react/         React 工作台与 Vite 前端
-cli/           CLI、OpenTUI / Solid 终端界面与非交互执行
-electron/      Electron 主进程、预加载桥、运行时启动及安装脚本
-plugins/       执行工具、Skill、语言服务及渠道适配器
-scripts/       自检、构建与跨平台打包
-test/          客户端单元与集成测试
-docs/          终端、打包与插件开发说明
-~~~
-
-React、Electron 与终端通过本地 REST / SSE 接口访问运行时。`core/loop.mjs` 负责执行，`core/stream.mjs` 处理模型流，`core/session.mjs` 保存会话，`core/permissions.mjs` 执行授权，`core/plugins.mjs` 注册扩展。
-
-## 扩展
-
-### Skill 与专家
-
-Skill 用 Markdown 描述方法、接口和工作约束，适合接入新的 AIGC API 或复用创作、办公流程。运行时发现技能索引，Agent 按需读取完整指南。临时接入也可直接提供可访问的 API 文档链接，让 Agent 阅读接口并通过执行工具调用；复用时再沉淀为 Skill。
-
-~~~text
-skills/my-video-api/
-  SKILL.md
-  scripts/              可选的调用与结果处理脚本
-  references/           可选的 API 文档与参考材料
-~~~
-
-~~~markdown
----
-name: my-video-api
-description: 通过指定 API 创建视频任务、查询状态并下载结果。
----
-
-说明 API 地址、鉴权环境变量、请求与响应结构、异步任务状态和输出路径。
-记录失败处理与重试规则，使用环境变量管理凭据。
-~~~
-
-工作区支持 `skills/`、`.agent/skills/`、`.agents/skills/`；插件也可携带 `skills/`。专家提供场景方法与提示配置，适合在技能之上组织写作、编辑和分析方式。
-
-### 工具插件
-
-新执行能力放入 `plugins/<name>/`。推荐布局：
-
-~~~text
-plugins/example/
-  .codex-plugin/plugin.json
-  plugin.mjs
-  skills/               可选
-  assets/               可选
-~~~
-
-~~~json
-{
-  "name": "example",
-  "version": "0.2.0",
-  "description": "Example tool plugin",
-  "capabilities": []
-}
-~~~
-
-~~~js
-export default function setup(ctx) {
-  ctx.registerTool({
-    name: 'example_echo',
-    description: 'Return the supplied text.',
-    parameters: {
-      type: 'object',
-      properties: { text: { type: 'string' } },
-      required: ['text'],
-    },
-    permission: 'L0',
-    async run({ text }) {
-      return { content: String(text) };
-    },
-  });
-  ctx.registerCommand('/echo', {
-    description: 'Run the example tool',
-    template: 'Use example_echo to return: {{args}}',
-  });
-}
-~~~
-
-工具权限为 L0 只读、L1 工作区写入、L2 系统执行、L3 敏感操作。UI 提问使用 `ctx.requestUi`；执行钩子为 `authorize_tool_call`、`process_tool_result`、`on_event`，资源释放通过 `ctx.registerCleanup` 注册。插件加载或重载使用 `POST /api/plugins/reload`。
-
-插件还可通过 `ctx.registerLanguageServer` 和 `ctx.registerChannelAdapter` 扩展 LSP 与连接渠道。LSP 优先使用项目或系统已有服务，缺失时经授权安装到 Agent 缓存；当前内置 JavaScript / TypeScript 与 Python。已有实现可参考 `plugins/lsp`、`plugins/feishu`、`plugins/dingtalk`。
-
-用户插件放在运行时数据目录的 `plugins/` 下，同名用户插件优先于内置插件。旧版根 `plugin.json` 保持兼容；纯 Skill 插件可以省略 `plugin.mjs`。详见 [插件兼容说明](PLUGIN-COMPATIBILITY.md)。
-
-### MCP
-
-在 `config.json` 的 `mcp.servers` 中声明 stdio 服务：
-
-~~~json
-{
-  "mcp": {
-    "servers": [
-      {
-        "name": "my-service",
-        "command": "node",
-        "args": ["/absolute/path/to/mcp-server.mjs"]
-      }
-    ]
-  }
-}
-~~~
-
-运行时支持 MCP 工具发现、描述与调用。配置服务进程和鉴权信息后，可将外部数据源与工具接入现有 Agent 工作流。
-
-## 构建与部署
-
-~~~sh
-# 本地浏览器客户端：Node 托管 Agent 与已构建的前端
-npm run build:web
-npm start
-
-# Windows 现代版与兼容版
-npm run dist:win
-npm run dist:win:modern
-npm run dist:win:legacy
-
-# macOS PKG，需在 macOS 构建
-npm run dist:mac -- --arch arm64
-
-# Linux TUI / CLI，含独立 Node 运行时
-npm run dist:linux -- --arch x64
-~~~
-
-产物位于 `release/`，版本由根 `package.json` 统一提供。Windows 打包包含构建与启动验证；现代版用于 Windows 10 / 11 x64，兼容版用于 Win7 SP1 / ia32 环境。具体依赖与验证见 [Windows 打包说明](docs/WINDOWS-PACKAGING.md)；其他终端包说明见 [TUI / CLI 文档](docs/TERMINAL.md)。
-
-本地运行采用 loopback 监听，远程开发可通过 SSH 端口转发访问工作台。
-
-## 测试与贡献
-
-~~~sh
-npm test
-npm run check
-npm run test:tui
-npm run build:web
-~~~
-
-欢迎通过 Issue 和 PR 参与开发。提交时提供平台、复现方式、修改范围与验证结果；运行时、协议和插件接口变更补充相关测试，UI 变更覆盖流式输出、审批与会话切换。开发配置与凭据通过本地配置文件或环境变量管理。
-
-## 致谢与许可
-
-感谢 [OpenCode](https://github.com/anomalyco/opencode)、[Claude Code](https://github.com/anthropics/claude-code)、[Pi Agent](https://github.com/earendil-works/pi) 与 [Cherry Studio](https://github.com/CherryHQ/cherry-studio)，这些项目为 Agent 工程设计、交互体验与扩展机制提供了参考与启发。
-
-感谢以下主要开源项目及其贡献者，为工作台提供了坚实的基础：
-
-- **界面与构建**：[React](https://react.dev/)、[Vite](https://vite.dev/) 与 [esbuild](https://github.com/evanw/esbuild)。
-- **桌面与打包**：[Electron](https://github.com/electron/electron) 与 [electron-builder](https://github.com/electron-userland/electron-builder)。
-- **终端交互**：[OpenTUI](https://github.com/anomalyco/opentui)、[SolidJS](https://github.com/solidjs/solid) 与 [Terminal Kit](https://github.com/cronvel/terminal-kit)。
-- **白板创作**：[Excalidraw](https://github.com/excalidraw/excalidraw)。
-- **代码编辑与终端面板**：[CodeMirror](https://github.com/codemirror/dev)、[React CodeMirror](https://github.com/uiwjs/react-codemirror) 与 [xterm.js](https://github.com/xtermjs/xterm.js)。
-- **Markdown 与 PDF**：[Streamdown](https://github.com/vercel/streamdown) 与 [PDF.js](https://github.com/mozilla/pdf.js)。
-- **图标与二维码**：[Lucide](https://github.com/lucide-icons/lucide) 与 [qrcode.react](https://github.com/zpao/qrcode.react)。
-- **消息渠道**：[飞书 / Lark Node SDK](https://github.com/larksuite/node-sdk) 与 [钉钉 Stream SDK](https://github.com/open-dingtalk/dingtalk-stream-sdk-nodejs)。
-- **媒体与文档工具**：[FFmpeg](https://ffmpeg.org/) 与 [LibreOffice](https://www.libreoffice.org/)。
-
-内置第三方 Skill、插件与素材保留各自的许可证及通知。
-
-项目代码采用 [Apache-2.0](LICENSE)；第三方组件以各自许可为准。
+魔力工作台基于 [Apache-2.0](LICENSE) 许可证开源。内置第三方 Skill、插件与素材保留各自的许可证及通知。

@@ -37,6 +37,10 @@ export async function main(args = process.argv.slice(2)) {
     if (abort.signal.aborted) { process.exitCode = 130; return; }
     if (['tui', 'exec', 'serve'].includes(options.command)) await client.useWorkspace(options.cwd);
     if (options.command === 'exec') process.exitCode = await executePrompt(client, options, { signal: abort.signal });
+    else if (options.command === 'acp') {
+      const { runAcp } = await import('./acp.mjs');
+      await runAcp(client, { signal: abort.signal });
+    }
     else if (options.command === 'tui') {
       if (modernTui) {
         const { runModernTui } = await import('./modern-launcher.mjs');

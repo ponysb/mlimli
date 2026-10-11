@@ -10,6 +10,7 @@ export const HELP = `MLI Agent
   mli login
   mli logout
   mli serve
+  mli acp [--cwd PATH]
 
   --data-dir PATH   User configuration directory
   --connect URL     Connect to an existing loopback runtime
@@ -19,7 +20,7 @@ export const HELP = `MLI Agent
 
 export function parseOptions(args, cwd = process.cwd()) {
   const options = { command: 'tui', cwd: path.resolve(cwd), positional: [], json: false, auto: false };
-  const commands = new Set(['exec', 'models', 'model', 'config', 'login', 'logout', 'serve']);
+  const commands = new Set(['exec', 'models', 'model', 'config', 'login', 'logout', 'serve', 'acp']);
   for (let index = 0; index < args.length; index++) {
     const value = args[index];
     if (value === '--') { options.positional.push(...args.slice(index + 1)); break; }
@@ -42,6 +43,7 @@ export function parseOptions(args, cwd = process.cwd()) {
   }
   if (options.command === 'exec' && options.resume === true) throw new Error('mli exec --resume requires a session ID');
   if (options.command !== 'exec' && (options.json || options.auto)) throw new Error('--json and --auto are only available for mli exec');
+  if (options.command === 'acp' && (options.resume || options.positional.length)) throw new Error('mli acp accepts no prompt or --resume; the ACP client manages sessions');
   return options;
 }
 

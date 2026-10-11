@@ -8,8 +8,9 @@
 .composer-reference button { display: grid; flex: 0 0 18px; width: 18px; height: 18px; padding: 0; place-items: center; border-radius: 3px; background: transparent; }
 .composer-reference button:hover { background: #dce9e1; }
 .composer-references.read-only { padding: 0; margin: 0 0 8px; }
-.message-entry-actions { display: flex; justify-content: flex-end; gap: 7px; margin: -6px 0 18px; padding-left: 42px; }
-.message-entry-actions button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 1px solid var(--line, #e1e4e8); border-radius: 6px; background: #fff; color: var(--muted, #737b85); }
+.message-entry-actions { display: flex; justify-content: flex-end; gap: 4px; margin: 2px 0 10px; }
+.message-entry-actions button { display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 1px solid var(--line, #e1e4e8); border-radius: 6px; background: #fff; color: var(--muted, #737b85); }
+.message-entry-actions button svg { width: 10px; height: 10px; }
 .message-entry-actions button:hover:not(:disabled) { color: #287856; background: #eff6f2; }
 .message-entry-actions .delete-entry:hover:not(:disabled) { color: #b54040; background: #fff0f0; }
 .message-entry-actions button:disabled { opacity: .4; }

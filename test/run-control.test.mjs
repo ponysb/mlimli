@@ -10,7 +10,7 @@ import { Session } from '../core/session.mjs';
 import { createRunContext, withRunContext } from '../core/run-context.mjs';
 import { getWorkspaceRoot, setWorkspaceRoot } from '../core/paths.mjs';
 import { buildSystemPrompt } from '../core/prompts.mjs';
-import { buildRequest, setConfig, resolveModelSelection } from '../core/llm.mjs';
+import { buildRequest, sessionRoutingKey, setConfig, resolveModelSelection } from '../core/llm.mjs';
 import { loadAll, disposePlugins, getTool, executeTool } from '../core/plugins.mjs';
 import { runTurn, setLoopConfig, abortRun } from '../core/loop.mjs';
 import { saveTaskCheckpoint, taskRecoveryState } from '../core/task-checkpoint.mjs';
@@ -145,6 +145,21 @@ test('输出预算使用对应协议字段；缺省不额外限制、不注入�
     assert.equal(body[field], 2048); assert.equal(body.reasoning, undefined);
   }
   assert.equal(buildRequest({ protocol: 'openai-chat', baseUrl: 'http://localhost' }, { model: 'deepseek' }, [], '', [], true).body.max_tokens, undefined);
+});
+
+test('会话标识按协议写入缓存路由字段，并规范化异常标识', () => {
+  const sessionId = 'session-123';
+  const request = protocol => buildRequest(
+    { protocol, baseUrl: 'http://localhost' },
+    { model: 'fixture' },
+    [{ role: 'user', content: 'hi' }], '', [], false, undefined, sessionId,
+  ).body;
+  assert.equal(request('openai-chat').prompt_cache_key, sessionId);
+  assert.equal(request('openai-responses').prompt_cache_key, sessionId);
+  assert.equal(request('anthropic').metadata.user_id, sessionId);
+  assert.equal(sessionRoutingKey(''), '');
+  assert.match(sessionRoutingKey('含空格的会话'.repeat(20)), /^[a-f0-9]{64}$/);
+  assert.equal(sessionRoutingKey('含空格的会话'.repeat(20)), sessionRoutingKey('含空格的会话'.repeat(20)));
 });
 
 async function loopFixture(t, respond, { maxSteps = 12, maxDurationMs = 20000, quality = false, runControl, allowedTools = ['read_file', 'write_file', 'read_tool_output'] } = {}) {

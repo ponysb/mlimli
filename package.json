@@ -1,6 +1,6 @@
 {
   "name": "mli-agent",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "魔力工作台：本地 Agent 运行时、React 工作台、Electron 桌面入口与可扩展插件系统",
   "type": "module",
   "main": "electron/main.cjs",
@@ -19,7 +19,7 @@
     "build:web": "vite build",
     "build:web:legacy": "vite build --mode legacy",
     "preelectron": "node node_modules/electron/install.js",
-    "electron": "node node_modules/electron/cli.js electron/main.cjs",
+    "electron": "node scripts/start-electron-dev.mjs",
     "export:client": "node scripts/export-client.mjs",
     "pack:win": "node scripts/package-win.mjs --modern --dir",
     "dist:win": "node scripts/package-win.mjs",
@@ -43,6 +43,7 @@
     "url": "https://github.com/ponysb/mlimli/issues"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "1.8.0",
     "@anthropic-ai/sandbox-runtime": "0.0.78",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.12",
@@ -68,7 +69,9 @@
     "streamdown": "^2.6.0",
     "terminal-kit": "^3.1.4",
     "vite": "latest",
-    "xterm-readline": "^1.2.2"
+    "xterm-readline": "^1.2.2",
+    "yarn": "^1.22.22",
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "@opentui/core": "0.4.5",

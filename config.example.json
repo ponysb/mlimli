@@ -74,6 +74,9 @@
       "currency": "CNY"
     }
   },
+  "acp": {
+    "agents": []
+  },
   "mcp": {
     "servers": []
   }

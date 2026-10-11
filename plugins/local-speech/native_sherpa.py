@@ -122,8 +122,8 @@ class OfflineRecognizer(Handle):
 class VadModelConfig:
     def __init__(self):
         self.sample_rate = 16000
-        self.silero_vad = SimpleNamespace(model='', threshold=0.5, min_silence_duration=0.45,
-                                          min_speech_duration=0.2, max_speech_duration=12)
+        self.silero_vad = SimpleNamespace(model='', threshold=0.5, min_silence_duration=0.75,
+                                          min_speech_duration=0.2, max_speech_duration=24)
 
 
 class VoiceActivityDetector(Handle):

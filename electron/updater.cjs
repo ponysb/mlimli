@@ -18,12 +18,11 @@ function createUpdater(options, { development, currentVersion }) {
   return updater;
 }
 
-function registerDesktopUpdater({ app, ipcMain, getWindow, baseUrl, beforeInstall, platform = process.platform, arch = process.arch, portable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE), factory = createUpdater, logger = console }) {
+function registerDesktopUpdater({ app, ipcMain, getWindow, baseUrl, beforeInstall, development = !app.isPackaged, platform = process.platform, arch = process.arch, portable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE), factory = createUpdater, logger = console }) {
   const supported = platform === 'win32' && !portable && ['x64', 'ia32'].includes(arch);
-  const development = !app.isPackaged;
   const canInstall = supported && !development;
   const target = arch === 'ia32' ? 'windows-legacy-ia32' : 'windows-x64';
-  const currentVersion = app.isPackaged ? app.getVersion() : require('../package.json').version;
+  const currentVersion = development ? require('../package.json').version : app.getVersion();
   let state = { status: 'idle', currentVersion, version: null, releaseNotes: '', percent: 0, message: '', mode: development ? 'development' : 'installed', canInstall };
   let updater;
   let operation;

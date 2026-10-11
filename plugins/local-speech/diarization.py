@@ -5,6 +5,7 @@ sentence as a voiceprint, or reset ASR merely because a speaker might change.
 """
 from collections import OrderedDict
 import numpy as np
+from speech_policy import fill_ambiguous_speakers
 
 SAMPLE_RATE = 16000
 WINDOW = 2 * SAMPLE_RATE
@@ -105,7 +106,7 @@ class SpeakerDiarizer:
         if offsets[-1] != len(audio) - WINDOW:
             offsets.append(len(audio) - WINDOW)
         records = [self.observe(audio[offset:offset + WINDOW], start + offset) for offset in offsets]
-        labels = [self.speaker(record) for record in records]
+        labels = fill_ambiguous_speakers([self.speaker(record) for record in records])
         # Reject isolated flips, including short timbre changes and mixed windows.
         original = labels[:]
         for i in range(1, len(labels) - 1):

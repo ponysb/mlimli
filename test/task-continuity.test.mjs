@@ -144,8 +144,12 @@ test('检查点重载保留目标、未知副作用、句柄、用量和已消�
 
 test('三种非流模型协议的截断摘要被拒绝，完整摘要正常返回', async t => {
   const { run, session } = fixture(t);
-  let payload;
-  const provider = http.createServer((req, res) => { req.resume(); res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(payload)); });
+  let payload, received;
+  const provider = http.createServer(async (req, res) => {
+    let raw = ''; for await (const chunk of req) raw += chunk;
+    received = { headers: req.headers, body: JSON.parse(raw) };
+    res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(payload));
+  });
   await new Promise(resolve => provider.listen(0, '127.0.0.1', resolve));
   t.after(async () => { provider.closeAllConnections(); await new Promise(resolve => provider.close(resolve)); });
   for (const [protocol, incomplete, complete] of [
@@ -155,6 +159,9 @@ test('三种非流模型协议的截断摘要被拒绝，完整摘要正常返�
   ]) {
     const request = { sessionId: session.id, messages: [{ role: 'user', content: '摘要' }], requireComplete: true, modelSelection: { provider: { protocol, baseUrl: `http://127.0.0.1:${provider.address().port}` }, model: { model: 'fixture' } } };
     payload = incomplete; await assert.rejects(run(() => completeOnce(request)), /不完整/);
+    assert.equal(received.headers['x-session-id'], session.id);
+    if (protocol === 'anthropic') assert.equal(received.body.metadata.user_id, session.id);
+    else assert.equal(received.body.prompt_cache_key, session.id);
     payload = complete; assert.equal(await run(() => completeOnce(request)), summary);
   }
 });

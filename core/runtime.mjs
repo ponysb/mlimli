@@ -22,6 +22,7 @@ import { initializeSandbox, hasActiveSandboxCommands, stopAllSandboxCommands } f
 import { initializeChannels, setChannelRunner, disconnectAll as disconnectChannels, send as sendChannel, getChannelMapping } from './channels.mjs';
 import { taskRecoveryState } from './task-checkpoint.mjs';
 import { isRunning } from './loop.mjs';
+import { runExternalAgent, stopExternalAgent } from './acp-client.mjs';
 
 export const CONFIG_FILE = path.join(DATA_ROOT, 'config.json');
 export const activeSequences = new Set();
@@ -111,7 +112,8 @@ async function runBoundSequence(session, text, attachments, options) {
   const initialEntryCount = session.entries().length;
   emit('session_run_started', { sessionId: session.id });
   try {
-    await runTurn(session, text, attachments, options);
+    if (getRunContext()?.externalAgentId) await runExternalAgent(session, text);
+    else await runTurn(session, text, attachments, options);
     while (session.queued().length) {
       if (session.chain().findLast(entry => entry.type === 'turn_end')?.reason !== 'done') break;
       const next = session.queued()[0];
@@ -143,7 +145,7 @@ export function stopSession(id) {
 }
 
 function stopSingleSession(id) {
-  const stopped = abortRun(id);
+  const stopped = stopExternalAgent(id) || abortRun(id);
   cancelRequests(id);
   cancelUiRequests(id);
   return stopped;

@@ -41,9 +41,8 @@ export function MarketingCard({ data, onClick }) {
   if (dismissed) return null;
   return <div className="magic-activity-card">
     <button className="magic-card-main" onClick={onClick}>
-      <span className="magic-card-icon"><Gift size={20}/></span>
-      <span><strong>魔力加油站</strong><small>{data.checkinEnabled ? data.checkedIn ? '今日已签到 · 明天继续' : <>今日可领 <b>{number(data.checkinReward)}</b> 魔力值</> : '邀请好友，双方得魔力值'}</small></span>
-      <span className="magic-card-arrow">↗</span>
+      <span className="magic-card-copy"><strong>魔力加油站</strong><small>{data.checkinEnabled ? data.checkedIn ? '今日奖励已到账' : <>今日可领 <b>{number(data.checkinReward)}</b> 魔力值</> : '邀请好友，双方得魔力值'}</small></span>
+      <span className={`magic-card-status ${data.checkedIn ? 'claimed' : ''}`}>{data.checkedIn ? '今日已领' : '去领取'}</span>
     </button>
     <button className="magic-card-close" title="关闭活动提示" aria-label="关闭活动提示" onClick={() => setDismissed(true)}><X size={13}/></button>
   </div>;

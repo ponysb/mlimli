@@ -169,7 +169,8 @@ export default function VoiceInput({ workspace, onText, onSummary, onOpenSetting
     if (nextKind === 'dictation') { setOpen(false); setMeetingPage(false); }
     const recordingCallbacks = {
       onPcm: data => {
-        if (current.pcm.length >= 120) { setError('转写速度落后超过 30 秒，已停止录制以保留数据'); finish(); return; }
+        const pcmQueueLimit = current.kind === 'meeting' && current.pcmSeq === 0 ? 1200 : 120;
+        if (current.pcm.length >= pcmQueueLimit) { setError(`转写速度落后超过${current.kind === 'meeting' ? ' 5 分钟' : ' 30 秒'}，已停止录制以保留数据`); finish(); return; }
         current.pcm.push(data); if (!current.pcmError) drainPcm();
       },
       onMedia: blob => {
@@ -180,6 +181,11 @@ export default function VoiceInput({ workspace, onText, onSummary, onOpenSetting
         if (current.phase === 'recording' && current.media.reduce((size, item) => size + item.size, 0) > 128 * 1024 * 1024) { setError('未保存的录制达到 128 MB，已停止录制，请重试保存'); finish(); }
       },
       onEnded: () => finish(), onError: e => { setError(e.message); finish(); },
+      onInterrupted: () => {
+        current.autoSummary = false;
+        if (alive.current) setNotice('系统休眠导致录制中断，正在保存已录制内容；唤醒后可重新开始会议。');
+        finish();
+      },
       onPreview: stream => { if (alive.current) setPreviewStream(stream); },
     };
     if (nextKind === 'meeting') microphone.current.clearIdle();
@@ -237,7 +243,7 @@ export default function VoiceInput({ workspace, onText, onSummary, onOpenSetting
     const current = state.current;
     if (current.phase === 'starting') {
       if (current.kind === 'dictation') { current.stopRequested = true; setStopRequested(true); current.captureStop ||= current.capture?.then(() => current.browser.stop()).catch(() => {}); return; }
-      current.cancelled = true; await current.browser?.stop(); return;
+      current.cancelled = true; await current.browser?.stop().catch(() => {}); return;
     }
     if (!['recording', 'save-error'].includes(current.phase)) return;
     phaseTo('stopping');
@@ -336,7 +342,7 @@ export default function VoiceInput({ workspace, onText, onSummary, onOpenSetting
   const microphoneStandby = !busy && microphoneState === 'ready';
   const feedback = loading ? (!captureReady ? '准备麦克风…' : stopRequested ? '加载模型并确认文字…' : '加载语音模型… · 声音已采集') : phase === 'stopping' ? '确认文字中…' : `${kind === 'dictation' ? '语音输入' : '会议录制'} · ${clock(elapsed)}`;
   const speakers = [...new Set([...(meeting?.segments || []).map(s => s.speaker), ...Object.keys(meeting?.participants || {}), ...(speaker ? [speaker] : [])])];
-  const button = <button type="button" className={`voice-button ${busy ? 'active' : ''} ${microphoneStandby ? 'prepared' : ''}`} aria-label="语音输入与会议录制" aria-describedby="voice-button-tooltip" aria-busy={loading || microphonePreparing || status?.dictation?.state === 'loading'} onPointerEnter={prepareMicrophone} onFocus={prepareMicrophone} disabled={!workspace || openingMeeting || summarizing} onPointerDown={down} onPointerUp={() => up()} onPointerCancel={() => up(true)} onLostPointerCapture={() => up(true)} onClick={event => { if (hold.current.pointerClick && event.detail !== 0) { hold.current.pointerClick = false; return; } if (event.detail === 0 && !hold.current.pressed) showMeeting(); }} onKeyDown={event => { if (event.key === ' ' && !event.repeat) { event.preventDefault(); hold.current.pressed = true; hold.current.long = true; hold.current.pointerClick = false; start('dictation'); } }} onKeyUp={event => { if (event.key === ' ') { event.preventDefault(); up(); } }}>{loading || microphonePreparing || status?.dictation?.state === 'loading' ? <LoaderCircle size={18} className="spin"/> : <Mic size={18}/>}</button>;
+  const button = <button type="button" className={`voice-button ${busy ? 'active' : ''} ${microphoneStandby ? 'prepared' : ''}`} aria-label="语音输入与会议录制" aria-describedby="voice-button-tooltip" aria-busy={loading || microphonePreparing || status?.dictation?.state === 'loading'} onPointerEnter={prepareMicrophone} onFocus={prepareMicrophone} disabled={!workspace || openingMeeting || summarizing} onPointerDown={down} onPointerUp={() => up()} onPointerCancel={() => up(true)} onLostPointerCapture={() => up(true)} onClick={event => { if (hold.current.pointerClick && event.detail !== 0) { hold.current.pointerClick = false; return; } if (event.detail === 0 && !hold.current.pressed) showMeeting(); }} onKeyDown={event => { if (event.key === ' ' && !event.repeat) { event.preventDefault(); hold.current.pressed = true; hold.current.long = true; hold.current.pointerClick = false; start('dictation'); } }} onKeyUp={event => { if (event.key === ' ') { event.preventDefault(); up(); } }}>{loading || microphonePreparing || status?.dictation?.state === 'loading' ? <LoaderCircle size={16} className="spin"/> : <Mic size={16}/>}</button>;
   const voiceControl = <span className="voice-button-wrap" data-busy={busy}>{button}<span id="voice-button-tooltip" className="voice-button-tooltip" role="tooltip"><span>长按：语音输入</span><span>点击：会议录制</span></span></span>;
   const closeMeeting = () => { setMeetingPage(false); setOpen(false); };
   const standby = (microphoneStandby || microphonePreparing) && !open && !meetingPage && !error && <div className="voice-live voice-standby" role="status">{microphonePreparing && <LoaderCircle size={14} className="spin"/>}<span className="voice-status-label">{microphonePreparing ? '准备麦克风…' : '麦克风待命'}</span><button title="关闭麦克风" aria-label="关闭待命麦克风" onClick={() => microphone.current.clearIdle()}><X size={14}/></button></div>;

@@ -152,7 +152,7 @@ export function windowsBuildConfig(stage, electronDist = path.join(ROOT, 'node_m
     publish: { provider: 'generic', url: updateFeedUrl(stage.updateServerUrl || 'https://updates.invalid', legacy ? 'windows-legacy-ia32' : 'windows-x64') },
     electronVersion: legacy ? stage.manifest.devDependencies['electron-legacy'].split('@').at(-1) : stage.manifest.devDependencies.electron,
     electronDist,
-    win: { icon: path.join(ROOT, 'electron', 'assets', 'icon.png'), target: ['nsis', 'portable'] },
+    win: { icon: path.join(ROOT, 'electron', 'assets', 'icon.ico'), target: ['nsis', 'portable'] },
     nsis: {
       oneClick: false,
       perMachine: false,

@@ -8,7 +8,7 @@ const example = fs.readFileSync(new URL('../config.example.json', import.meta.ur
 test('provider forms and connection details do not offer environment-variable configuration', () => {
   const source = fs.readFileSync(new URL('../react/src/main.jsx', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /apiKeyEnv|环境变量|OPENAI_API_KEY/);
-  assert.match(source, /<label>API Key<input type="password"/);
+  assert.match(source, /<label>\s*API Key\s*<input\s+type="password"/);
   assert.match(source, /<small>API 地址<\/small>/);
   assert.match(source, /<small>API Key<\/small>/);
   assert.ok(JSON.parse(example).providers.every(provider => !Object.hasOwn(provider, 'apiKeyEnv')));

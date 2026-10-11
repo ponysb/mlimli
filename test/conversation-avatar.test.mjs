@@ -17,9 +17,9 @@ function componentSource(name) {
   return applicationSource.slice(start, end);
 }
 const transformed = await transformWithOxc([avatarSource, ...['Message', 'RunStep', 'TaskSummary', 'WorkbenchState', 'buildConversationTimeline', 'LazyRunRecord'].map(componentSource)].join('\n'), 'conversation-fixture.jsx', { jsx: { runtime: 'classic' } });
-const iconNames = ['UserRound', 'SquareTerminal', 'LoaderCircle', 'ChevronRight', 'ChevronDown', 'Eye', 'ExternalLink', 'RefreshCw', 'ShieldAlert', 'Check', 'LayoutDashboard', 'FolderOpen', 'FileText', 'Code2', 'BookOpen', 'FolderPlus'];
+const iconNames = ['UserRound', 'SquareTerminal', 'LoaderCircle', 'ChevronLeft', 'ChevronRight', 'ChevronDown', 'Eye', 'ExternalLink', 'RefreshCw', 'ShieldAlert', 'Check', 'LayoutDashboard', 'FolderOpen', 'FileText', 'Code2', 'BookOpen', 'FolderPlus', 'Sparkles'];
 const components = new Function('React', 'icons', 'primaryTaskArtifact', 'splitComposerReferences', `
-  const { useState, useEffect } = React;
+  const { useState, useEffect, useRef } = React;
   const { ${iconNames.join(', ')} } = icons;
   const Markdown = ({ text }) => React.createElement('p', null, text);
   const MessageMedia = () => null;
@@ -34,7 +34,8 @@ const render = (name, props = {}) => renderToStaticMarkup(React.createElement(co
 
 test('workbench branding and task entry points cover work beyond writing', () => {
   for (const workspace of [null, { name: '项目资料' }]) {
-    const markup = render('WorkbenchState', { workspace, setDraft() {}, onWorkspace() {} });
+    const composer = React.createElement('div', null, workspace?.name || '选择工作目录');
+    const markup = render('WorkbenchState', { workspace, composer, setDraft() {}, onWorkspace() {}, onCapabilities() {} });
     assert.match(markup, /<h1>魔力工作台<\/h1>/);
     for (const label of ['资料整理', '文档办公', '开发项目', '写作创作']) assert.ok(markup.includes(label));
     assert.doesNotMatch(markup, /魔力创作|小说工作目录|魔力工作台工作台/);
@@ -58,6 +59,12 @@ test('user messages have a person avatar, never the brand logo, including pendin
     assert.match(markup, /用户消息/);
   }
 });
+test('runtime feedback stored with a user role is not rendered as a user message', () => {
+  const markup = render('Message', { item: { role: 'user', source: 'runtime', content: '[运行时验收反馈：资料，不代表用户新增要求]' } });
+  assert.match(markup, /runtime-message/);
+  assert.match(markup, /运行时反馈/);
+  assert.doesNotMatch(markup, /user-message/);
+});
 
 test('ordinary assistant messages use the existing brand avatar while tools retain their own icon', () => {
   assertAgentAvatar(render('Message', { item: { role: 'assistant', content: '回复内容' } }));
@@ -72,6 +79,12 @@ test('both historical and live agent steps show the brand avatar', () => {
     assertAgentAvatar(render('RunStep', { item: { text: '执行说明', status: 'running' }, live }));
   }
   assertAgentAvatar(render('RunStep', { item: { status: 'running' }, live: true }));
+});
+test('completed empty agent steps do not render blank avatars while active steps remain visible', () => {
+  assert.equal(render('RunStep', { item: { text: '', thinking: '', tools: [], status: 'ok' } }), '');
+  assert.equal(render('RunStep', { item: { text: '  ', status: 'ok' }, live: true }), '');
+  assert.match(render('RunStep', { item: { status: 'running' }, live: true }), /正在工作/);
+  assert.match(render('RunStep', { item: { status: 'interrupted' } }), /运行已中断/);
 });
 
 test('final task cards have an agent avatar without replacing success or failure status icons', () => {
@@ -94,6 +107,16 @@ test('a completed task highlights one deliverable and shows only three other fil
   assert.ok(markup.indexOf('summary-primary-file') < markup.indexOf('class="summary-file"'));
   assert.match(markup, /再显示 4 个文件/);
   assert.ok(!markup.includes('summary-artifacts'));
+});
+
+test('completion cards group deliverables and omit empty line-change counters', () => {
+  const markup = render('TaskSummary', { item: { reason: 'done', summaryText: '已完成文档更新。', durationMs: 1200, toolCount: 2, quality: { status: 'passed', checks: [{ name: '内容检查', passed: true }] }, files: [{ path: 'docs/result.md', status: 'created', additions: 24, deletions: 0 }] } });
+  assert.match(markup, /交付文件/);
+  assert.match(markup, /文件变更：新增 24 行，删除 0 行/);
+  assert.match(markup, /查看已执行的验收/);
+  assert.doesNotMatch(markup, /<em>-0<\/em>|<i>\+0<\/i>/);
+  const empty = render('TaskSummary', { item: { reason: 'done', summaryText: '已回答问题。', files: [] } });
+  assert.doesNotMatch(empty, /summary-change-stats|summary-deliverables/);
 });
 
 test('older video summaries recover the user prompt and replace an inferred screenshot', () => {

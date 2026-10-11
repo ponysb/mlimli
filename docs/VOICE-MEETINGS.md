@@ -12,7 +12,7 @@
 
 - 实时预览：[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) 的 `sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30`，中文流式识别，CPU 推理。预览文字尚未定稿，英文预览可能不完整。
 - 最终转写：采用用户所选的 Paraformer、SenseVoice 或 Qwen3-ASR。每段结束后对 VAD 检出的实际音频重新识别，使用该结果保存会议逐字稿与生成纪要；64 位长按中文输入直接使用流式 Zipformer，避免加载会议模型。实时预览使用中文 Zipformer，不等于所选最终模型；其他语言以最终结果为准。32 位环境关闭预览节省内存。
-- VAD：[Silero VAD](https://github.com/snakers4/silero-vad)，判断发言与静音，约 450 毫秒静音后提交一段文字；程序明确在连续发言约 12 秒时刷新并提交，防止一直积累预览。VAD 自身的 `max_speech_duration` 只调整切段阈值，不能保证强制切段。实时 ASR 仅接收检出的语音，包含起始预留音频；结束时通过 VAD 刷新尾句，纯静音不调用最终转写。
+- VAD：[Silero VAD](https://github.com/snakers4/silero-vad)，判断发言与静音，约 750 毫秒静音后提交一段最终文字，减少正常思考停顿造成的碎句；程序明确在连续发言约 24 秒时刷新并提交，给最终模型更多上下文，同时防止一直积累。实时 Zipformer 预览仍持续更新，不需要等待最终切句。VAD 自身的 `max_speech_duration` 只调整切段阈值，不能保证强制切段。实时 ASR 仅接收检出的语音，包含起始预留音频；结束时通过 VAD 刷新尾句，纯静音不调用最终转写。
 - 说话人：[3D-Speaker](https://github.com/modelscope/3D-Speaker) 的中英 CAM++ 声纹模型，使用约两秒声音窗口、每秒检测一次并确认新声纹。VAD 不负责区分身份。检测到换人后，对各人的声音分别转写；没有静音的换人也能检测。说话人编号按会议分别生成，用户可填写对应姓名、职务。
 
 64 位环境的模型文件首次下载量约：Paraformer 391 MB、SenseVoice 328 MB、Qwen 0.6B 1041 MB、Qwen 1.7B 3662 MB，另需运行环境。32 位环境省略 133 MB 中文预览。共享 VAD、声纹和预览文件只需下载一次。安装时查询官方资源、检查大小，有官方 SHA-256 时同时核验。安装完成前实际加载并解码。首次安装需要访问 GitHub、PyPI、Python 发行下载地址；1.7B 还访问 Hugging Face 和 PyTorch。失败可重试，已完成的下载复用。运行中无需联网转写。

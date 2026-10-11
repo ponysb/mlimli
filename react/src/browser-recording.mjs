@@ -49,8 +49,8 @@ export function requestUserMedia(constraints, timeoutMs = 15000) {
 }
 
 export class BrowserRecording {
-  constructor({ mode, cameraStream, recordMedia = true, onPcm, onMedia, onEnded, onError, onPreview }) {
-    Object.assign(this, { mode, cameraStream, recordMedia, onPcm, onMedia, onEnded, onError, onPreview });
+  constructor({ mode, cameraStream, recordMedia = true, onPcm, onMedia, onEnded, onError, onPreview, onInterrupted }) {
+    Object.assign(this, { mode, cameraStream, recordMedia, onPcm, onMedia, onEnded, onError, onPreview, onInterrupted });
     this.streams = []; this.nodes = []; this.stopped = false; this.portTasks = new Map(); this.portSequence = 0;
     if (cameraStream) this.streams.push(cameraStream);
   }
@@ -112,6 +112,13 @@ export class BrowserRecording {
     });
   }
   async acquire() {
+    this.removePowerListener ||= globalThis.window?.desktop?.onSystemPowerChanged?.(state => {
+      if (!['suspend', 'resume'].includes(state) || this.stopped || this.interrupted) return;
+      this.interrupted = true;
+      this.stop().catch(error => this.onError?.(error));
+      if (this.onInterrupted) this.onInterrupted();
+      else this.onEnded?.();
+    });
     if (!navigator.mediaDevices?.getUserMedia || (this.recordMedia && !globalThis.MediaRecorder)) throw new Error('此浏览器不支持录制，请使用桌面端或 HTTPS / localhost');
     this.prepareAudio();
     this.resuming = this.context.resume(); this.resuming.catch(() => {});
@@ -175,15 +182,28 @@ export class BrowserRecording {
       this.recorder.start(1000);
     } catch (error) { this.cleanup(); throw error; }
   }
-  async stop() {
-    if (this.stopped) return;
-    // The acknowledgement follows the final PCM message, including short utterances.
-    if (this.worklet) await this.pausePcm();
-    this.stopped = true;
-    if (this.recorder && this.recorder.state !== 'inactive') {
-      await new Promise(resolve => { this.recorder.addEventListener('stop', resolve, { once: true }); this.recorder.stop(); });
-    }
-    this.cleanup();
+  stop() {
+    if (this.stopTask) return this.stopTask;
+    if (this.stopped) return Promise.resolve();
+    this.stopTask = (async () => {
+      try {
+        if (this.worklet && !this.interrupted && this.context?.state === 'running') await this.pausePcm();
+        this.stopped = true;
+        if (this.recorder && this.recorder.state !== 'inactive') {
+          await new Promise((resolve, reject) => {
+            const recorder = this.recorder;
+            const finish = () => { clearTimeout(timer); recorder.removeEventListener('stop', finish); resolve(); };
+            const timer = setTimeout(finish, 3000);
+            recorder.addEventListener('stop', finish, { once: true });
+            try {
+              recorder.stop();
+              if (this.interrupted) for (const stream of this.streams) for (const track of stream.getTracks()) track.stop();
+            } catch (error) { clearTimeout(timer); recorder.removeEventListener('stop', finish); reject(error); }
+          });
+        }
+      } finally { this.cleanup(); }
+    })();
+    return this.stopTask;
   }
   releaseMicrophone() {
     for (const node of this.nodes) node.disconnect();
@@ -194,6 +214,7 @@ export class BrowserRecording {
   }
   cleanup() {
     this.stopped = true;
+    this.removePowerListener?.(); this.removePowerListener = null;
     this.bus?.disconnect(); this.worklet?.disconnect(); this.mute?.disconnect();
     for (const finish of this.portTasks.values()) finish();
     for (const node of this.nodes) node.disconnect();

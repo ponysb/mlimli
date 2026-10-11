@@ -63,10 +63,13 @@ function writePluginArchive(buffer, expectedSha256) {
   }
 }
 
-export async function listPlatformPlugins({ baseUrl, token }) {
+export async function listPlatformPlugins({ baseUrl, token, organizationId }) {
   if (!baseUrl) return [];
   const headers = { accept: 'application/json' };
   if (token) headers.authorization = `Bearer ${token}`;
+  // 企业主体下服务端会追加该企业的插件；匿名访问仍只返回官方插件。
+  const subject = String(organizationId || '').trim();
+  if (token && subject) headers['x-mli-organization-id'] = subject;
   const response = await fetch(`${baseUrl.replace(/\/$/, '')}/api/v2/plugins`, { headers, signal: AbortSignal.timeout(15000) });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.success === false) throw new Error(payload.error?.message || payload.error || `插件仓库 HTTP ${response.status}`);

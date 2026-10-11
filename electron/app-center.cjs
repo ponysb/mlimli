@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const dns = require('node:dns').promises;
-const { appUrl, privateHost, loginPage, publicPageUrl } = require('../core/app-center-policy.cjs');
+const { appUrl, privateHost, publicPageUrl } = require('../core/app-center-policy.cjs');
 
 // Scripts are fixed, with JSON-encoded data arguments; there is no arbitrary JS
 // evaluation or Cookie/storage API exposed to the model or workbench renderer.
@@ -32,30 +32,16 @@ function elementScript(ref, action, text) {
   })()`;
 }
 
-function loginStateScript() {
-  return `(() => {
-    if (document.readyState !== 'complete' || !document.body?.innerText.trim()) return null;
-    const visible = el => { const r = el.getBoundingClientRect(), s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
-    const controls = Array.from(document.querySelectorAll('a,button,[role="button"]')).filter(visible);
-    const label = el => (el.innerText || el.getAttribute('aria-label') || '').trim();
-    const bodyText = (document.body?.innerText || '').slice(0, 30000);
-    const signedIn = controls.some(el => /^(退出登录|退出账号|注销|登出|sign\\s*out|log\\s*out)$/i.test(label(el)) || /\\/(logout|signout)([/?#]|$)/i.test(el.getAttribute('href') || ''))
-      || /已登录|登录成功|欢迎回来|signed\\s*in|logged\\s*in|welcome\\s+back/i.test(bodyText);
-    const loginForm = Array.from(document.querySelectorAll('input[type="password"],input[autocomplete="one-time-code"]')).some(visible)
-      || Array.from(document.querySelectorAll('form')).some(el => visible(el) && /登录|登入|sign\\s*in|log\\s*in/i.test(el.innerText));
-    const loginOnly = controls.some(el => /^(登录|立即登录|请登录|登入|sign\\s*in|log\\s*in)$/i.test(label(el)));
-    return { url: location.href, loginState: signedIn ? 'signed-in' : loginForm || loginOnly ? 'required' : 'unknown' };
-  })()`;
-}
+
 
 function createAppBrowser({ electron, getWindow, serverUrl, dataRoot, testAllowLocal = false }) {
   const { BrowserView, WebContentsView, BrowserWindow, session } = electron;
   const views = new Map(), popups = new Map(), jobs = new Map();
   const clientId = crypto.randomUUID();
-  let timer, busy = false, stopped = false, activeId, surface = null, attached = null;
+  let timer, busy = false, stopped = false, activeId, surface = null, attached = null, attachedSurface = null;
   const token = () => fs.readFileSync(path.join(dataRoot, '.security', 'app-center', 'bridge-token'), 'utf8').trim();
   async function request(route, body) {
-    const response = await fetch(serverUrl + '/api/app-center' + route, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json', 'x-mli-browser-token': token() }, body: body ? JSON.stringify(body) : undefined });
+    const response = await fetch(serverUrl + '/api/app-center' + route, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json', 'x-mli-browser-token': token() }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(10000) });
     const result = await response.json(); if (!response.ok) throw new Error(result.error || '应用台连接失败'); return result;
   }
   const validateUrl = value => testAllowLocal ? new URL(value) : appUrl(value);
@@ -68,32 +54,21 @@ function createAppBrowser({ electron, getWindow, serverUrl, dataRoot, testAllowL
   }
   function state(item) { return { appId: item.app.id, url: item.contents.getURL() ? publicPageUrl(item.contents.getURL()) : '', title: item.contents.getTitle(), loading: item.contents.isLoading(), canGoBack: item.contents.canGoBack(), canGoForward: item.contents.canGoForward() }; }
   function notify(item) { const win = getWindow(); if (win && !win.isDestroyed()) win.webContents.send('app-browser-changed', state(item)); }
-  function observeDocument(item) {
-    // Serialize observations with navigation invalidations so stale pages cannot
-    // overwrite the login status reported by a subsequent redirect.
-    const operation = async () => {
-      const wc = item.contents;
-      if (wc.isDestroyed() || wc.isLoadingMainFrame()) return;
-      const revision = item.revision, url = wc.getURL();
-      const observation = await wc.executeJavaScriptInIsolatedWorld(999, [{ code: loginStateScript() }]);
-      if (!observation || wc.isDestroyed() || item.revision !== revision || wc.getURL() !== url || observation.url !== url) return;
-      const result = await request('/bridge/observe', { appId: item.app.id, url, loginState: observation.loginState });
-      item.app = result.app;
-      return result.app;
-    };
-    item.observations = item.observations.catch(() => {}).then(operation);
-    return item.observations;
-  }
   function observeNavigation(item, url) {
     item.revision++;
     item.observations = item.observations.catch(() => {}).then(() => request('/bridge/observe', { appId: item.app.id, url }));
   }
   function attach() {
     const win = getWindow(); if (!win || win.isDestroyed()) return;
-    if (attached) { try { if (attached.modern) win.contentView.removeChildView(attached.view); else win.removeBrowserView(attached.view); } catch {} attached = null; }
-    const item = views.get(activeId); if (!item || !surface || surface.width < 30 || surface.height < 30) return;
-    if (item.modern) win.contentView.addChildView(item.view); else win.addBrowserView(item.view);
-    item.view.setBounds(surface); attached = item;
+    const item = surface && surface.width >= 30 && surface.height >= 30 ? views.get(activeId) : null;
+    if (attached !== item) {
+      if (attached) { try { if (attached.modern) win.contentView.removeChildView(attached.view); else win.removeBrowserView(attached.view); } catch {} }
+      attached = null; attachedSurface = null;
+      if (item) { if (item.modern) win.contentView.addChildView(item.view); else win.addBrowserView(item.view); attached = item; }
+    }
+    if (item && (!attachedSurface || ['x', 'y', 'width', 'height'].some(key => attachedSurface[key] !== surface[key]))) {
+      item.view.setBounds(surface); attachedSurface = { ...surface };
+    }
   }
   async function ensure(app) {
     let item = views.get(app.id);
@@ -115,13 +90,13 @@ function createAppBrowser({ electron, getWindow, serverUrl, dataRoot, testAllowL
       if (/^(data:|blob:)/i.test(details.url)) return callback({});
       safeNetwork(details.url).then(() => callback({}), () => callback({ cancel: true }));
     });
-    const webPreferences = { session: appSession, nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, allowRunningInsecureContent: false, spellcheck: false };
+    const webPreferences = { session: appSession, nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, allowRunningInsecureContent: false, spellcheck: false, backgroundThrottling: false };
     const modern = typeof WebContentsView === 'function' && typeof getWindow()?.contentView?.addChildView === 'function';
     const view = modern ? new WebContentsView({ webPreferences }) : new BrowserView({ webPreferences });
     item = { app, view, contents: view.webContents, modern, appSession, chain: Promise.resolve(), observations: Promise.resolve(), revision: 0, agentMode: false, lastObserved: 0 };
     views.set(app.id, item);
     const setupContents = (contents, popup) => {
-      const checkNavigation = (event, url) => { try { const parsed = validateUrl(url); if (item.agentMode && (!item.app.origins.includes(parsed.origin) || loginPage(parsed.href, item.app.loginPaths))) { observeNavigation(item, url); item.agentMode = false; event.preventDefault(); } } catch { event.preventDefault(); } };
+      const checkNavigation = (event, url) => { try { validateUrl(url); } catch { event.preventDefault(); } };
       contents.on('will-navigate', checkNavigation);
       contents.on('will-redirect', checkNavigation);
       contents.setWindowOpenHandler(({ url }) => {
@@ -133,8 +108,7 @@ function createAppBrowser({ electron, getWindow, serverUrl, dataRoot, testAllowL
       if (!popup) {
         for (const event of ['did-start-loading', 'did-stop-loading', 'page-title-updated']) contents.on(event, () => notify(item));
         contents.on('did-navigate', (_event, url) => observeNavigation(item, url));
-        contents.on('did-navigate-in-page', (_event, url, main) => { if (main) { observeNavigation(item, url); observeDocument(item).catch(() => {}); } });
-        contents.on('did-stop-loading', () => observeDocument(item).catch(() => {}));
+        contents.on('did-navigate-in-page', (_event, url, main) => { if (main) { observeNavigation(item, url); } });
       }
     };
     setupContents(item.contents, false); return item;
@@ -145,18 +119,13 @@ function createAppBrowser({ electron, getWindow, serverUrl, dataRoot, testAllowL
     const target = url || item.contents.getURL() || app.url;
     validateUrl(target);
     if (url || !item.contents.getURL()) await item.contents.loadURL(target);
-    await observeDocument(item);
     notify(item); return state(item);
   }
   async function guard(item) {
     if (item.contents.isLoadingMainFrame()) throw new Error('应用页面正在加载，请稍后重试');
-    await observeDocument(item);
     const { apps } = await request(''); const app = apps.find(a => a.id === item.app.id);
-    if (!app || app.agentAllowed === false || app.loginState === 'required') throw new Error('应用未登录或已撤销使用权限，请在应用台登录或恢复权限');
-    const url = validateUrl(item.contents.getURL());
-    if (!app.origins.includes(url.origin) || loginPage(url.href, app.loginPaths)) {
-      await request('/bridge/observe', { appId: app.id, url: url.href }); throw new Error('应用登录已失效，请重新登录');
-    }
+    if (!app || app.agentAllowed === false || app.status !== 'authorized') throw new Error('应用尚未确认或已撤销使用权限，请在应用卡片上确认登录或恢复权限');
+    validateUrl(item.contents.getURL());
     return app;
   }
   async function execute(job) {
@@ -165,10 +134,8 @@ function createAppBrowser({ electron, getWindow, serverUrl, dataRoot, testAllowL
       if (job.cancelled) throw new Error('任务已停止');
       if (job.action === 'open') {
         const url = validateUrl(job.args.url || job.app.url);
-        if (!job.app.origins.includes(url.origin)) throw new Error('目标网址超出应用授权范围');
         const current = item.contents.getURL();
         if (!current || publicPageUrl(current) !== publicPageUrl(url.href)) { item.agentMode = false; await item.contents.loadURL(url.href); }
-        await observeDocument(item);
         return state(item);
       }
       const app = await guard(item), wc = item.contents;
@@ -193,20 +160,24 @@ function createAppBrowser({ electron, getWindow, serverUrl, dataRoot, testAllowL
         await evaluate(`window.scrollBy(0, ${JSON.stringify(delta)})`);
       } else if (job.action === 'navigate') {
         const target = validateUrl(job.args.url);
-        if (!app.origins.includes(target.origin) || loginPage(target.href, app.loginPaths)) throw new Error('目标超出授权域名或是登录入口');
         await wc.loadURL(target.href);
       } else throw new Error('不支持的应用操作');
       return { ...result, url: publicPageUrl(wc.getURL()) };
     };
-    const promise = item.chain.catch(() => {}).then(operation); item.chain = promise; return promise;
+    const promise = item.chain.catch(() => {}).then(async () => {
+      let timeout;
+      try {
+        return await Promise.race([operation(), new Promise((_, reject) => {
+          timeout = setTimeout(() => { job.cancelled = true; item.contents.stop(); reject(new Error('应用页面操作超过 15 秒，请刷新页面后重试')); }, 15000);
+        })]);
+      } finally { clearTimeout(timeout); }
+    });
+    item.chain = promise; return promise;
   }
   async function poll() {
     if (busy || stopped) return; busy = true;
     try {
       const result = await request('/bridge/poll', { clientId });
-      for (const item of views.values()) if (!item.contents.isDestroyed() && Date.now() - item.lastObserved > 2000) {
-        item.lastObserved = Date.now(); observeDocument(item).catch(() => {});
-      }
       for (const [id, job] of jobs) if (!result.activeJobIds.includes(id)) { job.cancelled = true; const item = views.get(job.app.id); item?.contents.stop(); }
       for (const job of result.jobs) {
         jobs.set(job.id, job);
@@ -232,9 +203,8 @@ function createAppBrowser({ electron, getWindow, serverUrl, dataRoot, testAllowL
       return state(item);
     },
     async authorize(appId) {
-      const item = views.get(appId); if (!item || activeId !== appId || !surface) throw new Error('请在应用台打开该应用并完成登录后确认');
-      await item.appSession.cookies.flushStore(); await item.appSession.flushStorageData();
-      return request('/bridge/authorize', { appId, url: item.contents.getURL() });
+      const item = views.get(appId);
+      return request('/bridge/authorize', { appId, url: item?.contents.isDestroyed() === false ? item.contents.getURL() || undefined : undefined });
     },
     async clear(appId) {
       const item = views.get(appId); if (activeId === appId) { activeId = null; attach(); }
@@ -256,4 +226,4 @@ function registerAppBrowser({ ipcMain, controller, getWindow, serverUrl }) {
   }
   for (const [name, fn] of Object.entries({ open: id => controller.open(id), bounds: bounds => controller.bounds(bounds), navigate: data => controller.navigate(data.action, data.url), authorize: id => controller.authorize(id), clear: id => controller.clear(id) })) ipcMain.handle('app-browser-' + name, (event, argument) => { trusted(event); return fn(argument); });
 }
-module.exports = { createAppBrowser, registerAppBrowser, snapshotScript, elementScript, loginStateScript };
+module.exports = { createAppBrowser, registerAppBrowser, snapshotScript, elementScript };

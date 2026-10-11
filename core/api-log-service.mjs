@@ -29,14 +29,17 @@ async function read(operation, options) {
   let stat;
   try { stat = await fs.promises.stat(file); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
-  const key = JSON.stringify([file, stat?.size, stat?.mtimeMs, operation, options]);
+  const summaryFile = file.replace(/\.jsonl$/, '-summary.jsonl');
+  let summaryStat;
+  try { summaryStat = await fs.promises.stat(summaryFile); } catch {}
+  const key = JSON.stringify([file, stat?.size, stat?.mtimeMs, summaryStat?.size, summaryStat?.mtimeMs, operation, options]);
   const cached = cache.get(key); if (cached?.expires > Date.now()) return cached.result;
   if (inFlight.has(key)) return inFlight.get(key);
   if (pending.size >= 16) throw new Error('调用日志查询繁忙，请稍后重试');
   const promise = new Promise((resolve, reject) => {
     const id = ++sequence, current = ensureWorker();
     const timer = setTimeout(() => { disposeLogReader(new Error('调用日志读取超时，请缩小查询范围后重试')); }, 120000);
-    pending.set(id, { resolve, reject, timer }); current.ref(); current.postMessage({ id, file, operation, options });
+    pending.set(id, { resolve, reject, timer }); current.ref(); current.postMessage({ id, file, summaryFile, operation, options });
   });
   inFlight.set(key, promise);
   try {

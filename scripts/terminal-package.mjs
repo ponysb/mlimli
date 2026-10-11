@@ -65,6 +65,8 @@ export function copyTerminalDependencies(destination, root = ROOT) {
   visit('dingtalk-stream', root);
   visit('pdfjs-dist', root);
   visit('@anthropic-ai/sandbox-runtime', root);
+  visit('@agentclientprotocol/sdk', root);
+  visit('zod', root);
   return Object.fromEntries(copied);
 }
 

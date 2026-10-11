@@ -1,13 +1,15 @@
-.magic-activity-card { position: relative; display: flex; align-items: center; width: calc(100% - 20px); margin: 8px 10px 4px; padding: 0; border: 1px solid #c9eae0; border-radius: 14px; background: linear-gradient(120deg,#f7fffc,#e7f8f1); color: #194638; overflow: hidden; }
-.magic-card-main { display: flex; align-items: center; gap: 10px; min-width: 0; width: 100%; padding: 15px 30px 15px 12px; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
-.magic-card-main:hover { background: #e7f8f180; }
-.magic-card-close { position: absolute; top: 5px; right: 5px; display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #76958a; cursor: pointer; }
-.magic-card-close:hover { background: #cfeee2; color: #245b43; }
-.magic-card-icon { width: 34px; height: 34px; display: grid; place-items: center; background: #d3f0e4; color: #188b64; border-radius: 11px; flex: none; }
-.magic-activity-card strong { display: block; font-size: 13px; margin-bottom: 5px; }
-.magic-activity-card small { display: block; font-size: 11px; color: #667e74; }
-.magic-activity-card small b { color: #159c71; font-size: 14px; }
-.magic-card-arrow { margin-left: auto; color: #43a081; }
+.magic-activity-card { position: relative; display: flex; min-width: 0; min-height: 62px; align-items: center; margin: 0; padding: 0; overflow: hidden; color: #3b424b; border: 1px solid #e1e4e7; border-radius: 16px; background: #fff; box-shadow: 0 5px 15px rgba(31,39,48,.06); transition: border-color .15s, box-shadow .15s; }
+.magic-activity-card:hover { border-color: #ccd2d7; box-shadow: 0 7px 20px rgba(31,39,48,.09); }
+.magic-card-main { display: flex; width: 100%; min-width: 0; min-height: 62px; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px 9px 14px; color: inherit; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.magic-card-main:hover { background: transparent; }
+.magic-card-copy { display: grid; min-width: 0; gap: 3px; padding-right: 6px; }
+.magic-card-close { position: absolute; top: 5px; right: 5px; display: grid; width: 18px; height: 18px; padding: 0; place-items: center; color: #a0a6ac; border: 0; border-radius: 5px; background: transparent; cursor: pointer; }
+.magic-card-close:hover { color: #646b74; background: #f0f1f2; }
+.magic-activity-card strong { overflow: hidden; color: #252b33; font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.magic-activity-card small { overflow: hidden; color: #727a84; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.magic-activity-card small b { color: #18a174; font-size: 14px; }
+.magic-card-status { flex: 0 0 auto; margin-right: 2px; padding: 6px 10px; color: #287255; border-radius: 12px; background: #edf7f2; font-size: 10px; font-weight: 600; white-space: nowrap; }
+.magic-card-status.claimed { color: #fff; background: #c9cccf; }
 .magic-activities { max-width: 1080px; margin: 0 auto; padding: 28px 44px 60px; height: 100%; overflow: auto; }
 .magic-page-nav { display: flex; justify-content: space-between; }
 .magic-page-nav button { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: #75827d; background: none; border: 0; cursor: pointer; padding: 8px 0; }

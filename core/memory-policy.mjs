@@ -1,7 +1,7 @@
 import { getConfig } from './llm.mjs';
 
 export const MEMORY_DEFAULTS = Object.freeze({ enabled: true, autoLearn: true, reviewBeforeSave: false, historyEnabled: true });
-export const MEMORY_TOOLS = new Set(['list_memories', 'read_memory', 'search_memories', 'search_history', 'write_memory', 'delete_memory']);
+export const MEMORY_TOOLS = new Set(['list_memories', 'read_memory', 'search_memories', 'read_team_memory', 'search_team_memories', 'search_history', 'write_memory', 'delete_memory']);
 let generation = 0;
 export function memoryPolicyVersion() { return generation; }
 export function memorySettings() {

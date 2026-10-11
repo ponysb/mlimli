@@ -3,14 +3,14 @@ import test from 'node:test';
 import { EventEmitter } from 'node:events';
 import debug from '../electron/debug-console.cjs';
 
-test('控制台打开独立窗口、同步手动关闭状态，拒绝非主窗口请求', () => {
+test('控制台在主窗口右侧停靠、同步手动关闭状态，拒绝非主窗口请求', () => {
   const handlers = new Map(), target = new EventEmitter(), sent = [];
   let opened = false, destroyed = false;
   target.mainFrame = {};
   target.isDestroyed = () => destroyed;
   target.isDevToolsOpened = () => opened;
   target.send = (channel, payload) => sent.push({ channel, payload });
-  target.openDevTools = options => { assert.deepEqual(options, { mode: 'detach', activate: true }); opened = true; target.emit('devtools-opened'); };
+  target.openDevTools = options => { assert.deepEqual(options, { mode: 'right', activate: true }); opened = true; target.emit('devtools-opened'); };
   target.closeDevTools = () => { opened = false; target.emit('devtools-closed'); };
   debug.registerDebugConsole({ handle: (name, callback) => handlers.set(name, callback) }, () => ({ isDestroyed: () => destroyed, webContents: target }));
   debug.observeDebugConsole(target);
