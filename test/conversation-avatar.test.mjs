@@ -16,7 +16,7 @@ function componentSource(name) {
   assert.ok(start >= 0 && end > start);
   return applicationSource.slice(start, end);
 }
-const transformed = await transformWithOxc([avatarSource, ...['Message', 'RunStep', 'TaskSummary', 'WorkbenchState', 'buildConversationTimeline', 'LazyRunRecord'].map(componentSource)].join('\n'), 'conversation-fixture.jsx', { jsx: { runtime: 'classic' } });
+const transformed = await transformWithOxc([avatarSource, ...['Message', 'RunStep', 'TaskSummary', 'WorkbenchState', 'buildConversationTimeline', 'LazyRunRecord', 'compactUsageNumber', 'compactBillingValue', 'currencyValue', 'TaskUsageSummary'].map(componentSource)].join('\n'), 'conversation-fixture.jsx', { jsx: { runtime: 'classic' } });
 const iconNames = ['UserRound', 'SquareTerminal', 'LoaderCircle', 'ChevronLeft', 'ChevronRight', 'ChevronDown', 'Eye', 'ExternalLink', 'RefreshCw', 'ShieldAlert', 'Check', 'LayoutDashboard', 'FolderOpen', 'FileText', 'Code2', 'BookOpen', 'FolderPlus', 'Sparkles'];
 const components = new Function('React', 'icons', 'primaryTaskArtifact', 'splitComposerReferences', `
   const { useState, useEffect, useRef } = React;
@@ -96,6 +96,55 @@ test('final task cards have an agent avatar without replacing success or failure
   assertAgentAvatar(failed);
   assert.match(failed, /lucide-shield-alert/);
   assert.match(failed, /连接失败/);
+});
+
+test('task usage shows magic value for official models and configured cost for custom models', () => {
+  const base = {
+    requestCount: 1,
+    promptTokens: 1000,
+    completionTokens: 200,
+    cacheCreationTokens: 100,
+    cacheReadTokens: 200,
+    cacheTokens: 300,
+  };
+  const official = render('TaskSummary', { item: { reason: 'done', files: [], billing: { ...base, official: true, magicValue: 0.125 } } });
+  assert.match(official, /0\.125 魔力值/);
+  assert.match(official, /输入 1,000/);
+  assert.match(official, /输出 200/);
+  assert.match(official, /缓存 300/);
+
+  const priced = render('LazyRunRecord', {
+    summary: { reason: 'done', billing: { ...base, pricingConfigured: true, costs: { USD: 0.0012 } } },
+    recordCount: 0,
+    children: () => null,
+  });
+  assert.match(priced, /\$0\.0012/);
+  assert.match(priced, /输入 1,000/);
+  assert.match(priced, /缓存创建 100 tokens，缓存读取 200 tokens/);
+});
+
+test('custom models without configured pricing show tokens without a zero-valued charge', () => {
+  const markup = render('TaskSummary', {
+    item: {
+      reason: 'done',
+      files: [],
+      billing: {
+        requestCount: 1,
+        official: false,
+        pricingConfigured: false,
+        costs: {},
+        promptTokens: 48,
+        completionTokens: 12,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 8,
+        cacheTokens: 8,
+      },
+    },
+  });
+  assert.match(markup, /输入 48/);
+  assert.match(markup, /输出 12/);
+  assert.match(markup, /缓存 8/);
+  assert.doesNotMatch(markup, /魔力值|USD|\$/);
 });
 
 test('a completed task highlights one deliverable and shows only three other files', () => {

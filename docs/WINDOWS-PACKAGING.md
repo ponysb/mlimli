@@ -12,15 +12,19 @@ npm run dist:win
 
 一条命令自动构建并验证两套安装包，最终文件直接位于 `release/`：
 
-不想输入命令时，也可双击项目根目录的 `build-windows.cmd`。它会检查 Node.js 版本，在依赖未安装时执行 `npm ci`，然后运行同一个双版本打包命令。
+不想输入命令时，也可双击项目根目录的 `build-windows.cmd`。它会检查 Node.js 版本，每次都执行 `npm ci` 恢复锁文件规定的完整依赖树，然后运行同一个双版本打包命令。打包时不要运行使用项目内 Electron 的开发客户端，否则 Windows 文件锁会使 `npm ci` 失败。
 
-- `MoliCreation-Modern-Setup-0.4.0-x64.exe`：现代版，Electron 44.4.5，面向 Win10 / Win11 64 位。
-- `MoliCreation-Legacy-Win7-Setup-0.4.0-ia32.exe`：兼容版，Electron 22.3.27，面向 Win7 SP1 32/64 位及 Win10 32 位；64 位新系统也可通过 WOW64 运行。
+- `MoliCreation-Modern-Setup-<version>-x64.exe`：现代版，Electron 44.4.5，面向 Win10 / Win11 64 位。
+- `MoliCreation-Legacy-Win7-Setup-<version>-ia32.exe`：兼容版，Electron 22.3.27，面向 Win7 SP1 32/64 位及 Win10 32 位；64 位新系统也可通过 WOW64 运行。
+
+兼容版仍携带沙箱修复组件，但 `srt-win.exe` 的 Windows 原生沙箱只在实际支持的 Windows 版本、架构和运行库环境中启用。Windows 7 不应被默认宣称支持原生沙箱；若 helper 报 `0xC0000135`，应安装 Microsoft Visual C++ 运行库和系统更新，或使用用户确认的一次性宿主权限重试。
 - `SHA256SUMS.txt`：最终安装包的 SHA-256 校验值。
 
 `npm run dist:win:all` 是上述命令的别名。分别构建：`npm run dist:win:modern`、`npm run dist:win:legacy`。默认不生成免安装包；需要时执行 `npm run dist:win -- --portable`。
 
 每次成功构建后替换本次构建版本的旧安装包；单独构建一版不会删除另一版。全部选定版本构建和启动验证通过后才发布，不会因为构建失败而先删除已有安装包。不会删除源码压缩包或其他非打包脚本生成的文件。中间文件放在 `node_modules/.cache/mli-windows-packaging/`，成功后自动清理，不再往 `release/` 留下时间戳目录、解包文件、blockmap、日志或测试工作区。
+
+构建开始前会逐项核对 `package-lock.json` 中的全部非可选包；staging 后会从实际发布源码提取第三方模块引用，确认它们只能从成品自身的 `resources/client/node_modules` 解析，禁止借用项目上级目录的开发依赖。最终解包验证会使用随包 Node 实际导入全部客户端运行时依赖，并检查 Windows 沙箱 helper。任一检查失败都不会发布本次安装包；此时 `release/` 中已有文件是旧产物，不得作为本次构建上传。
 
 只生成现代调试解包目录：`npm run pack:win`；兼容版：`node scripts/package-win.mjs --legacy --dir`。调试目录或失败构建的缓存会保留，命令输出其绝对路径，供检查；它们不会进入 `release/`。首次构建可能需要下载经过官方 SHA-256 校验的 Electron 22 ia32 和 NSIS 等工具。
 

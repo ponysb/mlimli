@@ -1,0 +1,70 @@
+.browser-workspace { height: 100%; min-height: 0; display: flex; flex-direction: column; background: #fff; color: #30383f; }
+.browser-start-toolbar { position: relative; z-index: 3; display: flex; align-items: center; gap: 5px; min-height: 46px; padding: 5px 10px; border-bottom: 1px solid #e4e7eb; background: #fff; flex: none; }
+.browser-start-toolbar > button, .browser-toolbar-menu > button { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #6f7881; cursor: pointer; flex: none; }
+.browser-start-toolbar > button:hover:not(:disabled) { background: #f0f2f3; color: #30383f; }
+.browser-start-toolbar > button.active { background: #e9f1ff; color: #2764c5; }
+.browser-start-toolbar > button:disabled { opacity: .35; cursor: default; }
+.browser-start-toolbar > form { height: 32px; display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; margin: 0 6px; padding: 0 14px; border: 1px solid #dfe3e6; border-radius: 16px; background: #f3f4f5; color: #879099; }
+.browser-start-toolbar input { width: 100%; min-width: 0; padding: 0; border: 0; outline: 0; background: transparent; text-align: center; font-size: 13px; }
+.browser-toolbar-menu { position: relative; flex: none; }
+.browser-toolbar-menu > button:hover, .browser-toolbar-menu > button.active { color: #30383f; background: #f0f2f3; }
+.browser-toolbar-menu > .browser-extension-trigger { width: 32px; height: 32px; color: #747d84; }
+.browser-toolbar-menu > .browser-extension-trigger svg { width: 15px; height: 15px; stroke-width: 1.7; }
+.browser-menu { position: absolute; z-index: 5; top: 40px; right: 0; width: 280px; padding: 8px; border: 1px solid #e0e3e5; border-radius: 8px; background: #fff; box-shadow: 0 12px 32px #20262d24; }
+.browser-menu header { display: flex; align-items: center; gap: 8px; padding: 7px 8px 10px; border-bottom: 1px solid #eceeef; }
+.browser-menu header b { font-size: 13px; }.browser-menu header small { color: #8c949b; font-size: 11px; }
+.browser-menu > button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 0 9px; border: 0; border-radius: 5px; background: transparent; color: #3f464c; text-align: left; cursor: pointer; }
+.browser-menu > button:hover:not(:disabled) { background: #f1f3f4; }
+.browser-menu > button:disabled { color: #aeb4b9; cursor: default; }
+.browser-menu > button > svg { flex: none; color: #707980; }
+.browser-menu > button:disabled > svg { color: inherit; }
+.browser-menu-chevron { margin-left: auto; }
+.browser-menu-note { margin-left: auto; font-size: 10px; }
+.browser-menu-separator { height: 1px; margin: 5px 7px; background: #eceeef; }
+.browser-extension-list { max-height: 210px; overflow: auto; padding: 5px 0; border-bottom: 1px solid #eceeef; }
+.browser-extension-list > div { display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 5px 8px; }
+.browser-extension-list > div > span { display: grid; flex: 1; min-width: 0; gap: 2px; }
+.browser-extension-list b, .browser-extension-list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-extension-list b { font-size: 12px; }.browser-extension-list small { color: #8d959c; font-size: 10px; }
+.browser-extension-list button { display: grid; place-items: center; width: 27px; height: 27px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #9a7377; cursor: pointer; }
+.browser-extension-list button:hover { color: #b23d48; background: #faecee; }
+.browser-extension-list p { margin: 0; padding: 18px 8px; color: #939aa0; font-size: 12px; }
+.browser-detail-menu header { padding: 2px 3px 8px; }
+.browser-detail-menu header > button { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: #687179; cursor: pointer; }
+.browser-detail-menu header > button:hover { background: #f1f3f4; }
+.browser-menu-list { max-height: 260px; overflow: auto; padding: 5px 0; border-bottom: 1px solid #eceeef; }
+.browser-menu-list > button, .browser-menu-list > div { display: flex; width: 100%; min-height: 43px; padding: 6px 8px; border: 0; border-radius: 5px; background: transparent; text-align: left; cursor: pointer; }
+.browser-menu-list > button:hover { background: #f1f3f4; }
+.browser-menu-list span { display: grid; min-width: 0; gap: 3px; }
+.browser-menu-list b, .browser-menu-list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-menu-list b { font-size: 12px; font-weight: 500; }.browser-menu-list small { color: #8d959c; font-size: 10px; }
+.browser-menu-list p { margin: 0; padding: 22px 8px; color: #939aa0; font-size: 12px; text-align: center; }
+.browser-settings-summary { display: grid; gap: 5px; margin: 5px 0; padding: 10px 9px 12px; border-bottom: 1px solid #eceeef; }
+.browser-settings-summary b { font-size: 12px; }.browser-settings-summary small { color: #858e95; font-size: 11px; line-height: 1.5; }
+.browser-menu-notice { position: absolute; z-index: 20; top: calc(100% + 7px); left: 50%; transform: translateX(-50%); max-width: calc(100% - 32px); padding: 7px 11px; border: 1px solid #dce3df; border-radius: 6px; background: #f8fbf9; color: #53635a; box-shadow: 0 5px 18px #20262d18; font-size: 11px; pointer-events: none; white-space: nowrap; }
+.browser-surface-preview { display: block; flex: 1; min-height: 100px; width: 100%; height: 100%; object-fit: cover; object-position: top left; background: #fff; }
+.browser-zoom-row { display: flex; align-items: center; gap: 5px; min-height: 38px; padding: 0 9px; border-block: 1px solid #eceeef; }
+.browser-zoom-row > span { flex: 1; font-size: 12px; }.browser-zoom-row b { width: 42px; text-align: center; font-size: 11px; }
+.browser-zoom-row button { display: grid; place-items: center; width: 27px; height: 27px; padding: 0; border: 0; border-radius: 5px; background: #f1f3f4; cursor: pointer; }
+.browser-find { position: absolute; z-index: 4; top: 51px; right: 14px; display: flex; align-items: center; gap: 7px; width: min(360px, calc(100% - 28px)); height: 38px; padding: 0 8px 0 11px; border: 1px solid #dfe3e6; border-radius: 7px; background: #fff; box-shadow: 0 8px 24px #20262d1f; }
+.browser-find input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 12px; }.browser-find button { border: 0; border-radius: 4px; background: transparent; cursor: pointer; font-size: 11px; }
+.browser-surface { flex: 1; min-height: 100px; background: #fff; }
+.browser-surface[hidden] { display: none; }
+.browser-start-page { flex: 1; min-height: 0; overflow: auto; padding: 34px 32px; background: #fafafa; }
+.browser-start-page h2 { margin: 12px 0 18px; font-size: 15px; font-weight: 600; }
+.browser-start-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 44px; }
+.browser-start-tools button { display: flex; align-items: center; gap: 12px; min-height: 58px; padding: 0 16px; border: 1px solid #eceef0; border-radius: 8px; background: #fff; color: #30383f; font-size: 14px; cursor: pointer; }
+.browser-start-tools button:hover { border-color: #cdd5d1; background: #f8fbf9; }
+.browser-start-apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 16px; }
+.browser-start-app { position: relative; min-width: 0; border-radius: 8px; }
+.browser-start-app-main { display: grid; justify-items: center; gap: 6px; width: 100%; min-width: 0; padding: 14px 8px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
+.browser-start-app-main:hover, .browser-start-app-main:focus-visible { background: #f0f2f3; }
+.browser-start-app-center { position: absolute; top: 6px; right: 6px; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 1px solid #dfe3e6; border-radius: 6px; background: #fff; color: #78828a; cursor: pointer; opacity: 0; transform: translateY(-2px); transition: opacity .15s ease, transform .15s ease, color .15s ease, background .15s ease; }
+.browser-start-app:hover .browser-start-app-center, .browser-start-app:focus-within .browser-start-app-center { opacity: 1; transform: translateY(0); }
+.browser-start-app-center:hover, .browser-start-app-center:focus-visible { background: #f0f2f3; color: #30383f; }
+.browser-app-icon { display: grid; place-items: center; width: 44px; height: 44px; color: #65717b; background: #fff; border: 1px solid #e3e7ea; border-radius: 8px; }
+.browser-start-apps b, .browser-start-apps small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-start-apps b { font-size: 12px; font-weight: 600; }
+.browser-start-apps small { color: #90989f; font-size: 10px; }
+.browser-start-apps p { color: #8a939b; font-size: 12px; }
+@media (max-width: 600px) { .browser-start-page { padding: 18px 16px; } .browser-start-tools { grid-template-columns: 1fr; margin-bottom: 30px; } .browser-start-toolbar { padding-inline: 6px; } .browser-start-toolbar form { padding-inline: 9px; } .browser-start-toolbar form svg { display: none; } }

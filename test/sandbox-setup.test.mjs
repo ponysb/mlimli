@@ -2,6 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 const {registerSandboxSetup}=createRequire(import.meta.url)('../electron/sandbox-setup.cjs');
+test('repair shares the installation origin and duplicate-operation guards', async()=>{
+  const handlers={};let repaired=0,finish;
+  const contents={mainFrame:{},isDestroyed:()=>false,getURL:()=> 'http://127.0.0.1:1234/'};
+  const event={sender:contents,senderFrame:contents.mainFrame};
+  registerSandboxSetup({ipcMain:{handle:(name,fn)=>{handlers[name]=fn;}},getWindow:()=>({webContents:contents,isDestroyed:()=>false}),serverUrl:'http://127.0.0.1:1234',platform:'win32',preflight:async()=>{},install:async()=>{},repair:()=>{repaired++;return new Promise(resolve=>{finish=resolve;});}});
+  await assert.rejects(handlers['repair-windows-sandbox']({...event,senderFrame:{}}),/主窗口/);
+  const pending=handlers['repair-windows-sandbox'](event);await Promise.resolve();
+  await assert.rejects(handlers['install-windows-sandbox'](event),/正在安装/);
+  finish({status:{available:true}});await pending;assert.equal(repaired,1);
+});
 function fixture(options={}) {
   let handler,installed=0;
   const contents={mainFrame:{},isDestroyed:()=>false,getURL:()=> 'http://127.0.0.1:1234/'};

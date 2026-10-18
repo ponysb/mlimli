@@ -103,7 +103,7 @@ export function canonicalPath(candidate) {
 
 function assertToolPath(abs, real, { write = false } = {}) {
   const policy = toolSandboxPolicy();
-  if (!policy || policy.mode === 'off') return;
+  if (!policy || policy.enabled === false || policy.mode === 'off') return;
   if (write && policy.mode === 'read-only') throw new SandboxError('只读沙箱禁止修改文件');
   for (const root of new Set([getWorkspaceRoot(), APP_ROOT, DATA_ROOT])) {
     for (const [candidate, parent] of [[abs, root], [real, canonicalPath(root)]]) {

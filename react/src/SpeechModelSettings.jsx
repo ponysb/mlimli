@@ -37,20 +37,16 @@ export default function SpeechModelSettings({ onStatus, disabled = false }) {
   }
   const locked = disabled || pending || status?.state === 'installing' || status?.activeSessions > 0;
   return <section className="speech-model-settings" aria-label="本地语音模型">
-    <h4>本地语音模型</h4>
-    {status?.hardware && <p className="voice-hint">本机：{status.hardware.arch} · {status.hardware.memoryGB} GB 内存 · {status.hardware.cores} 逻辑核心{status.hardware.gpu ? ` · ${status.hardware.gpu.name} ${status.hardware.gpu.memoryGB} GB 显存` : status.hardware.detecting ? ' · 正在检测显卡…' : ''}</p>}
-    <p className="voice-hint">{status?.recommendation?.reason || '正在检测配置…'}。推荐项排在第一位，您可以自行选择；当前启用：{status?.ready ? status.model : '尚未启用'}。</p>
+    <div className="speech-model-intro"><div><h4>本地语音模型</h4><p>{status?.recommendation?.reason || '正在检测配置…'}</p></div><span className={`speech-active-model ${status?.ready ? 'ready' : ''}`}>{status?.ready ? `当前：${status.model}` : '尚未启用'}</span></div>
+    {status?.hardware && <div className="speech-hardware" aria-label="本机配置"><span>{status.hardware.arch}</span><span>{status.hardware.memoryGB} GB 内存</span><span>{status.hardware.cores} 核心</span><span>{status.hardware.gpu ? `${status.hardware.gpu.name} · ${status.hardware.gpu.memoryGB} GB 显存` : status.hardware.detecting ? '正在检测显卡…' : '未检测到独立显卡'}</span></div>}
     <div className="speech-model-list">{status?.models?.map(model => <article key={model.id} className={`speech-model-card ${status.modelId === model.id && status.ready ? 'selected' : ''}`}>
-      <div className="speech-model-heading"><strong>{model.name}</strong>{model.recommended && <span className="speech-model-badge">本机推荐</span>}{model.installed && <span className="speech-model-badge">已安装</span>}</div>
-      <p>{model.purpose}</p><p className="voice-hint">语言：{model.languages}</p>
-      <p className="voice-hint">{model.configuration}</p><p className="voice-hint">{model.platformNote}</p>
-      <p className="voice-hint">首次模型下载约 {model.totalDownloadMB} MB（含发言检测、声纹及预览，共享文件会复用）{model.engine === 'transformers' ? '；另需约 2–5 GB 推理依赖' : '；另需运行环境'}。</p>
-      <details><summary>效果参考与测试来源</summary><p className="voice-hint">{model.reference}</p><p className="voice-hint">这是论文 / 官方评测的原版模型数据；INT8 版本、本应用录音与本机速度需要实际验证。不同测试条件的错误率不能直接排名。CER 是字符错误率，越低越好。</p><a href={model.source} target="_blank" rel="noreferrer">查看来源</a></details>
-      {!model.supported && <p className="voice-error">{model.unavailableReason}</p>}
+      <div className="speech-model-main"><div className="speech-model-copy"><div className="speech-model-heading"><strong>{model.name}</strong>{model.recommended && <span className="speech-model-badge">本机推荐</span>}{model.installed && <span className="speech-model-badge">已安装</span>}</div><p>{model.purpose}</p><div className="speech-model-facts"><span>{model.languages}</span><span>{model.configuration}</span><span>下载约 {model.totalDownloadMB} MB</span></div></div>
       <div className="speech-model-actions"><button type="button" className="secondary-action" disabled={locked || !model.supported || (status.ready && status.modelId === model.id)} onClick={() => choose(model)}>
         {status.state === 'installing' && status.installingModelId === model.id ? <LoaderCircle size={15} className="spin"/> : model.installed ? <Check size={15}/> : <Download size={15}/>}
-        {status.state === 'installing' && status.installingModelId === model.id ? '正在安装…' : status.ready && status.modelId === model.id ? '当前使用' : model.installed ? '切换使用' : '下载安装并使用'}
-      </button>{(model.installed || model.removable) && <button type="button" className="speech-model-delete" disabled={locked} title={`删除 ${model.name}`} aria-label={`删除 ${model.name}`} onClick={() => remove(model)}><Trash2 size={16}/></button>}</div>
+        {status.state === 'installing' && status.installingModelId === model.id ? '正在安装…' : status.ready && status.modelId === model.id ? '当前使用' : model.installed ? '切换使用' : '安装并使用'}
+      </button>{(model.installed || model.removable) && <button type="button" className="speech-model-delete" disabled={locked} title={`删除 ${model.name}`} aria-label={`删除 ${model.name}`} onClick={() => remove(model)}><Trash2 size={16}/></button>}</div></div>
+      <details className="speech-model-more"><summary>详细信息</summary><div><p>{model.platformNote}</p><p>首次模型下载约 {model.totalDownloadMB} MB，包含发言检测、声纹及预览，共享文件会复用{model.engine === 'transformers' ? '；另需约 2–5 GB 推理依赖' : '；另需运行环境'}。</p><p>{model.reference}</p><p>评测数据来自论文或官方原版模型；量化版本、本机录音与速度以实际使用为准，不同测试条件不能直接排名。</p><a href={model.source} target="_blank" rel="noreferrer">查看测试来源</a></div></details>
+      {!model.supported && <p className="voice-error">{model.unavailableReason}</p>}
       {status.installingModelId === model.id && status.state === 'installing' && <div className="speech-download-progress" role="status">
         <div className="speech-download-head"><b>{status.stage}</b><span>{status.currentFile && status.fileTotalBytes > 0 ? `${Math.min(100, Math.round(status.fileDownloadedBytes / status.fileTotalBytes * 100))}%` : '准备中'}</span></div>
         <progress max="100" {...(status.currentFile && status.fileTotalBytes > 0 ? { value: Math.min(100, status.fileDownloadedBytes / status.fileTotalBytes * 100) } : {})}/>
@@ -62,8 +58,7 @@ export default function SpeechModelSettings({ onStatus, disabled = false }) {
       {status.installingModelId === model.id && status.error && <p className="voice-error" role="alert">{status.error}</p>}
     </article>)}</div>
     {error && <p className="voice-error" role="alert">{error}</p>}
-    <p className="voice-hint">下载方式：客户端直连国内优先源，模型和运行依赖只保存在本机，不经过官方后台。开始下载前会检查源是否可用，并支持自动切换。</p>
+    <details className="speech-model-notes"><summary>下载方式与识别说明</summary><p>客户端会优先直连国内下载源，模型和运行依赖只保存在本机。所有模型共用发言检测与说话人区分；64 位环境提供中文实时预览，其他语言以断句后的结果为准。</p></details>
     {(disabled || status?.activeSessions > 0) && <p className="voice-hint">录制结束后可以下载和切换模型。</p>}
-    <p className="voice-hint">所有模型共用 Silero 发言检测和 CAM++ 说话人区分。64 位环境提供中文实时预览，断句后由所选模型校正；其他语言请以断句后的文字为准。32 位环境在断句后显示转写，以节省内存。</p>
   </section>;
 }

@@ -41,7 +41,7 @@
       "maxToolOutputChars": 12000
     },
     "quality": {
-      "enabled": true,
+      "enabled": false,
       "noProgressThreshold": 3
     },
     "subagents": {
@@ -60,11 +60,12 @@
     "workspaceRoot": "./workspace",
     "permissionTimeoutMs": 300000,
     "sandbox": {
+      "enabled": false,
       "mode": "workspace-write",
       "backend": "auto",
-      "networkAccess": false,
+      "networkAccess": true,
       "dockerImage": "mli-agent-sandbox:1",
-      "allowedDomains": []
+      "allowedDomains": ["*"]
     }
   },
   "account": {

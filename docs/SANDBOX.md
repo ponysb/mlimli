@@ -4,22 +4,34 @@
 
 ## 已接入的能力
 
+跨平台 Bash 采用能力探测和执行后端分层。`backend=auto` 时依次尝试：Windows 使用 Anthropic Sandbox Runtime 原生后端；macOS / Linux 先使用 Anthropic Sandbox Runtime（`srt`），不可用时（例如 Linux 缺少 socat / ripgrep）再使用内置的 Seatbelt / Bubblewrap profile；Docker 只在用户明确选择时使用。Anthropic 运行时只能按域名白名单联网，因此"开启联网且白名单为空"时 macOS / Linux 的 auto 直接使用内置 profile（保持不受限网络）。沙箱是可选增强：`auto` 先用真实 shell 命令探测后端（结果缓存 5 分钟，设置变更或沙箱报错时重新探测），所有候选后端都不可用、工作区含硬链接或路径不受支持时，Bash 按已经通过的授权规则使用宿主 shell，并在结果中标记 `host-fallback` 及原因；回退只发生在目标命令启动之前，不会重复执行有副作用的命令。用户明确选择某个后端时仍然失败关闭。宿主 shell 会继承 HOME/USERPROFILE/APPDATA 等非敏感用户变量和登录 shell 的 PATH，模型密钥、代理与 `NODE_OPTIONS` 仍被移除。
+
+以下情况可由用户确认一次宿主权限重试（"不使用沙箱重试"）：沙箱启动失败、原生沙箱被另一个 MLI 进程占用、命令在沙箱中被拒绝访问或联网被拦截。重试有独立审计记录、超时和进程树清理，不会修改全局沙箱设置；普通的非零退出不能绕过沙箱。被拒绝的命令结果会附带 `[沙箱提示]`，说明是工作区外路径、只读的 `.git`、隐藏的敏感文件还是网络白名单导致。
+
+### 常驻 broker
+
+Anthropic 运行时（Windows 原生和 macOS / Linux `srt`）通过一个常驻的可信 broker 进程（`core/sandbox-broker-worker.mjs`）执行。每个工作区 + 策略只初始化一次（Windows：账户检查、WFP 探测、工作区 ACL 授权），之后的命令复用该会话并可并行执行；切换工作区或策略时等待正在运行的命令结束，再 reset 并重新初始化。broker 空闲 10 分钟后退出并撤回全部 ACL；它不会阻止命令行等一次性进程退出，父进程退出时 broker 自行清理。上游 `reset()` 会撤回本进程持有的全部授权（包括 helper 目录的读权限），broker 每次 reset 后重新授予。此前每条命令都新建进程并对整个工作区加撤可继承 ACL，大型工作区下经常超时或卡住，这是"运行不起来"的主要原因。
+
+现代 Windows 客户端在权限配置中提供“修复沙箱”：使用安装包内的校验备份恢复沙箱运行依赖，再检测并按需启动系统沙箱安装（需要管理员授权）。客户无需单独安装 Node.js 或联网。bash 执行前会尝试恢复缺失或损坏的组件，失败时返回错误；不会自动关闭沙箱，也不会自动请求系统安装授权。首次系统安装仍需在设置中操作。旧版安装包没有修复备份，需要先升级；修复后如模块加载错误仍存在，请重启客户端。
+
 - 默认 `workspace-write`：命令仅可修改映射的工作区及隔离临时目录。
 - `read-only`：命令不能修改工作区，Agent 的 L1 工具及文件路径写入也被阻止。
-- 默认禁止命令联网。模型 API、用户批准的网页查询及其他受信任宿主工具使用独立的连接，不会因此离线。
+- 默认开启命令联网；Windows 原生后端使用 `*` 表示不限制域名，也可改为具体白名单。模型 API、用户批准的网页查询及其他受信任宿主工具使用独立的连接。
 - 子进程不继承模型密钥、代理令牌、`NODE_OPTIONS` 或动态加载注入变量。Docker CLI 的宿主连接环境和容器环境独立。
 - 保护现有 `.agent`、`.security`、`.codex`、`.ssh`、`.aws`、`.gnupg`；隐藏现有 `.env` / `*.env.*`、`.npmrc`、`.netrc`、私钥和工作区根 `config.json`。`.env.example` / `.sample` / `.template` 可读。
 - 现有 `.git` 和 `.agents` 在命令沙箱中只读；普通项目文件保持可写。Git 提交、分支修改等需要宿主可信工作流，不能通过批准绕过。
 - 文件工具验证真实路径与最近存在的父目录，阻止符号链接、junction、盘符切换、Windows 设备路径和备用数据流逃逸。硬链接可能关联未挂载的宿主文件，因此工具拒绝访问硬链接文件，命令启动前也拒绝带硬链接的工作区。
-- 后端缺失、镜像缺失、策略不合法和隔离启动失败都阻止执行，不自动改用宿主 shell。
+- 明确选择的后端缺失、镜像缺失、策略不合法和隔离启动失败都阻止执行，不自动改用宿主 shell（`auto` 的回退规则见上文）。
 - 每次调用快照策略；文件工具使用独立异步执行上下文，不影响用户手动编辑。运行中的任务不能通过设置 API 修改策略。
 - 命令取消、超时及退出时清理进程组；Docker 删除具名容器，覆盖后台子进程。命令输出和捕获内存都有上限。
 
 ## 平台实现与启用
 
-Linux 自动使用 Bubblewrap：新 user / PID / mount / IPC / network 命名空间、移除 capabilities，挂载必要系统工具为只读，工作区映射到 `/workspace`，临时目录使用私有 tmpfs。需要系统安装 `bubblewrap` 并允许创建用户命名空间。此实现没有添加自定义 seccomp 过滤器；需要更强 syscall 限制或 CPU/内存/PID 限额时选择 Docker 后端。
+macOS / Linux 的 `srt` 后端使用上游维护的 Seatbelt / Bubblewrap 实现：读取默认允许，但拒绝整个用户主目录，只重新开放工作区、主目录下 PATH 中的工具链（nvm、volta、pyenv 等）和一个独立的临时 HOME；工作区内的受保护文件更具体，仍保持隐藏或只读。写入只允许工作区和临时 HOME。网络经上游代理按域名白名单放行，空白名单即离线。Linux 需要 `bubblewrap`、`socat`、`ripgrep`，并允许非特权用户命名空间（Ubuntu 23.10+ 默认由 AppArmor 限制，需要管理员放开）。
 
-macOS 自动使用系统 `/usr/bin/sandbox-exec` 和 Seatbelt profile，默认拒绝访问，只开放系统工具、工作区及本次调用的临时目录，保护路径使用显式 deny，网络默认拒绝。此后端没有容器的 CPU/内存/PID 限额，不开放整个用户主目录。
+内置 profile（Linux 下没有 `srt` 依赖时使用 Bubblewrap）：新 user / PID / mount / IPC / network 命名空间、移除 capabilities，挂载必要系统工具及 PATH 中的用户工具链（nvm、volta、bun 等）为只读，工作区按宿主真实路径挂载，临时目录使用私有 tmpfs。需要系统安装 `bubblewrap` 并允许创建用户命名空间。此实现没有添加自定义 seccomp 过滤器；需要更强 syscall 限制或 CPU/内存/PID 限额时选择 Docker 后端。
+
+macOS 自动使用系统 `/usr/bin/sandbox-exec` 和 Seatbelt profile，默认拒绝访问，只开放系统工具、Homebrew、当前 Xcode/Command Line Tools、PATH 中的用户工具链、工作区及本次调用的临时目录，保护路径使用显式 deny，网络默认拒绝。profile 必须包含 dyld/libSystem 启动所需的规则（根目录、`/private/var/select`、opendirectoryd、notification_center 等），缺少时所有 shell 会在启动阶段 SIGABRT；旧版本因此在 macOS 上始终回退到宿主 shell。此后端没有容器的 CPU/内存/PID 限额，不开放整个用户主目录。
 
 Windows 自动选择 `windows-native`，接入 Apache-2.0 开源的 [Anthropic Sandbox Runtime](https://github.com/anthropics/sandbox-runtime)，依赖锁定 `@anthropic-ai/sandbox-runtime@0.0.78`。已经核查 npm 发布包包含 x64 / arm64 的 `srt-win.exe`，不是仅根据 main 分支文档推断。该 Windows 后端仍标记 **Alpha**。不需要 Docker 或 WSL，命令继续采用原生 cmd 语法和宿主工作区路径。
 
@@ -42,13 +54,15 @@ node scripts/setup-windows-sandbox.mjs uninstall
 
 按钮接入回归覆盖 Electron IPC、本地运行时预检查及模拟的 UAC 取消结果，不触发系统账户/网络规则安装。这些测试不代表已完成真实管理员安装与安装后命令隔离实测；相关自动检查位于 `test/sandbox-setup.test.mjs`。
 
-每次执行使用独立可信 Node broker，校验随发布包锁定的 native helper SHA-256，然后由上游进行账户及 WFP 的实际检查、添加工作区读写 ACL、敏感路径拒绝 ACL，再以沙箱账户的受限令牌和 Windows job object 启动命令。调用结束会 reset 上游策略、撤回会话 ACL。取消优先请求 broker 清理，超过 8 秒则强制结束；强制结束遗留的 ACL 由上游下次初始化恢复。沙箱账户使用自己的 profile、临时目录及 HKCU，不接收模型账户密钥。
+常驻 broker 校验随发布包锁定的 native helper SHA-256，会话初始化时由上游进行账户及 WFP 的实际检查、添加工作区读写 ACL、敏感路径拒绝 ACL，之后每条命令以沙箱账户的受限令牌和 Windows job object 启动。会话之后新出现的敏感文件作为单条命令的拒绝规则加上。取消优先请求 broker 结束该命令，超过 8 秒则强制结束其进程树；broker 退出时 reset 上游策略、撤回会话 ACL，强制结束遗留的 ACL 由上游下次初始化恢复。沙箱账户使用自己的 profile、临时目录及 HKCU，不接收模型账户密钥。联网时为 git 关闭 schannel 吊销检查（WFP 会拦截 CRL/OCSP 地址，否则报 `CRYPT_E_REVOCATION_OFFLINE`）。
+
+状态检测分两步：先只读检查 helper、Secondary Logon（seclogon）服务是否被禁用、沙箱账户是否已安装；再通过 broker 跑一条真实命令。可用时还会检查 node / npm / git / python 在沙箱内是否可见，不可见的列在状态说明里。上游错误码会被翻译成可操作的提示（未安装、seclogon 被禁用、登录被策略拒绝 1385、凭据失效、缺少运行库、WFP 失效、初始化超时、helper 不可读等）。注意上游在所有 `CreateProcessWithLogonW` 错误后都附带"确认 seclogon 正在运行"，拒绝访问（0x80070005）通常是沙箱账户无法读取 helper 或工作目录，而不是服务问题。
 
 Windows 原生后端的网络经 HTTP/SOCKS 代理控制，开启 `networkAccess` 后还需配置 `allowedDomains`（例如 `registry.npmjs.org:443`、`*.github.com`）。默认空白名单阻止所有代理请求，`strictAllowlist` 禁止动态扩大域名权限。WFP 拦截绕过代理的直接连接；系统 DNS 服务仍可能替该账户完成解析，**这不是完全无网络信息泄露的离线环境**。上游还说明共享机器上的本地账户可能观察代理凭据；此 Alpha 后端适合单用户开发环境，不承诺多租户隔离。
 
-文件权限是 Windows ACL 模型：拒绝读取宿主用户主目录并重新授予项目目录权限，不是 Linux 空根文件系统。系统文件及其他已经向沙箱账户/Everyone 开放的目录可能可读；不要用它运行需要强多租户隔离的任务。安装于用户 profile 内的 Node、Python、Scoop 等工具通常不可访问；优先使用机器级安装。本实现不自动开放整个 profile 来解决工具缺失。
+文件权限是 Windows ACL 模型：拒绝读取宿主用户主目录并重新授予项目目录权限，不是 Linux 空根文件系统。系统文件及其他已经向沙箱账户/Everyone 开放的目录可能可读；不要用它运行需要强多租户隔离的任务。安装于用户 profile 内的工具（Python、`%APPDATA%\npm`、nvm 链接目标、`%LOCALAPPDATA%\Programs` 下的工具、客户端自带的 Node）只要位于 PATH 中，就会以只读方式授权给沙箱账户：只授权 PATH 列出的目录本身，不授权整个 profile、AppData 根、MLI 数据目录、工作区的上级目录，也不授权桌面/文档/下载、`.ssh`、`.aws`、`.config`、凭据等目录。不在 PATH 中的工具仍不可见，建议使用机器级安装。
 
-上游所有 Windows 会话使用同一个沙箱 SID，ACL 是账户权限。MLI 使用同一 Windows 用户下的独占 named pipe 作为跨运行时锁，互斥执行原生命令，并在结束清理后释放；进程崩溃时内核也会释放 pipe，避免残留 PID 锁及并发清理竞争。**不要同时在其他应用或其他 Windows 用户下使用同一个 srt-sandbox 账户运行敏感任务**；MLI 的锁不能约束它们。需要并行且彼此隔离的任务，选择独立容器/虚拟机或分别配置账户的方案。
+上游所有 Windows 会话使用同一个沙箱 SID，ACL 是账户权限。MLI 使用同一 Windows 用户下的独占 named pipe 作为跨运行时锁，由 broker 在存活期间持有；同一运行时内的命令共享 broker、可以并行执行。另一个 MLI 进程（命令行版、第二个客户端、设置中的安装/修复）需要时会连接该 pipe 请求释放，空闲的 broker 立即退出，忙碌的 broker 在当前命令结束后退出，等待超过 2 分钟才报 `SANDBOX_BUSY`。进程崩溃时内核也会释放 pipe，避免残留 PID 锁及并发清理竞争。**不要同时在其他应用或其他 Windows 用户下使用同一个 srt-sandbox 账户运行敏感任务**；MLI 的锁不能约束它们。需要并行且彼此隔离的任务，选择独立容器/虚拟机或分别配置账户的方案。
 
 Docker 是手动选择的可选后端，Windows 使用 Docker Desktop 的 **Linux 容器**。容器仅绑定当前工作区，不绑定用户主目录、运行时凭据或 Docker socket；文件系统默认只读，移除全部 capabilities，禁止获得新权限，限制 PID 为 128、内存为 1 GB、CPU 为 2，默认 `--network none`。Windows 容器内用户为 `1000:1000`；Unix 使用当前用户 UID/GID。始终使用 Docker 的本地 `default` context，不使用远程 context，不自动拉取镜像。
 
@@ -60,7 +74,7 @@ node scripts/build-sandbox-image.mjs
 
 这一步构建 `mli-agent-sandbox:1`，包含 Node 22、npm、Git、Python 3、ripgrep、Bash 和 CA 证书。首次构建需要联网下载基础镜像与软件包；执行任务时不会偷偷拉取镜像。Docker Desktop 的工作区文件共享必须已获准。
 
-进入 **设置 → 权限配置 → 运行沙箱**，重新检测并保存策略。仅 Docker/Bubblewrap 的 Agent 命令使用 `/bin/sh` 与 `/workspace`，请使用 Linux 命令及工作区相对路径。Windows 原生后端使用 cmd 和真实项目路径。文件工具仍使用宿主工作区路径。选择 Docker 时 Windows 的原生 `node_modules` 可能包含不兼容 Linux 的模块，建议在容器内安装依赖；写入工作区的文件真实保留，不是自动回滚的副本。
+进入 **设置 → 权限配置 → 运行沙箱**，重新检测并保存策略。仅 Docker 的 Agent 命令使用 `/workspace`（Bubblewrap 和 Seatbelt 使用宿主真实路径），请使用 Linux 命令及工作区相对路径。Windows 原生后端使用 cmd 和真实项目路径。文件工具仍使用宿主工作区路径。选择 Docker 时 Windows 的原生 `node_modules` 可能包含不兼容 Linux 的模块，建议在容器内安装依赖；写入工作区的文件真实保留，不是自动回滚的副本。
 
 沙箱设置保存在用户数据目录 `.security/sandbox.json`，由宿主设置入口修改并在重启后保留，不读取项目中的沙箱覆盖文件。`config.example.json` 的 `security.sandbox` 提供首次启动默认值。已有用户升级后也默认启用工作区沙箱；没有可用后端时仍能聊天及使用获准的文件工具，但命令会被阻止。关闭沙箱是单独的显式选项，关闭后的命令保留环境清理但使用宿主用户权限。
 

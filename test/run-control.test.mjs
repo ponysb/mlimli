@@ -12,7 +12,7 @@ import { getWorkspaceRoot, setWorkspaceRoot } from '../core/paths.mjs';
 import { buildSystemPrompt } from '../core/prompts.mjs';
 import { buildRequest, sessionRoutingKey, setConfig, resolveModelSelection } from '../core/llm.mjs';
 import { loadAll, disposePlugins, getTool, executeTool } from '../core/plugins.mjs';
-import { runTurn, setLoopConfig, abortRun } from '../core/loop.mjs';
+import { runTurn, setLoopConfig, abortRun, interruptRunForAdjustment, runningStep } from '../core/loop.mjs';
 import { saveTaskCheckpoint, taskRecoveryState } from '../core/task-checkpoint.mjs';
 import { parseOpenAIStream, parseResponsesStream, parseAnthropicStream, assembleToolCalls } from '../core/stream.mjs';
 
@@ -162,20 +162,27 @@ test('会话标识按协议写入缓存路由字段，并规范化异常标识',
   assert.equal(sessionRoutingKey('含空格的会话'.repeat(20)), sessionRoutingKey('含空格的会话'.repeat(20)));
 });
 
-async function loopFixture(t, respond, { maxSteps = 12, maxDurationMs = 20000, quality = false, runControl, allowedTools = ['read_file', 'write_file', 'read_tool_output'] } = {}) {
+async function loopFixture(t, respond, { maxSteps = 12, maxDurationMs = 20000, quality = false, omitQualityConfig = false, runControl, allowedTools = ['read_file', 'write_file', 'read_tool_output'] } = {}) {
   const root = workspace(t), seen = [];
   fs.writeFileSync(path.join(root, 'input.txt'), 'stable');
   const server = http.createServer(async (req, res) => {
     let raw = ''; for await (const chunk of req) raw += chunk;
     const body = JSON.parse(raw); seen.push(body); const response = await respond(body, seen.length);
-    const calls = response.call ? [{ index: 0, id: `call-${seen.length}`, type: 'function', function: { name: response.call.name, arguments: response.call.raw ?? JSON.stringify(response.call.args) } }] : undefined;
+    const requestedCalls = response.calls || (response.call ? [response.call] : []);
+    const calls = requestedCalls.length ? requestedCalls.map((call, index) => ({ index, id: `call-${seen.length}-${index}`, type: 'function', function: { name: call.name, arguments: call.raw ?? JSON.stringify(call.args) } })) : undefined;
     res.setHeader('content-type', 'text/event-stream');
+    if (response.frames) {
+      for (const frame of response.frames) res.write('data: ' + (frame === '[DONE]' ? frame : JSON.stringify(frame)) + '\n\n');
+      if (response.holdMs) await new Promise(resolve => setTimeout(resolve, response.holdMs));
+      res.end(response.finish === false ? '' : 'data: [DONE]\n\n');
+      return;
+    }
     const usageFrames = (response.usages || []).map(usage => 'data: ' + JSON.stringify({ choices: [], usage }) + '\n\n').join('');
     res.end('data: ' + JSON.stringify({ choices: [{ delta: calls ? { tool_calls: calls } : { content: response.text || '已核对结果。' }, finish_reason: response.reason || (calls ? 'tool_calls' : 'stop') }] }) + '\n\n' + usageFrames + 'data: [DONE]\n\n');
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => { disposePlugins(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });
-  const config = { providers: [{ id: 'p', name: 'fixture', protocol: 'openai-chat', baseUrl: `http://127.0.0.1:${server.address().port}` }], models: [{ id: 'm', providerId: 'p', model: 'fixture', contextWindow: 128000 }], activeModelId: 'm', account: { enabled: false }, memory: { enabled: false }, agent: { maxSteps, maxDurationMs, runControl, quality: { enabled: quality, noProgressThreshold: 3 }, subagents: { enabled: false } } };
+  const config = { providers: [{ id: 'p', name: 'fixture', protocol: 'openai-chat', baseUrl: `http://127.0.0.1:${server.address().port}` }], models: [{ id: 'm', providerId: 'p', model: 'fixture', contextWindow: 128000 }], activeModelId: 'm', account: { enabled: false }, memory: { enabled: false }, agent: { maxSteps, maxDurationMs, runControl, ...(omitQualityConfig ? {} : { quality: { enabled: quality, noProgressThreshold: 3 } }), subagents: { enabled: false } } };
   setConfig(config); setLoopConfig(config); await loadAll({ reload: true });
   const session = Session.create('loop fixture'); session.setMode('auto-all');
   const context = createRunContext({ session, config, modelSelection: resolveModelSelection(), sandboxPolicy: { mode: 'off' }, allowedTools });
@@ -183,6 +190,61 @@ async function loopFixture(t, respond, { maxSteps = 12, maxDurationMs = 20000, q
     resume: () => { const loaded = Session.load(session.id, session.directory); return withRunContext(context, () => runTurn(loaded, '', [], { resumeCheckpointId: taskRecoveryState(loaded).checkpointId })); },
     checkpoint: state => withRunContext(context, () => saveTaskCheckpoint(session, { ...state, turnId: session.entries().findLast(entry => entry.type === 'turn_start').turnId })) };
 }
+
+async function waitUntil(predicate, message, timeoutMs = 3000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  assert.fail(message);
+}
+
+test('立即调整会中断模型流、丢弃半截工具调用，并在同一 turn 重发上下文', async t => {
+  const fixture = await loopFixture(t, (_, n) => n === 1 ? {
+    frames: [{ choices: [{ delta: { content: '旧回答', tool_calls: [{ index: 0, id: 'partial-call', type: 'function', function: { name: 'write_file', arguments: '{"path":' } }] }, finish_reason: null }] }],
+    holdMs: 1000,
+  } : { text: '已按新要求完成。' });
+  const running = fixture.run('先执行原任务');
+  await waitUntil(() => runningStep(fixture.session.id)?.text === '旧回答', '模型流未开始');
+  const adjustment = fixture.session.enqueue('不要写文件，只回答新要求');
+  fixture.session.adjustQueued(adjustment.queueId);
+  assert.equal(interruptRunForAdjustment(fixture.session.id), true);
+  await running;
+
+  const entries = fixture.session.entries();
+  assert.equal(entries.filter(entry => entry.type === 'turn_start').length, 1);
+  assert.equal(entries.filter(entry => entry.type === 'step_end' && entry.status === 'adjusted').length, 1);
+  assert.equal(entries.filter(entry => entry.type === 'tool_start').length, 0);
+  assert.equal(entries.filter(entry => entry.type === 'message' && entry.queuedId === adjustment.queueId).length, 1);
+  assert.equal(fixture.session.queued().length, 0);
+  assert.ok(fixture.seen[1].messages.some(message => message.role === 'user' && String(message.content).includes('不要写文件，只回答新要求')));
+  assert.equal(entries.findLast(entry => entry.type === 'turn_end').reason, 'done');
+});
+
+test('工具执行期间的立即调整不终止或重放工具，结果落盘后进入下一次上下文', async t => {
+  const fixture = await loopFixture(t, (_, n) => n === 1 ? {
+    calls: [
+      { name: 'bash', args: { command: `node -e "setTimeout(()=>require('node:fs').writeFileSync('tool-ran.txt','once'),300)"` } },
+      { name: 'bash', args: { command: `node -e "require('node:fs').writeFileSync('must-not-run.txt','bad')"` } },
+    ],
+  } : { text: '工具完成后已采用调整。' }, { allowedTools: ['bash'] });
+  const running = fixture.run('运行一次工具');
+  await waitUntil(() => fixture.session.entries().some(entry => entry.type === 'tool_start'), '工具未开始执行');
+  const adjustment = fixture.session.enqueue('工具完成后直接总结，不要再次执行');
+  fixture.session.adjustQueued(adjustment.queueId);
+  assert.equal(interruptRunForAdjustment(fixture.session.id), false);
+  await running;
+
+  const entries = fixture.session.entries();
+  assert.equal(entries.filter(entry => entry.type === 'tool_start' && entry.name === 'bash').length, 1);
+  assert.equal(entries.filter(entry => entry.type === 'tool_end' && entry.name === 'bash' && entry.status === 'ok').length, 1);
+  assert.equal(entries.filter(entry => entry.type === 'tool_end' && entry.name === 'bash' && entry.status === 'adjusted').length, 1);
+  assert.equal(fs.readFileSync(path.join(fixture.root, 'tool-ran.txt'), 'utf8'), 'once');
+  assert.equal(fs.existsSync(path.join(fixture.root, 'must-not-run.txt')), false);
+  assert.ok(fixture.seen[1].messages.some(message => message.role === 'user' && String(message.content).includes('工具完成后直接总结，不要再次执行')));
+  assert.equal(entries.findLast(entry => entry.type === 'turn_end').reason, 'done');
+});
 
 test('恢复重载会话沿用原 turn、用量和轮数，已写入文件不自动重放', async t => {
   let fixture;
@@ -282,12 +344,23 @@ test('显式时间预算仍会中止尚未完成的模型请求', async t => {
 test('累计 usage 帧在每次模型响应中只计最终值，多轮仍累加', async t => {
   const fixture = await loopFixture(t, (_, n) => ({
     ...(n === 1 ? { call: { name: 'read_file', args: { path: 'input.txt' } } } : { text: '已核对。' }),
-    usages: [{ prompt_tokens: 100, completion_tokens: 5 }, { prompt_tokens: 100, completion_tokens: 10 }, { prompt_tokens: 100, completion_tokens: 10 }],
+    usages: [
+      { prompt_tokens: 100, completion_tokens: 5, prompt_tokens_details: { cached_tokens: 20 } },
+      { prompt_tokens: 100, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 30 } },
+      { prompt_tokens: 100, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 30 } },
+    ],
   }));
   await fixture.run('核对 input.txt');
   const summary = fixture.session.entries().findLast(e => e.type === 'task_summary');
   assert.equal(summary.runtimeControl.promptTokens, 200);
   assert.equal(summary.runtimeControl.completionTokens, 20);
+  assert.equal(summary.billing.promptTokens, 200);
+  assert.equal(summary.billing.completionTokens, 20);
+  assert.equal(summary.billing.cacheReadTokens, 60);
+  assert.equal(summary.billing.cacheTokens, 60);
+  assert.equal(summary.billing.requestCount, 2);
+  assert.equal(summary.billing.official, false);
+  assert.equal(summary.billing.pricingConfigured, false);
 });
 
 test('真实循环在相同结果预警后收尾，无额外用户消息', { timeout: 30000 }, async t => {
@@ -326,6 +399,16 @@ test('收尾提醒不绕过质量门禁：无验证文字交付仍未完成', { 
   const fixture = await loopFixture(t, (_, n) => n === 1 ? { call: { name: 'write_file', args: { path: 'final.md', content: '未经核对的成品' } } } : { text: '全部完成。' }, { maxSteps: 10, quality: true });
   await fixture.run('保存为 final.md 文件并验证内容');
   assert.equal(fixture.session.entries().findLast(e => e.type === 'task_summary').reason, 'needs_validation');
+});
+
+test('旧配置未声明质量门禁时，完整最终答复立即停止', { timeout: 30000 }, async t => {
+  const fixture = await loopFixture(t, (_, n) => n === 1
+    ? { call: { name: 'write_file', args: { path: 'unrequested.md', content: '模型自行扩大的交付物' } } }
+    : { text: '统计总结已经完成。' }, { omitQualityConfig: true });
+  await fixture.run('总结一下现在的大纲有多少');
+  assert.equal(fixture.seen.length, 2);
+  assert.equal(fixture.session.entries().filter(entry => entry.source === 'runtime' && entry.role === 'user').length, 0);
+  assert.equal(fixture.session.entries().findLast(entry => entry.type === 'task_summary').reason, 'done');
 });
 
 test('原步骤上限真实生效，未完成摘要不显示成功', { timeout: 30000 }, async t => {

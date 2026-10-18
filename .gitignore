@@ -43,3 +43,4 @@ __pycache__/
 # Private services are never part of the public client repository
 /server/
 /website/
+/enterprise-web/

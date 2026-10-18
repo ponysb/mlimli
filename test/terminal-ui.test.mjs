@@ -54,6 +54,24 @@ test('file explorer header only applies centered icon-button styling to its tool
   assert.doesNotMatch(css, /\.file-explorer-head button\s*\{/);
 });
 
+test('terminal workspace uses xterm panes, supports split view, and closes back to a valid workspace', () => {
+  const component = fs.readFileSync(path.join(root, 'react/src/TerminalWorkspace.jsx'), 'utf8');
+  const main = fs.readFileSync(path.join(root, 'react/src/main.jsx'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'react/src/style.css'), 'utf8');
+  assert.match(component, /from '@xterm\/xterm'/);
+  assert.match(component, /aria-label="添加终端"/);
+  assert.match(component, /panes\.map\(\(pane, index\)/);
+  assert.match(component, /const layoutFallback = \{/);
+  assert.match(component, /style=\{layoutFallback\.paneHead\}/);
+  assert.match(main, /terminalReturnView\.current = \{ view, activeWorkspaceTab \}/);
+  assert.match(main, /setView\(destination\.view === 'terminal'/);
+  assert.doesNotMatch(main, /function closeTerminal\(\)[\s\S]{0,300}setView\("file"\)/);
+  assert.match(css, /\.terminal-panes\.is-split\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit/);
+  assert.match(css, /grid-auto-rows:\s*minmax\(240px, 1fr\)/);
+  assert.match(css, /\.terminal-panes\.is-split\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) !important/);
+  assert.match(css, /\.terminal-pane\s*\{[^}]*height:\s*100%/);
+});
+
 test('default workspace is created automatically and terminal commands run there with ANSI output intact', async context => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'mli-terminal-'));
   const runtime = startRuntime({ executable: process.execPath, runtimeRoot: root, dataRoot: directory });
@@ -98,4 +116,23 @@ test('default workspace is created automatically and terminal commands run there
     await fetch(`${url}/api/terminal/${waiting.terminalId}/stop`, { method: 'POST' });
     if (processId) { try { process.kill(processId); } catch {} }
   }
+});
+
+test('interactive terminal keeps a real PTY session for stdin and resize', async context => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'mli-terminal-pty-'));
+  const runtime = startRuntime({ executable: process.execPath, runtimeRoot: root, dataRoot: directory });
+  context.after(async () => {
+    if (runtime.child.exitCode === null) { const exited = once(runtime.child, 'exit'); runtime.child.kill(); await exited; }
+    fs.rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  });
+  const { url } = await runtime.ready;
+  const response = await fetch(`${url}/api/terminal/interactive`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cols: 100, rows: 30 }) });
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.interactive, true);
+  await fetch(`${url}/api/terminal/${result.terminalId}/resize`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cols: 120, rows: 40 }) });
+  await fetch(`${url}/api/terminal/${result.terminalId}/input`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ data: 'echo PTY_HTTP_OK\r' }) });
+  await new Promise(resolve => setTimeout(resolve, 350));
+  const stop = await fetch(`${url}/api/terminal/${result.terminalId}/stop`, { method: 'POST' });
+  assert.equal(typeof (await stop.json()).ok, 'boolean');
 });

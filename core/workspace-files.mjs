@@ -12,6 +12,10 @@ const TEXT_EXTENSIONS = new Set([
   '.cmd', '.vue', '.svelte', '.graphql', '.gql', '.csv', '.tsv', '.log', '.properties', '.conf',
 ]);
 const MIME = {
+  '.html': 'text/html; charset=utf-8', '.htm': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8', '.scss': 'text/x-scss; charset=utf-8', '.less': 'text/less; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.cjs': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8', '.xml': 'application/xml; charset=utf-8',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
   '.webp': 'image/webp', '.bmp': 'image/bmp', '.ico': 'image/x-icon', '.svg': 'image/svg+xml',
   '.doc': 'application/msword', '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -57,7 +61,7 @@ function fileKind(file, sample) {
   if (mime.startsWith('audio/')) return { kind: 'audio', mime };
   if (mime.startsWith('video/')) return { kind: 'video', mime };
   if (mime === 'application/pdf') return { kind: 'pdf', mime };
-  if (TEXT_EXTENSIONS.has(ext) && !sample?.includes(0)) return { kind: 'text', mime: 'text/plain; charset=utf-8' };
+  if (TEXT_EXTENSIONS.has(ext) && !sample?.includes(0)) return { kind: 'text', mime: MIME[ext] || 'text/plain; charset=utf-8' };
   return { kind: 'binary', mime };
 }
 

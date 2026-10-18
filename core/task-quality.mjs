@@ -26,7 +26,7 @@ export function sourceEvidence() {
   try{walk(root);}catch{complete=false;}
   return {sha256:hash.digest('hex'),complete,environment};
 }
-export function qualityPolicy(config={}) {const value=config.agent?.quality||{};return {enabled:value.enabled!==false,noProgressThreshold:Math.max(2,Math.min(8,Number(value.noProgressThreshold)||3))};}
+export function qualityPolicy(config={}) {const value=config.agent?.quality||{};return {enabled:value.enabled===true,noProgressThreshold:Math.max(2,Math.min(8,Number(value.noProgressThreshold)||3))};}
 function artifactKey(file){const value=path.resolve(getWorkspaceRoot(),file);return process.platform==='win32'?value.toLowerCase():value;}
 export function assessTaskQuality({entries,turnId,files=[],prompt='',mock=false}) {
   // Rehash once per file in this assessment, never reuse a cache across deliveries.

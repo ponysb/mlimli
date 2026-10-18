@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { ROOT, stageWindowsClient, bundleCompatibility } from './package-win.mjs';
 import { installNodeRuntime } from './terminal-package.mjs';
 import { buildTui } from './build-tui.mjs';
+import { verifyInstalledBuildDependencies, verifyRuntimeDependencies } from './runtime-dependencies.mjs';
 
 export function macBuildConfig(stage, arch) {
   return {
@@ -12,7 +13,8 @@ export function macBuildConfig(stage, arch) {
     files: ['package.json', 'electron/**/*', 'core/**/*'], asar: true, npmRebuild: false,
     electronVersion: stage.manifest.devDependencies.electron,
     extraResources: [
-      { from: stage.runtimeDirectory, to: 'client', filter: ['**/*'] },
+      { from: stage.runtimeDirectory, to: 'client', filter: ['**/*', '!node_modules{,/**/*}'] },
+      { from: path.join(stage.runtimeDirectory, 'node_modules'), to: 'client/node_modules', filter: ['**/*'] },
       { from: path.join(stage.destination, 'stage', 'node'), to: 'node', filter: ['**/*'] },
       { from: path.join(ROOT, 'cli', 'launchers', 'mli'), to: 'bin/mli' },
     ],
@@ -31,6 +33,7 @@ export function macBuildConfig(stage, arch) {
 
 async function main() {
   if (process.platform !== 'darwin') throw new Error('macOS PKG 打包需要在 macOS 上运行');
+  verifyInstalledBuildDependencies(ROOT);
   const args = process.argv.slice(2);
   let arch = process.arch;
   for (let index = 0; index < args.length; index++) {
@@ -45,6 +48,7 @@ async function main() {
   await buildWeb({ configFile: path.join(ROOT, 'vite.config.js'), root: path.join(ROOT, 'react') });
   const stage = stageWindowsClient({ output: path.join(working, 'desktop') });
   await bundleCompatibility(stage);
+  verifyRuntimeDependencies(stage.runtimeDirectory);
   await buildTui({ platform: 'darwin', arch, output: path.join(stage.runtimeDirectory, 'cli', 'bin') });
   await installNodeRuntime(path.join(stage.destination, 'stage', 'node'), { platform: 'darwin', arch });
   fs.chmodSync(path.join(ROOT, 'electron', 'pkg-scripts', 'postinstall'), 0o755);

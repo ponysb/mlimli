@@ -7,9 +7,11 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { spawn as spawnPty } from 'node-pty';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, getConfig, applyProviderPatch, saveConfigFile, publicSettings, listRemoteModels, testProvider, refreshManagedCatalog } from './core/llm.mjs';
-import { setLoopConfig, runTurn, abortRun, isRunning, runningStep, runDevTool, runtimeInfo, Session } from './core/loop.mjs';
+import { modelProfiles } from './core/model-profiles.mjs';
+import { setLoopConfig, runTurn, abortRun, interruptRunForAdjustment, isRunning, runningStep, runDevTool, runtimeInfo, Session } from './core/loop.mjs';
 import { onEvent, emit, eventSequence } from './core/events.mjs';
 import { setWorkspaceRoot, APP_ROOT, DATA_ROOT, getWorkspaceRoot, isWorkspaceRoot } from './core/paths.mjs';
 import { uiPreferences, updateUiPreferences } from './core/ui-preferences.mjs';
@@ -41,7 +43,8 @@ import { approveMemory, deleteMemory, getMemory, listMemories, memoryLocations, 
 import { memorySettings, updateMemorySettings } from './core/memory-policy.mjs';
 import { memoryLearner } from './core/memory-learning.mjs';
 import { stopProcessTree } from './core/process-tree.mjs';
-import { sandboxStatus, updateSandbox, hasActiveSandboxCommands } from './core/sandbox.mjs';
+import { sandboxStatus, updateSandbox, hasActiveSandboxCommands, shutdownSandboxBroker } from './core/sandbox.mjs';
+import { retryBashWithoutSandbox } from './core/sandbox-retry.mjs';
 import { speechRoute, shutdownSpeech, listMeetings } from './core/speech.mjs';
 import { appCenter } from './core/app-center.mjs';
 import { appCenterRoute } from './core/app-center-http.mjs';
@@ -54,6 +57,7 @@ recordClientLaunch().catch(() => {});
 const PORT = Number(process.env.MLI_AGENT_PORT || cfg.server?.port || 3000);
 const HOST = process.env.MLI_AGENT_HOST || cfg.server?.host || '127.0.0.1';
 const terminalRuns = new Map();
+const interactiveTerminals = new Map();
 const runtimeHost = globalThis.mliRuntimeHost;
 const leases = new Map();
 let shuttingDown = false;
@@ -66,6 +70,7 @@ function shutdown() {
   appCenter().shutdown();
   const sandboxCleanup = shutdownRuntime();
   for (const id of terminalRuns.keys()) stopTerminalRun(id);
+  for (const id of interactiveTerminals.keys()) stopInteractiveTerminal(id);
   for (const response of sseClients) response.end();
   server.close(() => Promise.resolve(sandboxCleanup).finally(() => process.exit(0)));
   setTimeout(() => process.exit(0), 15000).unref();
@@ -158,8 +163,65 @@ function stopTerminalRun(id) {
   return true;
 }
 
+function startInteractiveTerminal({ cols = 120, rows = 32 } = {}) {
+  const id = crypto.randomUUID().slice(0, 12);
+  const cwd = getWorkspaceRoot();
+  const safeCols = Math.max(20, Math.min(500, Number(cols) || 120));
+  const safeRows = Math.max(5, Math.min(200, Number(rows) || 32));
+  const isWindows = process.platform === 'win32';
+  const shell = isWindows ? (process.env.ComSpec || 'cmd.exe') : (process.env.SHELL || '/bin/bash');
+  const args = isWindows ? ['/d'] : ['-il'];
+  const pty = spawnPty(shell, args, {
+    name: 'xterm-256color', cwd, cols: safeCols, rows: safeRows,
+    env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' },
+    useConpty: isWindows,
+  });
+  const session = { id, cwd, pty, output: [], startedAt: Date.now(), status: 'running' };
+  interactiveTerminals.set(id, session);
+  emit('terminal_started', { terminalId: id, cwd, interactive: true });
+  pty.onData(text => {
+    if (!text) return;
+    session.output.push({ stream: 'stdout', text });
+    if (session.output.length > 4000) session.output.shift();
+    emit('terminal_output', { terminalId: id, stream: 'stdout', text, interactive: true });
+  });
+  pty.onExit(({ exitCode, signal }) => {
+    if (session.status === 'exited') return;
+    session.status = 'exited';
+    emit('terminal_exit', { terminalId: id, code: exitCode, signal: signal || null, interactive: true });
+    setTimeout(() => interactiveTerminals.delete(id), 5 * 60 * 1000);
+  });
+  return { terminalId: id, cwd, interactive: true };
+}
+
+function writeInteractiveTerminal(id, data) {
+  const session = interactiveTerminals.get(id);
+  if (!session || session.status !== 'running') return false;
+  session.pty.write(String(data || ''));
+  return true;
+}
+
+function resizeInteractiveTerminal(id, cols, rows) {
+  const session = interactiveTerminals.get(id);
+  if (!session || session.status !== 'running') return false;
+  session.pty.resize(Math.max(20, Math.min(500, Number(cols) || 120)), Math.max(5, Math.min(200, Number(rows) || 32)));
+  return true;
+}
+
+function stopInteractiveTerminal(id) {
+  const session = interactiveTerminals.get(id);
+  if (!session || session.status !== 'running') return false;
+  session.stopping = true;
+  try { session.pty.write('\u0003'); } catch {}
+  setTimeout(() => { try { if (session.status === 'running') session.pty.kill(); } catch {} }, 500).unref();
+  return true;
+}
+
 // ---------- SSE 总线 ----------
 const sseClients = new Set();
+const refreshModelProfiles = () => modelProfiles.refresh().then(changed => { if (changed) emit('catalog_updated', { ok: true }); }).catch(() => {});
+setInterval(refreshModelProfiles, 60000).unref();
+void refreshModelProfiles();
 onEvent((evt) => {
   const frame = `data: ${JSON.stringify(evt)}\n\n`;
   for (const res of sseClients) {
@@ -303,7 +365,7 @@ async function route(req, res, url) {
   }
 
   if (pathname === '/api/info') {
-    Promise.all([refreshManagedCatalog(), refreshPlatformLibrary()])
+    Promise.all([refreshManagedCatalog(), refreshPlatformLibrary(), modelProfiles.refresh().catch(() => false)])
       .then((results) => { if (results.some(Boolean)) emit('catalog_updated', { ok: true }); })
       .catch(() => {});
     let teamMemory = { available: false, organizationId: null, memoryCount: 0, repositoryCount: 0 };
@@ -311,7 +373,10 @@ async function route(req, res, url) {
       const data = await listTeamMemory({ timeoutMs: 1200 });
       teamMemory = { available: data.scope?.subjectType === 'enterprise', organizationId: data.scope?.organizationId || null, organizationName: data.scope?.organizationName || null, memoryCount: data.memories?.length || 0, repositoryCount: data.repositories?.length || 0 };
     } catch { /* 账户服务不可用时不阻断本地工作台 */ }
-    return json(res, 200, { ...runtimeInfo(), ...publicSettings(), account: publicAccountStatus(), teamMemory, uiPreferences: uiPreferences(), subagentsEnabled: cfg.agent?.subagents?.enabled !== false, plugins: pluginsInfo(), commands: getCommands(), experts: listExperts(), localSkills: listLocalSkills(), workspace: getWorkspaceRoot(), workspaces: listWorkspaces(), channels: listChannels(), channelAdapters: channelAdapters() });
+    const mcp = (cfg.mcp?.servers || []).map((server) => ({
+      name: String(server.name || '').trim(),
+    })).filter((server) => server.name);
+    return json(res, 200, { ...runtimeInfo(), ...publicSettings(), account: publicAccountStatus(), teamMemory, uiPreferences: uiPreferences(), subagentsEnabled: cfg.agent?.subagents?.enabled !== false, plugins: pluginsInfo(), commands: getCommands(), experts: listExperts(), localSkills: listLocalSkills(), mcp, workspace: getWorkspaceRoot(), workspaces: listWorkspaces(), channels: listChannels(), channelAdapters: channelAdapters() });
   }
   if (pathname === '/api/channels' && req.method === 'GET') return json(res, 200, { channels: listChannels(), adapters: channelAdapters(), events: channelEvents() });
   if (pathname === '/api/channels' && req.method === 'POST') {
@@ -503,7 +568,19 @@ async function route(req, res, url) {
     try { return json(res, 200, startTerminalRun((await readBody(req)).command)); }
     catch (error) { return json(res, 400, { error: error.message, code: 'TERMINAL_COMMAND_REJECTED' }); }
   }
-  if ((match = m(/^\/api\/terminal\/([\w-]+)\/stop$/)) && req.method === 'POST') return json(res, 200, { ok: stopTerminalRun(match[1]) });
+  if (pathname === '/api/terminal/interactive' && req.method === 'POST') {
+    try { return json(res, 200, startInteractiveTerminal(await readBody(req))); }
+    catch (error) { return json(res, 400, { error: error.message, code: 'TERMINAL_PTY_START_FAILED' }); }
+  }
+  if ((match = m(/^\/api\/terminal\/([\w-]+)\/input$/)) && req.method === 'POST') {
+    const body = await readBody(req);
+    return json(res, 200, { ok: writeInteractiveTerminal(match[1], body.data) });
+  }
+  if ((match = m(/^\/api\/terminal\/([\w-]+)\/resize$/)) && req.method === 'POST') {
+    const body = await readBody(req);
+    return json(res, 200, { ok: resizeInteractiveTerminal(match[1], body.cols, body.rows) });
+  }
+  if ((match = m(/^\/api\/terminal\/([\w-]+)\/stop$/)) && req.method === 'POST') return json(res, 200, { ok: stopTerminalRun(match[1]) || stopInteractiveTerminal(match[1]) });
   if ((match = m(/^\/api\/terminal\/([\w-]+)$/)) && req.method === 'GET') {
     const run = terminalRuns.get(match[1]);
     if (!run) return notFound(res, '终端任务不存在或已过期');
@@ -593,9 +670,12 @@ async function route(req, res, url) {
   }
   if (pathname === '/api/permissions' && req.method === 'GET') return json(res, 200, { allow: listPersistentRules() });
   if (pathname === '/api/sandbox' && req.method === 'GET') return json(res, 200, await sandboxStatus());
+  if (pathname === '/api/sandbox/diagnostics' && req.method === 'GET') return json(res, 200, await sandboxStatus());
   // Readiness only: system installation is available exclusively through desktop IPC.
   if (pathname === '/api/sandbox/install-preflight' && req.method === 'POST') {
     if(activeSequences.size || agentManager.hasPending() || hasActiveSandboxCommands() || [...terminalRuns.values()].some(run=>['starting','running'].includes(run.status)))return json(res,409,{error:'任务或终端命令正在运行，请停止或完成后再安装沙箱'});
+    // The idle broker holds the native sandbox claim the installer needs.
+    await shutdownSandboxBroker();
     return json(res,200,{ok:true});
   }
   if (pathname === '/api/sandbox' && req.method === 'POST') {
@@ -629,8 +709,11 @@ async function route(req, res, url) {
   }
   if (pathname === '/api/ui/preferences' && req.method === 'POST') {
     const body = await readBody(req);
-    if (!['default', 'auto-all'].includes(body.defaultPermissionMode)) return badRequest(res, '无效权限模式');
-    return json(res, 200, updateUiPreferences(body));
+    if (body.defaultPermissionMode !== undefined && !['default', 'auto-all'].includes(body.defaultPermissionMode)) return badRequest(res, '无效权限模式');
+    if (body.desktopEnabled !== undefined && typeof body.desktopEnabled !== 'boolean') return badRequest(res, '无效桌面会话开关');
+    const preferences = updateUiPreferences(body);
+    emit('ui_preferences_updated', preferences);
+    return json(res, 200, preferences);
   }
   if (pathname === '/api/memory/settings' && req.method === 'GET') return json(res, 200, { settings: memorySettings() });
   if (pathname === '/api/memory/settings' && req.method === 'POST') {
@@ -708,6 +791,7 @@ async function route(req, res, url) {
         providerId: body.providerId,
         baseUrl: body.baseUrl,
         model: body.model,
+        reasoningSettings: body.reasoningSettings,
         apiKey: body.apiKey || undefined,
         protocol: body.protocol,
       });
@@ -721,7 +805,15 @@ async function route(req, res, url) {
       ...session,
       running: isRunning(session.id) || activeSequences.has(session.id),
     }));
-    return json(res, 200, { sessions });
+    const workspaceSessions = Object.fromEntries(listWorkspaces().map((workspace) => {
+      if (workspace.active) return [workspace.id, sessions];
+      const directory = path.join(workspace.path, '.agent', 'sessions');
+      return [workspace.id, Session.list({ directory }).map((session) => ({
+        ...session,
+        running: isRunning(session.id) || activeSequences.has(session.id),
+      }))];
+    }));
+    return json(res, 200, { sessions, workspaceSessions });
   }
   if (pathname === '/api/schedules' && req.method === 'GET') {
     return json(res, 200, { tasks: scheduler.list(), runs: scheduler.runs() });
@@ -772,6 +864,25 @@ async function route(req, res, url) {
       return json(res, 200, result);
     } catch (error) { return badRequest(res, error.message); }
   }
+  if ((match = m(/^\/api\/session\/([\w-]+)\/tool\/([^/]+)\/retry-unsandboxed$/)) && req.method === 'POST') {
+    const host = String(req.headers.host || '');
+    if (!/^(127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/.test(host) || req.headers['sec-fetch-site'] === 'cross-site') return json(res, 403, { error: '无沙箱重试仅允许本机应用操作' });
+    if (req.headers.origin) {
+      let origin;
+      try { origin = new URL(req.headers.origin); } catch { return json(res, 403, { error: '无效来源' }); }
+      if (origin.host !== host || !['http:', 'https:'].includes(origin.protocol)) return json(res, 403, { error: '无沙箱重试不允许跨站调用' });
+    }
+    const s = getSessionOr400(res, match[1]); if (!s) return;
+    if (isRunning(s.id) || activeSequences.has(s.id) || agentManager.pending(s).length || hasActiveSandboxCommands()) return json(res, 409, { error: '会话或沙箱命令正在运行，请完成后再重试' });
+    const body = await readBody(req);
+    try {
+      let callId;
+      try { callId = decodeURIComponent(match[2]); } catch { return badRequest(res, '无效工具调用 ID'); }
+      if (!callId || callId.length > 300) return badRequest(res, '无效工具调用 ID');
+      const result = await retryBashWithoutSandbox(s, callId, { confirmed: body.confirmed, context: contextForSession(s) });
+      return json(res, 200, result);
+    } catch (error) { return json(res, error.status || 400, { error: error.message, code: error.code }); }
+  }
   if (pathname === '/api/acp/settings' && ['GET', 'POST'].includes(req.method)) {
     const host = String(req.headers.host || '');
     if (!/^(127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/.test(host)) return json(res, 403, { error: 'ACP 配置仅允许本机访问' });
@@ -812,6 +923,16 @@ async function route(req, res, url) {
     const page = await readSessionView(match[1], 'page', { limit: url.searchParams.get('limit') || 120, before }, directory);
     if (!page) return notFound(res, '会话不存在');
     return json(res, 200, page);
+  }
+  if ((match = m(/^\/api\/session\/([\w-]+)\/goal$/)) && req.method === 'POST') {
+    const s = getSessionOr400(res, match[1]); if (!s) return;
+    if (s.parentSessionId) return badRequest(res, '请从主任务设置目标');
+    const body = await readBody(req);
+    try {
+      const goal = s.setGoal(body.text, body.status || 'active');
+      emit('goal_updated', { sessionId: s.id, goal });
+      return json(res, 200, { goal });
+    } catch (error) { return badRequest(res, error.message); }
   }
   if ((match = m(/^\/api\/session\/([\w-]+)\/entries\/(\d+)(?:\/(media))?$/)) && req.method === 'GET') {
     const item = await readSessionView(match[1], match[3] ? 'media' : 'entry', { entryId: match[2], path: url.searchParams.get('path') }, runningSessions.get(match[1])?.directory);
@@ -928,8 +1049,9 @@ async function route(req, res, url) {
     if (s.parentSessionId) return badRequest(res, '请通过主任务调整子 Agent');
     if (!isRunning(s.id)) return json(res, 409, { error: '会话未运行，无法调整当前任务' });
     if (!s.adjustQueued(match[2])) return notFound(res, '排队消息不存在');
+    const interrupted = interruptRunForAdjustment(s.id);
     emit('queue_updated', { sessionId: s.id, queue: s.queued() });
-    return json(res, 200, { queue: s.queued() });
+    return json(res, 200, { queue: s.queued(), interrupted });
   }
   if ((match = m(/^\/api\/session\/([\w-]+)\/attachment\/([\w-]+)$/)) && req.method === 'GET') {
     const item = await readSessionView(match[1], 'attachment', { attachmentId: match[2] }, runningSessions.get(match[1])?.directory); if (!item) return notFound(res, '附件不存在');
@@ -964,11 +1086,11 @@ async function route(req, res, url) {
   }
   if ((match = m(/^\/api\/session\/([\w-]+)\/desktop$/)) && req.method === 'POST') {
     const s = getSessionOr400(res, match[1]); if (!s) return;
-    if (s.parentSessionId) return badRequest(res, '子 Agent 不开放桌面控制');
     const body = await readBody(req);
-    const enabled = s.setDesktopEnabled(!!body.enabled);
-    emit('session_updated', { sessionId: s.id, desktopEnabled: enabled });
-    return json(res, 200, { desktopEnabled: enabled });
+    if (typeof body.enabled !== 'boolean') return badRequest(res, '无效桌面会话开关');
+    const preferences = updateUiPreferences({ desktopEnabled: body.enabled });
+    emit('ui_preferences_updated', preferences);
+    return json(res, 200, { desktopEnabled: preferences.desktopEnabled });
   }
   if ((match = m(/^\/api\/session\/([\w-]+)\/expert$/)) && req.method === 'POST') {
     const s = getSessionOr400(res, match[1]); if (!s) return;

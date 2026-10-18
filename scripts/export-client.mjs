@@ -4,11 +4,15 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 export const CLIENT_FILES = [
+  'docs/MODEL-PROFILES.md', 'docs/model-profile-NOTICE.txt',
+  'test/reasoning.test.mjs',
+  'test/model-profile-worker.test.mjs',
   'docs/ACP.md', 'test/acp.test.mjs', 'test/acp-client.test.mjs', 'test/acp-settings.test.mjs', 'test/fixtures/acp-peer.mjs', 'test/fixtures/acp-settings-smoke.cjs',
   'README.md', 'README.en.md', 'docs/task-recovery-ui.png', '.gitignore', '.gitattributes', '.env.example', 'config.example.json', 'package.json', 'package-lock.json', 'build-windows.cmd',
   'vite.config.js', 'server.mjs', 'PLUGIN-COMPATIBILITY.md',
   'scripts/check.mjs', 'scripts/export-client.mjs', 'scripts/package-win.mjs', 'scripts/verify-win.mjs', 'scripts/clean-release.mjs', 'docs/WINDOWS-PACKAGING.md',
-  'scripts/terminal-package.mjs', 'scripts/package-linux.mjs', 'scripts/package-mac.mjs', 'docs/TERMINAL.md', 'test/cli.test.mjs',
+  'scripts/terminal-package.mjs', 'scripts/runtime-dependencies.mjs', 'scripts/package-linux.mjs', 'scripts/package-mac.mjs', 'docs/TERMINAL.md', 'test/cli.test.mjs',
+  'scripts/sandbox-repair-bundle.mjs', 'test/sandbox-repair.test.mjs',
   'scripts/build-tui.mjs', 'scripts/compile-tui.ts', 'scripts/test-tui.mjs', 'test/modern-tui.test.mjs', 'test/tui/interaction.test.tsx',
   'test/account.test.mjs', 'test/agent-workflow.test.mjs', 'test/export-client.test.mjs',
   'test/local-library.test.mjs', 'test/session-compat.test.mjs', 'test/session-queue.test.mjs',
@@ -24,7 +28,7 @@ export const CLIENT_FILES = [
   'docs/CLIENT-QUALITY.md', 'docs/MEMORY.md', 'docs/SUBAGENTS.md', 'docs/SCHEDULES.md', 'docs/LSP.md', 'scripts/verify-memory-ui.cjs',
   'test/browser-recording.test.mjs', 'test/channels.test.mjs', 'test/composer-capabilities.test.mjs',
   'test/delivery-evidence.test.mjs', 'test/fixtures/document-evidence.mjs', 'test/dictation-draft.test.mjs', 'test/dictation-microphone.test.mjs',
-  'test/meeting-workspace.test.mjs', 'test/memory-http.test.mjs', 'test/memory.test.mjs',
+  'test/meeting-mini.test.mjs', 'test/meeting-workspace.test.mjs', 'test/memory-http.test.mjs', 'test/memory.test.mjs',
   'test/run-control.test.mjs', 'test/sandbox-setup.test.mjs', 'test/scheduler.test.mjs',
   'test/session-deletion.test.mjs', 'test/session-pagination.test.mjs', 'test/speech-worker-cache.test.mjs',
   'test/subagents-http.test.mjs', 'test/subagents.test.mjs', 'test/task-continuity.test.mjs',
@@ -46,7 +50,7 @@ function excluded(relativePath) {
   const parts = relativePath.split('/');
   const name = parts.at(-1);
   return parts.some(part => EXCLUDED_DIRECTORIES.has(part)) ||
-    name === 'config.json' || name === 'account-session.json' || name === 'OWNERS' || name === 'voice-profiles.json' ||
+    name === 'config.json' || name === 'account-session.json' || name === 'model-profile-cache.json' || name === 'OWNERS' || name === 'voice-profiles.json' ||
     (name.startsWith('.env') && name !== '.env.example') ||
     /\.(?:log|pem|key|p12|pfx|sqlite|sqlite3|db|zip|pyc|pyo|bak|tmp|old)$/i.test(name);
 }

@@ -7,6 +7,7 @@ import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import clientEnvironment from '../core/client-env.cjs';
+import { runtimeDependencySpecifiers, verifyRuntimeDependencies } from './runtime-dependencies.mjs';
 
 export async function waitFor(check, timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs;
@@ -16,6 +17,18 @@ export async function waitFor(check, timeoutMs = 30000) {
     await delay(100);
   }
   throw new Error('验证超时');
+}
+
+export function assertPackagedSandboxStatus(sandbox) {
+  assert.equal(sandbox.policy?.enabled, false, '发布包必须保持 Bash 沙箱默认关闭');
+  assert.equal(sandbox.policy?.mode, 'workspace-write', '开启沙箱后必须使用工作区写入策略');
+  assert.equal(sandbox.policy?.backend, 'auto', '开启沙箱后必须自动选择可用后端');
+  assert.equal(sandbox.backend, 'none', '默认关闭时不得启动沙箱后端');
+  assert.equal(sandbox.enforced, false, '默认关闭时不得声称已强制执行沙箱');
+  assert.equal(sandbox.hostFallback, true, '默认关闭时命令必须使用宿主执行路径');
+  assert.equal(sandbox.failClosed, false, '默认关闭状态必须与宿主执行策略一致');
+  assert.ok(sandbox.fallbacks?.includes('host-auto'), '默认关闭状态必须报告宿主执行能力');
+  assert.equal(sandbox.runtime?.packagePresent, true, '发布包仍必须包含可选沙箱运行库');
 }
 
 export async function exerciseClient(url, dataRoot) {
@@ -32,6 +45,8 @@ export async function exerciseClient(url, dataRoot) {
   const sessions = await request('/api/sessions');
   assert.equal(sessions.sessions.length, 0, '首次启动不能带入开发者聊天记录');
   assert.ok(info.plugins.plugins.length > 0, '内置插件必须正常加载');
+  const sandbox = await request('/api/sandbox');
+  assertPackagedSandboxStatus(sandbox);
   const logo = await fetch(`${url}/branding/logo.png`);
   assert.equal(logo.status, 200);
   assert.match(logo.headers.get('content-type'), /image\/png/);
@@ -48,7 +63,7 @@ export async function exerciseClient(url, dataRoot) {
   assert.equal(snapshot.entries.findLast(entry => entry.type === 'turn_end').reason, 'done');
   assert.match(fs.readFileSync(path.join(info.workspace, 'hello.txt'), 'utf8'), /Windows 打包验证/);
   assert.ok(fs.existsSync(path.join(dataRoot, '.agent', 'workspaces.json')));
-  return { sessionId: session.id, workspace: info.workspace, plugins: info.plugins.plugins.map(plugin => plugin.name), approvals: 'passed', mockFileWrite: 'passed', logo: 'passed' };
+  return { sessionId: session.id, workspace: info.workspace, plugins: info.plugins.plugins.map(plugin => plugin.name), approvals: 'passed', mockFileWrite: 'passed', logo: 'passed', sandboxDefault: 'disabled' };
 }
 
 async function main() {
@@ -96,17 +111,38 @@ async function main() {
     const first = await launch('first-start');
     const result = await exerciseClient(first.url, dataRoot);
     const client = path.join(path.dirname(path.resolve(executable)), 'resources', 'client');
+    for (const relative of ['core/sandbox-retry.mjs', 'core/windows-sandbox.mjs', 'core/sandbox-broker.mjs', 'core/sandbox-broker-worker.mjs']) {
+      assert.ok(fs.existsSync(path.join(client, relative)), `安装包缺少关键沙箱文件：${relative}`);
+    }
+    const dependencyAudit = verifyRuntimeDependencies(client);
+    assert.ok(fs.existsSync(path.join(client, 'sandbox-runtime-repair.gz')), '安装包必须包含沙箱离线修复组件');
+    assert.ok(fs.existsSync(path.join(client, 'core', 'sandbox-repair-manifest.json')), '安装包必须包含沙箱修复清单');
     const bundledNode = path.join(path.dirname(path.resolve(executable)), 'resources', 'node', 'node.exe');
     const cliExecutable = fs.existsSync(bundledNode) ? bundledNode : path.resolve(executable);
     const cliEnvironment = { ...environment, ...(fs.existsSync(bundledNode) ? {} : { ELECTRON_RUN_AS_NODE: '1' }) };
     const help = await promisify(execFile)(cliExecutable, [path.join(client, 'cli', 'main.cjs'), '--help'], { env: cliEnvironment, timeout: 15000, windowsHide: true });
     assert.match(help.stdout, /mli exec/);
     if (fs.existsSync(bundledNode)) {
+      const dependencyProbe = [
+        "const fs=require('node:fs');const path=require('node:path');",
+        '(async()=>{',
+        `for(const name of ${JSON.stringify([...runtimeDependencySpecifiers(client).keys()])}) await import(name);`,
+        "const runtime=await import('@anthropic-ai/sandbox-runtime');",
+        "if(typeof runtime.installWindowsSandboxAsync!=='function')throw new Error('sandbox install export missing');",
+        "const nativeArch=process.arch==='ia32'&&/^(AMD64|ARM64)$/i.test(process.env.PROCESSOR_ARCHITEW6432||'')?(process.env.PROCESSOR_ARCHITEW6432.toUpperCase()==='AMD64'?'x64':'arm64'):process.arch;",
+        "const helper=path.join(process.cwd(),'node_modules','@anthropic-ai','sandbox-runtime','vendor','srt-win',nativeArch,'srt-win.exe');",
+        "if(!fs.existsSync(helper))throw new Error('sandbox helper missing: '+helper);",
+        "console.log('runtime-dependencies-ready');",
+        '})().catch(error=>{console.error(error);process.exitCode=1});',
+      ].join('');
+      const dependencies = await promisify(execFile)(bundledNode, ['--input-type=commonjs', '-e', dependencyProbe], { cwd: client, timeout: 30000, windowsHide: true });
+      assert.match(dependencies.stdout, /runtime-dependencies-ready/);
       const tui = path.join(client, 'cli', 'bin', 'mli-tui.exe');
       assert.ok(fs.existsSync(tui), '现代安装包必须包含独立 TUI 程序');
       const checked = await promisify(execFile)(tui, ['--self-test'], { cwd: dataRoot, timeout: 15000, windowsHide: true });
       assert.match(checked.stdout, /OpenTUI native renderer ready/);
       result.modernTui = 'passed';
+      result.sandboxRuntime = 'passed';
     }
     const terminal = await promisify(execFile)(cliExecutable, [path.join(client, 'cli', 'main.cjs'), '--data-dir', dataRoot, '--cwd', first.dataRoot + path.sep + 'workspace', 'exec', '--auto', '--json', '写一个 hello.txt，用于终端打包验证'], { env: cliEnvironment, timeout: 20000, windowsHide: true });
     const terminalEvents = terminal.stdout.trim().split('\n').map(line => JSON.parse(line));
@@ -128,7 +164,7 @@ async function main() {
     assert.equal(response.status, 200, '重新打开必须保留会话');
     assert.equal(fs.readFileSync(path.join(dataRoot, 'config.json'), 'utf8'), configBefore, '重新打开不能覆盖配置');
     assert.ok(fs.existsSync(path.join(dataRoot, 'workspace', 'hello.txt')));
-    const verified = { ...result, packaged: true, renderer: first.renderer, arch: first.arch, electron: first.electron, node: first.node, chrome: first.chrome, persistence: 'passed', restart: 'passed', shutdown: 'passed', publicDefaults: 'passed', userEnvironment: 'passed', dataRoot, executable: path.resolve(executable) };
+    const verified = { ...result, packaged: true, runtimeDependencies: dependencyAudit, renderer: first.renderer, arch: first.arch, electron: first.electron, node: first.node, chrome: first.chrome, persistence: 'passed', restart: 'passed', shutdown: 'passed', publicDefaults: 'passed', userEnvironment: 'passed', dataRoot, executable: path.resolve(executable) };
     if (process.argv.includes('--keep-open')) {
       console.log('窗口保留用于人工检查；关闭窗口后结束验证。');
       await once(currentChild, 'exit');
@@ -144,5 +180,5 @@ async function main() {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch(error => { console.error(error); process.exitCode = 1; });
+  main().catch(error => { console.error(error); process.exit(1); });
 }

@@ -8,6 +8,11 @@
 .app-center-head-divider { height: 16px; width: 1px; background: #e2e5e8; flex-shrink: 0; }
 .app-center-active-name { font-size: 12px; color: #74808a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-center-head-actions { flex-shrink: 0; }
+.app-center-delete-count { padding-left: 8px; border-left: 1px solid #e1e5e8; color: #76828b; font-size: 11px; }
+.app-center-head-actions .secondary-action, .app-center-head-actions .app-center-delete-start, .app-center-head-actions .app-center-delete-confirm { height: 28px; min-height: 28px; padding: 0 9px; border: 1px solid #dfe3e6; border-radius: 6px; background: #fff; color: #68747d; font-size: 11px; }
+.app-center-head-actions .app-center-delete-start:hover:not(:disabled) { border-color: #d4b4b7; color: #a44950; background: #fff9f9; }
+.app-center-head-actions .app-center-delete-confirm { border-color: #b74b54; background: #b74b54; color: #fff; }
+.app-center-head-actions .app-center-delete-confirm:disabled { opacity: .45; }
 .app-center-head-actions .primary-action { border-radius: 6px; padding: 0 8px; gap: 5px; font-size: 11px; height: 28px; min-height: 28px; }
 .app-center-head-actions .primary-action > svg { width: 13px; height: 13px; }
 .app-center-launchpad { flex: 1; overflow: auto; padding: 20px; }
@@ -25,9 +30,16 @@
 .app-center-layout button[aria-pressed=true] { background: #fff; color: #354b40; box-shadow: 0 1px 3px #25332a14; }
 .app-center-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(142px, 1fr)); gap: 12px; align-content: start; }
 .app-center-page .app-center-card { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 0; padding: 18px 10px 12px; min-width: 0; border: 1px solid #e6e9ec; border-radius: 8px; background: #fff; text-align: center; }
+.app-center-card-check { position: absolute; z-index: 2; top: 9px; left: 9px; display: grid !important; place-items: center; width: 18px !important; height: 18px !important; min-height: 18px; padding: 0 !important; border: 1px solid #cbd2d7; border-radius: 5px; background: #fff; color: #fff; cursor: pointer; }
+.app-center-card-check:hover { border-color: #b74b54; background: #fff5f5; }
+.app-center-card.delete-selected .app-center-card-check { border-color: #b74b54; background: #b74b54; }
+.app-center-page .app-center-card.delete-mode { cursor: pointer; }
+.app-center-page .app-center-card.delete-mode:has(.app-center-card-open:disabled) { opacity: .52; cursor: default; }
+.app-center-page .app-center-card.delete-selected { border-color: #c96a71; background: #fff7f7; box-shadow: 0 0 0 1px #c96a7133; }
 .app-center-page .app-center-card:hover { border-color: #c4cdd4; background: #fbfcfd; }
 .app-center-page .app-center-card.selected { border-color: #8eb6a2; background: #f1f8f4; }
 .app-center-page .app-center-card-open { display: flex; flex-direction: column; align-items: center; width: 100%; min-width: 0; padding: 0; gap: 0; text-align: inherit; cursor: pointer; }
+.app-center-page .app-center-card-open:disabled { color: inherit; cursor: default; }
 .app-center-page .app-center-list .app-center-card-open { flex-direction: row; flex: 1; gap: 12px; }
 .app-center-page .app-center-card-open:focus-visible { outline: 2px solid #32835e; outline-offset: 3px; border-radius: 5px; }
 .app-center-card:focus-within { outline: 2px solid #32835e; outline-offset: 2px; }
@@ -59,6 +71,15 @@
 .app-center-list .app-center-card-source { margin: 0; width: 60px; flex-shrink: 0; text-align: right; }
 .app-center-page .app-center-list .app-center-add-card { flex-direction: row; min-height: 52px; gap: 12px; }
 .app-center-body { display: flex; flex: 1; min-height: 0; }
+.app-center-dock[hidden] { display:none; }
+.app-center-dock-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.app-center-dock-head .app-center-home { flex:1; min-width:0; margin:0; }
+.app-center-dock-head > button:last-child { display:grid; place-items:center; width:28px; height:28px; flex:none; padding:0; border:0; border-radius:4px; background:transparent; color:#70808d; cursor:pointer; }
+.app-center-dock-head > button:last-child:hover { background:#e8ecef; }
+.app-center-browser:has(.app-center-expand-dock) .app-center-toolbar { padding-left:42px; }
+.app-center-browser { position:relative; }
+.app-center-expand-dock { position:absolute; top:8px; left:8px; z-index:2; display:grid; place-items:center; width:28px; height:28px; padding:0; border:0; border-radius:4px; background:transparent; color:#70808d; cursor:pointer; }
+.app-center-expand-dock:hover { background:#e8ecef; }
 .app-center-dock { width: 232px; flex-shrink: 0; overflow: auto; padding: 10px; border-right: 1px solid #e2e5e8; background: #f7f8fa; }
 .app-center-home { width: 100%; border: 0; background: transparent; padding: 6px !important; font-size: 12px; color: #70808d; margin-bottom: 8px; justify-content: flex-start !important; }
 .app-center-dock .app-center-controls { flex-direction: column; align-items: stretch; gap: 8px; margin-bottom: 12px; }

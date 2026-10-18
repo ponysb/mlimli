@@ -12,7 +12,7 @@ function smokeStage(stage) {
   if (smokeArgument) fs.appendFileSync(`${path.resolve(smokeArgument.slice('--mli-smoke-report='.length))}.startup.log`, `${stage}\n`);
 }
 smokeStage('entry');
-const { app, BrowserWindow, dialog, ipcMain, Menu, Notification, shell, powerMonitor, nativeImage } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, Notification, shell, powerMonitor, nativeImage, screen } = require('electron');
 smokeStage('electron');
 const { acquireRuntime } = require('./runtime.cjs');
 const { registerDebugConsole, observeDebugConsole } = require('./debug-console.cjs');
@@ -22,6 +22,7 @@ const { loadClientEnvironment } = require('../core/client-env.cjs');
 const { registerSandboxSetup } = require('./sandbox-setup.cjs');
 const { createAppBrowser, registerAppBrowser } = require('./app-center.cjs');
 const { registerWindowControls } = require('./window-controls.cjs');
+const { createMeetingMiniController } = require('./meeting-mini.cjs');
 require('./compat.cjs').installCompatibility();
 smokeStage('modules');
 let server;
@@ -30,6 +31,7 @@ let mainWindow;
 let quitting = false;
 let runtimeConnection;
 let appBrowser;
+let meetingMini;
 const windowsIcon = path.join(__dirname, 'assets', 'icon.ico');
 const appIconPath = process.platform === 'win32' && fs.existsSync(windowsIcon) ? windowsIcon : path.join(__dirname, 'assets', 'icon.png');
 const appIcon = nativeImage.createFromPath(appIconPath);
@@ -51,6 +53,7 @@ const configureDisplayCapture = registerDisplayCapture(ipcMain, () => mainWindow
 async function createWindow() {
   const win = new BrowserWindow({ width: 1440, height: 920, minWidth: 1024, minHeight: 680, backgroundColor: '#f6f7f8', icon: appIconPath, ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 13, y: 12 } } : { frame: false }), autoHideMenuBar: true, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false } });
   mainWindow = win;
+  meetingMini?.observe(win);
   observeDebugConsole(win.webContents);
   // Keep capture grants scoped to the local workbench; the OS/browser still
   // handles microphone/camera permission prompts.
@@ -159,8 +162,16 @@ if (ownsInstance) app.whenReady().then(async () => {
   smokeStage('runtime');
   server = runtime.child;
   serverUrl = runtime.url;
+  meetingMini = createMeetingMiniController({ BrowserWindow, screen, ipcMain, preload: path.join(__dirname, 'preload.cjs'), page: path.join(__dirname, 'meeting-mini.html'), getMainWindow: () => mainWindow, getServerUrl: () => serverUrl });
   appBrowser = createAppBrowser({ electron: require('electron'), getWindow: () => mainWindow, serverUrl, dataRoot });
-  registerAppBrowser({ ipcMain, controller: appBrowser, getWindow: () => mainWindow, serverUrl });
+  registerAppBrowser({
+    ipcMain, controller: appBrowser, getWindow: () => mainWindow, serverUrl,
+    chooseExtension: async () => {
+      const result = await dialog.showOpenDialog(mainWindow, { title: '选择已解压的浏览器扩展目录', properties: ['openDirectory'] });
+      return result.canceled ? null : result.filePaths[0];
+    },
+    openExtensionStore: async () => { await shell.openExternal('https://microsoftedge.microsoft.com/addons/Microsoft-Edge-Extensions-Home'); return true; },
+  });
   appBrowser.start();
   server?.on('error', error => { if (!quitting) { dialog.showErrorBox('本地服务出错', error.message); app.quit(); } });
   server?.on('exit', () => { if (!quitting) { dialog.showErrorBox('本地服务已停止', `请重新打开应用。启动日志：${runtime.logFile}`); app.quit(); } });
@@ -186,6 +197,11 @@ if (ownsInstance) app.whenReady().then(async () => {
       const {installNativeWindowsSandbox}=await import(pathToFileURL(path.join(runtimeRoot,'core/windows-sandbox.mjs')).href);
       return installNativeWindowsSandbox();
     },
+    repair:async()=>{
+      const {pathToFileURL}=require('node:url');
+      const {repairNativeWindowsSandbox}=await import(pathToFileURL(path.join(runtimeRoot,'core/windows-sandbox.mjs')).href);
+      return repairNativeWindowsSandbox({packaged:!developmentMode});
+    },
   });
   await createWindow();
   if (!smokeArgument) desktopUpdater.start();
@@ -203,6 +219,7 @@ app.on('before-quit', event => {
   if (quitting || !runtimeConnection) return;
   event.preventDefault();
   quitting = true;
+  meetingMini?.destroy();
   appBrowser?.destroy();
   runtimeConnection.release().finally(() => { smokeStage('runtime-released'); app.quit(); });
 });

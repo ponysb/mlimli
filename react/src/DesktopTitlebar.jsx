@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Copy, Minus, Square, X } from "lucide-react";
+import { Copy, LoaderCircle, Minus, PanelLeft, Square, X } from "lucide-react";
 import FollowMe from "./FollowMe.jsx";
 import { DesktopUpdateStatus } from "./DesktopUpdates.jsx";
 
@@ -9,6 +9,7 @@ export default function DesktopTitlebar() {
     maximized: false,
     platform: desktop?.platform || "",
   });
+  const [connection, setConnection] = useState({ status: "connecting", attempt: 0 });
   useEffect(() => {
     if (!desktop?.isElectron) return undefined;
     let active = true;
@@ -24,6 +25,11 @@ export default function DesktopTitlebar() {
       unsubscribe?.();
     };
   }, []);
+  useEffect(() => {
+    const update = (event) => setConnection(event.detail || { status: "connecting" });
+    window.addEventListener("mli:connection-status", update);
+    return () => window.removeEventListener("mli:connection-status", update);
+  }, []);
   if (!desktop?.isElectron) return null;
   const control = (action) =>
     desktop
@@ -38,6 +44,14 @@ export default function DesktopTitlebar() {
         <span>魔力工作台</span>
       </div>
       <div className="desktop-titlebar-actions">
+        <button
+          className="desktop-sidebar-toggle"
+          title="收起或展开导航"
+          aria-label="收起或展开导航"
+          onClick={() => window.dispatchEvent(new CustomEvent("mli:toggle-sidebar"))}
+        >
+          <PanelLeft size={15} />
+        </button>
         <FollowMe compact label="关注我" />
         <button
           title="设置"
@@ -48,6 +62,16 @@ export default function DesktopTitlebar() {
         >
           设置
         </button>
+        {connection.status !== "connected" && (
+          <button
+            className="desktop-connection-status"
+            title={connection.status === "retrying" ? "连接已断开，点击重连" : "正在连接本地 Agent"}
+            aria-label={connection.status === "retrying" ? "连接已断开，点击重连" : "正在连接本地 Agent"}
+            onClick={() => window.dispatchEvent(new CustomEvent("mli:reconnect"))}
+          >
+            <LoaderCircle className="spin" size={13} />
+          </button>
+        )}
         <DesktopUpdateStatus />
       </div>
       {!mac && (

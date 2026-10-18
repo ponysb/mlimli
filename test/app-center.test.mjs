@@ -6,6 +6,7 @@ import path from 'node:path';
 import { AppCenter } from '../core/app-center.mjs';
 import policy from '../core/app-center-policy.cjs';
 import { registerAppBrowser } from '../electron/app-center.cjs';
+import { appCenterTools } from '../core/app-center-tools.mjs';
 
 function fixture(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'mli-app-center-')), events = [];
@@ -24,6 +25,36 @@ test('application registry persists confirmation without cookies, OAuth codes, o
   assert.ok(!fs.readFileSync(path.join(directory, 'apps.json'), 'utf8').includes('SECRET_CODE'));
   const second = center.upsert({ name: 'Second', url: 'https://second.example/app?token=SECRET_CODE' });
   assert.equal(second.url, 'https://second.example/app');
+});
+test('plain URLs open as transient browser jobs without creating applications', async t => {
+  const { center, events } = fixture(t);
+  const before = center.list().apps.map(app => app.id);
+  center.poll('desktop1');
+  const pending = center.openUrl('https://developer.mozilla.org/en-US/', { sessionId: 'session1', rootSessionId: 'root1' });
+  const job = center.poll('desktop1').jobs[0];
+  assert.equal(job.action, 'open_url');
+  assert.equal(job.app.transient, true);
+  assert.equal(job.args.url, 'https://developer.mozilla.org/en-US/');
+  assert.deepEqual(center.list().apps.map(app => app.id), before);
+  assert.equal(events.find(event => event.type === 'browser_open_required').browserId, job.app.id);
+  center.complete('desktop1', job.id, { title: 'MDN', text: 'Docs', elements: [], url: job.args.url });
+  assert.equal((await pending).title, 'MDN');
+  assert.deepEqual(center.list().apps.map(app => app.id), before);
+});
+test('app_open only accepts an existing application id and open_url owns arbitrary URLs', () => {
+  const appOpen = appCenterTools.find(tool => tool.name === 'app_open');
+  const openUrl = appCenterTools.find(tool => tool.name === 'open_url');
+  assert.deepEqual(appOpen.parameters.required, ['app_id']);
+  assert.deepEqual(Object.keys(appOpen.parameters.properties), ['app_id']);
+  assert.deepEqual(openUrl.parameters.required, ['url']);
+  assert.match(openUrl.description, /不会把网站添加到应用台/);
+});
+test('only user applications can be deleted', t => {
+  const { center, app } = fixture(t);
+  center.remove(app.id);
+  assert.equal(center.list().apps.some(item => item.id === app.id), false);
+  center.syncCatalog([{ id: 'docs', name: 'Docs', url: 'https://docs.example.com', sortOrder: 1 }]);
+  assert.throws(() => center.remove('platform-docs'), /平台应用不能删除/);
 });
 test('unconfirmed application suspends and resumes the same call after human authorization', async t => {
   const { center, app, events } = fixture(t);
@@ -55,6 +86,12 @@ test('application browser exposes a manual login confirmation button through the
   assert.match(source, /await desktop\.authorizeApp\(appId\); await refresh\(\)/);
   assert.match(source, /className="app-center-card-confirm"[^>]*onClick=\{onConfirm\}>确认登录<\/button>/);
   assert.match(source, /onConfirm=\{\(\) => confirmLogin\(item.id\)\}/);
+  assert.doesNotMatch(source, /className="app-center-card-remove"/);
+  assert.match(source, /onClick=\{startDelete\}[^>]*>.*删除应用/s);
+  assert.match(source, /删除所选/);
+  assert.match(source, /removeSelected/);
+  assert.match(source, /className="app-center-card-check" onClick=\{onToggleDelete\}/);
+  assert.match(source, /aria-pressed=\{deleteSelected\}/);
   assert.doesNotMatch(source, /我已登录，确认/);
 });
 test('agent permission is sticky and can be restored for an already signed-in app', async t => {

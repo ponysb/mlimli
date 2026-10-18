@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { planClientExport } from './export-client.mjs';
 import clientEnvironment from '../core/client-env.cjs';
+import { runtimeDependencyPackages, verifyRuntimeDependencies } from './runtime-dependencies.mjs';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const execute = promisify(execFile);
@@ -23,7 +24,7 @@ function copyTree(source, target) {
   }
 }
 
-export function copyTerminalDependencies(destination, root = ROOT) {
+export function copyTerminalDependencies(destination, root = ROOT, { packages } = {}) {
   const copied = new Map();
   function visit(name, from) {
     const require = createRequire(path.join(from, 'package.json'));
@@ -58,15 +59,15 @@ export function copyTerminalDependencies(destination, root = ROOT) {
     copied.set(name, manifest.version);
     copyTree(directory, path.join(destination, 'node_modules', name));
     for (const dependency of Object.keys(manifest.dependencies || {})) visit(dependency, directory);
+    for (const dependency of Object.keys(manifest.peerDependencies || {})) {
+      if (!manifest.peerDependenciesMeta?.[dependency]?.optional) visit(dependency, directory);
+    }
   }
-  visit('terminal-kit', root);
-  // 渠道适配器通过动态 import 加载，运行时打包也必须携带官方 SDK。
-  visit('@larksuiteoapi/node-sdk', root);
-  visit('dingtalk-stream', root);
-  visit('pdfjs-dist', root);
-  visit('@anthropic-ai/sandbox-runtime', root);
-  visit('@agentclientprotocol/sdk', root);
-  visit('zod', root);
+  if (packages) {
+    for (const name of packages) visit(name, root);
+    return Object.fromEntries(copied);
+  }
+  for (const name of runtimeDependencyPackages(root)) visit(name, root);
   return Object.fromEntries(copied);
 }
 
@@ -132,6 +133,7 @@ export function stageTerminalClient({ root = ROOT, output, platform = 'linux', a
   fs.writeFileSync(path.join(client, 'package.json'), JSON.stringify({ name: 'mli-agent-terminal', version: manifest.version, private: true, type: 'module' }, null, 2));
   fs.writeFileSync(path.join(client, 'client-defaults.env'), clientEnvironment.publicClientEnvironment(root));
   const dependencies = copyTerminalDependencies(client);
+  verifyRuntimeDependencies(client);
   fs.mkdirSync(path.join(destination, 'bin'), { recursive: true });
   fs.copyFileSync(path.join(root, 'cli', 'launchers', 'mli'), path.join(destination, 'bin', 'mli'));
   fs.copyFileSync(path.join(root, 'cli', 'launchers', 'install.sh'), path.join(destination, 'install.sh'));

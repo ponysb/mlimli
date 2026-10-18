@@ -22,7 +22,7 @@ export function appendApiLog(entry) {
   fs.appendFileSync(logFile(), JSON.stringify(row) + '\n', 'utf8');
   const { request: _request, response: _response, ...summary } = row;
   fs.appendFileSync(summaryFile(), JSON.stringify(summary) + '\n', 'utf8');
-  context?.recordUsage?.(row.metrics || {});
+  context?.recordUsage?.(row);
   return row;
 }
 

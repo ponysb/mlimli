@@ -1,11 +1,11 @@
 import React from 'react';
-import { ArrowLeft, Check, Download, FileText, LoaderCircle, Mic, Square, Video } from 'lucide-react';
+import { ArrowLeft, Check, Download, FileText, LoaderCircle, Mic, Minimize2, Square, Video, X } from 'lucide-react';
 import { clock } from './voice-format.mjs';
 
 const speakerName = id => id === 'unknown' ? '待确认发言者' : id?.replace('speaker-', '说话人 ') || '识别中';
 const modeLabel = { audio: '语音会议', screen: '屏幕会议', camera: '摄像头会议' };
 
-export default function MeetingWorkspace({ meeting, phase, mode, previewStream, status, elapsed, partial, speaking, speaker, error, notice, summarizing, speakers, onFinish, onClose, onChangeParticipant, onRememberSpeaker, onDownloadTranscript, onSummarize, onRegenerate }) {
+export default function MeetingWorkspace({ meeting, phase, mode, previewStream, status, elapsed, partial, speaking, speaker, error, notice, summarizing, speakers, onFinish, onClose, onMinimize, onChangeParticipant, onRememberSpeaker, onDownloadTranscript, onSummarize, onRegenerate }) {
   const busy = ['starting', 'recording', 'stopping', 'save-error'].includes(phase);
   const ended = phase === 'finished';
   const loadingModel = !ended && Boolean(meeting?.modelLoading);
@@ -23,6 +23,11 @@ export default function MeetingWorkspace({ meeting, phase, mode, previewStream, 
       <button className="icon-button" title="返回工作台" aria-label="返回工作台" onClick={onClose}><ArrowLeft size={19}/></button>
       <div><h2>{meeting?.title || '会议录制'}</h2><p>{modelName} · {modeLabel[mode] || modeLabel.audio}</p></div>
       <span className={`meeting-state ${ended ? 'done' : busy ? 'live' : ''}`}><i/>{ended ? meeting?.state === 'interrupted' ? '已中断' : '已结束' : phase === 'stopping' ? '保存中' : phase === 'starting' ? '准备中' : loadingModel ? '录音中 · 转写准备' : speaking ? `${speakerName(speaker)}发言中` : '等待发言'}</span>
+      <div className="meeting-workspace-actions">
+        {!ended && <button className="icon-button" type="button" title="最小化并继续录制" aria-label="最小化并继续录制" onClick={onMinimize}><Minimize2 size={18}/></button>}
+        {busy && <button className="icon-button meeting-header-finish" type="button" title="结束会议" aria-label="结束会议" disabled={phase === 'stopping'} onClick={onFinish}><Square size={17}/></button>}
+        {ended && <button className="icon-button" type="button" title="关闭会议详情" aria-label="关闭会议详情" onClick={onClose}><X size={19}/></button>}
+      </div>
     </header>
     <main className="meeting-workspace-main">
       <aside className="meeting-control-panel">

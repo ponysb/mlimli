@@ -1,13 +1,13 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, BookOpen, ChevronRight, File, Folder, LoaderCircle, Minimize2, Package, Paperclip, Pencil, Search, Sparkles, Terminal, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, ChevronRight, File, Folder, LoaderCircle, Minimize2, Package, Paperclip, Pencil, Search, Sparkles, Target, Terminal, X } from 'lucide-react';
 import { capabilityItems, composerTrigger, insertCapability, joinComposerReferences, splitComposerReferences, referenceToken } from './composer-capabilities.mjs';
 import ComposerReferences from './ComposerReferences.jsx';
 import './composer-input.css';
 
-const icons = { file: File, folder: Folder, browse: Folder, skill: BookOpen, plugin: Package, expert: Sparkles, command: Terminal, upload: Paperclip, board: Pencil, compact: Minimize2 };
+const icons = { file: File, folder: Folder, browse: Folder, skill: BookOpen, plugin: Package, expert: Sparkles, command: Terminal, upload: Paperclip, board: Pencil, compact: Minimize2, goal: Target };
 
-export default function ComposerInput({ value: serializedValue, onChange: onSerializedChange, onPaste, onSend, disabled, attachmentLoading, placeholder, info, workspace, running, onExpert, onUpload, onBoard, onCompact, canCompact, compacting }) {
+export default function ComposerInput({ value: serializedValue, onChange: onSerializedChange, onPaste, onSend, disabled, attachmentLoading, placeholder, info, workspace, running, onExpert, onUpload, onBoard, onCompact, onGoal, canCompact, compacting }) {
   const { text: value, references } = useMemo(() => splitComposerReferences(serializedValue), [serializedValue]);
   const onChange = text => onSerializedChange(joinComposerReferences(text, references));
   const input = useRef(null), fileSearchInput = useRef(null), root = useRef(null), popup = useRef(null), list = useRef(null), requestId = useRef(0);
@@ -29,6 +29,7 @@ export default function ComposerInput({ value: serializedValue, onChange: onSeri
       { key: 'upload', kind: 'upload', name: '本地附件', description: '', group: '添加' },
       { key: 'board', kind: 'board', name: '画板', description: '', group: '添加' },
       { key: 'compact', kind: 'compact', name: compacting ? '正在压缩上下文' : '压缩上下文', description: !canCompact ? '当前没有可压缩的会话' : running ? '停止任务后可压缩' : '保留目标和近期记录', group: '会话' },
+      { key: 'goal', kind: 'goal', name: '目标', description: '设置要持续推进的目标', group: '会话' },
     ];
     const items = trigger.symbol === '/' ? [...capabilities.filter(item => item.kind === 'command'), ...actions, ...capabilities.filter(item => item.kind !== 'command')] : [...actions, ...capabilities.filter(item => item.kind !== 'command'), ...capabilities.filter(item => item.kind === 'command')];
     return items.filter(item => !query || `${item.name} ${item.displayName || ''} ${item.description || ''} ${item.group}`.toLocaleLowerCase().includes(query.replace(/^\//, '')));
@@ -71,6 +72,16 @@ export default function ComposerInput({ value: serializedValue, onChange: onSeri
   }, [Boolean(trigger)]);
   useEffect(() => { setIndex(0); }, [directory, query, fileSearch, files]);
   useEffect(() => { list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' }); }, [index]);
+  useLayoutEffect(() => {
+    const textarea = input.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    const style = getComputedStyle(textarea);
+    const singleLineHeight = parseFloat(style.lineHeight) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    const contentHeight = Math.max(textarea.scrollHeight, singleLineHeight + 24);
+    textarea.style.height = `${Math.min(contentHeight, 300)}px`;
+    textarea.style.overflowY = textarea.scrollHeight > 300 ? 'auto' : 'hidden';
+  }, [value]);
   useEffect(() => {
     const id = ++requestId.current;
     if (!trigger || !workspace) return;
@@ -112,6 +123,7 @@ export default function ComposerInput({ value: serializedValue, onChange: onSeri
     if (item.kind === 'upload') onUpload();
     if (item.kind === 'board') onBoard();
     if (item.kind === 'compact') onCompact();
+    if (item.kind === 'goal') onGoal?.();
   }
   function keyDown(event) {
     if (event.nativeEvent.isComposing || event.keyCode === 229) return;
@@ -137,6 +149,6 @@ export default function ComposerInput({ value: serializedValue, onChange: onSeri
         {!results.length && !loading && <div className="capability-status">没有匹配项</div>}
       </div>
     </div>, document.body)}
-    <textarea ref={input} value={value} aria-label="会话输入" aria-autocomplete="list" aria-controls={trigger ? 'composer-capabilities' : undefined} aria-expanded={Boolean(trigger)} aria-activedescendant={trigger && results[index] ? `composer-capability-${index}` : undefined} onPaste={onPaste} onChange={event => { dismissed.current = null; onChange(event.target.value); updateTrigger(event.target.value, event.target.selectionStart); }} onSelect={event => updateTrigger(event.target.value, event.target.selectionStart)} onKeyDown={keyDown} placeholder={placeholder} disabled={disabled}/>
+    <textarea ref={input} rows={1} value={value} aria-label="会话输入" aria-autocomplete="list" aria-controls={trigger ? 'composer-capabilities' : undefined} aria-expanded={Boolean(trigger)} aria-activedescendant={trigger && results[index] ? `composer-capability-${index}` : undefined} onPaste={onPaste} onChange={event => { dismissed.current = null; onChange(event.target.value); updateTrigger(event.target.value, event.target.selectionStart); }} onSelect={event => updateTrigger(event.target.value, event.target.selectionStart)} onKeyDown={keyDown} placeholder={placeholder} disabled={disabled}/>
   </div>;
 }

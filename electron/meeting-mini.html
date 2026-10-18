@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'">
+  <title>会议录制状态</title>
+  <link rel="stylesheet" href="meeting-mini.css">
+</head>
+<body>
+  <main id="mini" class="mini-shell" aria-label="会议录制状态">
+    <section class="compact-view">
+      <span class="timer">00:00</span>
+      <span class="levels" aria-hidden="true"></span>
+      <button class="stop-button" type="button" title="结束录制" aria-label="结束录制"><i></i></button>
+      <span class="divider" aria-hidden="true"></span>
+      <button class="expand-button" type="button" title="展开录制预览" aria-label="展开录制预览"><span class="chevron" aria-hidden="true"></span></button>
+    </section>
+    <section class="expanded-view" hidden>
+      <header>
+        <span class="status">聆听中…</span>
+        <div>
+          <button class="restore-button" type="button" title="恢复主窗口" aria-label="恢复主窗口"><svg class="restore-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v5a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3h5"/></svg></button>
+          <button class="collapse-button" type="button" title="收起录制预览" aria-label="收起录制预览"><span class="chevron up" aria-hidden="true"></span></button>
+        </div>
+      </header>
+      <p class="transcript" aria-live="polite">正在等待发言</p>
+      <span class="wide-levels levels" aria-hidden="true"></span>
+      <footer>
+        <span class="timer">00:00</span>
+        <button class="stop-button" type="button" title="结束录制" aria-label="结束录制"><i></i></button>
+      </footer>
+    </section>
+  </main>
+  <script src="meeting-mini.js"></script>
+</body>
+</html>

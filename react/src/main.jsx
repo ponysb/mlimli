@@ -6,7 +6,7 @@ import React, {
   useState,
 } from "react";
 import { createRoot } from "react-dom/client";
-import { createPortal, flushSync } from "react-dom";
+import { createPortal } from "react-dom";
 import CodeMirror from "@uiw/react-codemirror";
 import { Streamdown } from "streamdown";
 import { QRCodeSVG } from "qrcode.react";
@@ -20,9 +20,11 @@ import { sql } from "@codemirror/lang-sql";
 import {
   Activity,
   AlarmClock,
+  AppWindow,
   Archive,
   ArrowUp,
   Bot,
+  BrainCircuit,
   BookOpen,
   Building2,
   Check,
@@ -48,13 +50,16 @@ import {
   FolderOpen,
   FolderPlus,
   GitBranch,
+  Globe,
   Images,
   LayoutDashboard,
+  LayoutGrid,
   Library,
   ListTree,
   LoaderCircle,
   LogOut,
   Menu,
+  MessageSquare,
   MessageCircle,
   MoreHorizontal,
   Package,
@@ -68,6 +73,7 @@ import {
   Save,
   Scissors,
   Search,
+  Target,
   Server,
   Settings2,
   Shield,
@@ -107,6 +113,7 @@ import {
 import ChannelPage from "./ChannelPage.jsx";
 import SandboxSettings from "./SandboxSettings.jsx";
 import AppCenter from "./AppCenter.jsx";
+import BrowserWorkspace from "./BrowserWorkspace.jsx";
 import ComposerInput from "./ComposerInput.jsx";
 import ComposerReferences from "./ComposerReferences.jsx";
 import WorkspaceRemoveButton from "./WorkspaceRemoveButton.jsx";
@@ -115,12 +122,13 @@ import ActionPopoverHost, {
   promptAction,
 } from "./ActionPopover.jsx";
 import { splitComposerReferences } from "./composer-capabilities.mjs";
+import ReasoningSettings from "./ReasoningSettings.jsx";
 import MemorySettings from "./MemorySettings.jsx";
 import AcpSettings from "./AcpSettings.jsx";
 import TaskSplitLayout from "./TaskSplitLayout.jsx";
 import SessionContextPanel from "./SessionContextPanel.jsx";
 import DesktopTitlebar from "./DesktopTitlebar.jsx";
-import SubagentPanel from "./SubagentPanel.jsx";
+import SubagentPanel, { AgentStatusButton } from "./SubagentPanel.jsx";
 import {
   DesktopUpdateSettings,
 } from "./DesktopUpdates.jsx";
@@ -129,6 +137,7 @@ import MarketingPage, {
   useMarketing,
 } from "./MarketingPage.jsx";
 import { primaryTaskArtifact } from "../../core/task-artifacts.mjs";
+import { reasoningChoices } from "../../core/reasoning.mjs";
 import {
   ATTACHMENT_LIMITS,
   attachmentKind,
@@ -188,14 +197,30 @@ const MODE = {
 
 function App() {
   const [appRequest, setAppRequest] = useState(null);
-  const [contextPanelOpen, setContextPanelOpen] = useState(() => {
+  const [agentWorkspaceOpen, setAgentWorkspaceOpen] = useState(false);
+  const [contextPopupOpen, setContextPopupOpen] = useState(() => {
     try {
-      return localStorage.getItem("mli.context-panel-open") !== "false";
+      const savedPanel = localStorage.getItem("mli.right-panel");
+      if (savedPanel === "context" || savedPanel === "files") return false;
+      return localStorage.getItem("mli.context-panel-open") === "true";
     } catch {
-      return true;
+      return false;
     }
   });
-  const [contextSplitOpen, setContextSplitOpen] = useState(false);
+  const [contextPopupMode, setContextPopupMode] = useState("context");
+  const [rightPanel, setRightPanel] = useState(() => {
+    try {
+      const saved = localStorage.getItem("mli.right-panel");
+      if (saved === "context" || saved === "files") return saved;
+      return null;
+    } catch {
+      return null;
+    }
+  });
+  const [appTabOpen, setAppTabOpen] = useState(false);
+  const [browserTabs, setBrowserTabs] = useState([]);
+  const [workspaceTabs, setWorkspaceTabs] = useState([]);
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState('conversation');
   const [settingsTarget, setSettingsTarget] = useState(null);
   const [meetingRequest, setMeetingRequest] = useState(null);
   const [attachmentLoading, setAttachmentLoading] = useState(0);
@@ -203,10 +228,12 @@ function App() {
     [compactNotice, setCompactNotice] = useState(null);
   const compactLock = useRef(false);
   const whiteboardDrafts = useRef(new Map());
+  const lastRightPanel = useRef("context");
   const sessionRequest = useRef(0),
     sessionAbort = useRef(null);
   const [view, setView] = useState("workbench"),
     [info, setInfo] = useState(null),
+    [appCatalog, setAppCatalog] = useState(null),
     [account, setAccount] = useState(null),
     [accountOpen, setAccountOpen] = useState(false),
     [accountPurchaseOpen, setAccountPurchaseOpen] = useState(false),
@@ -218,8 +245,18 @@ function App() {
         ? Math.max(240, Math.min(520, value))
         : 320;
     }),
+    [rightPanelWidth, setRightPanelWidth] = useState(() => {
+      const saved = localStorage.getItem("mli.right-panel-width");
+      if (saved == null || saved.trim() === "") return 320;
+      const value = Number(saved);
+      return Number.isFinite(value)
+        ? Math.max(260, Math.min(640, value))
+        : 320;
+    }),
+    [rightPanelResizing, setRightPanelResizing] = useState(false),
     [workspaces, setWorkspaces] = useState([]),
     [sessions, setSessions] = useState([]),
+    [workspaceSessions, setWorkspaceSessions] = useState({}),
     [current, setCurrent] = useState(null),
     [running, setRunning] = useState(false),
     [draft, setDraft] = useState(""),
@@ -234,7 +271,7 @@ function App() {
       status: "connecting",
       attempt: 0,
     }),
-    [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 800),
+    [sidebarOpen, setSidebarOpen] = useState(() => window.desktop?.isElectron ? window.innerWidth > 800 : true),
     [error, setError] = useState(null),
     [selectedFile, setSelectedFile] = useState(null),
     [previewOpen, setPreviewOpen] = useState(false),
@@ -243,18 +280,41 @@ function App() {
     [selectedAsset, setSelectedAsset] = useState(null),
     [assetRevision, setAssetRevision] = useState(0),
     [scheduleRevision, setScheduleRevision] = useState(0),
-    [terminal, setTerminal] = useState(null);
+    [terminalPanes, setTerminalPanes] = useState([{ id: 'terminal-1', terminal: null, launching: false }]),
+    [unreadSessionIds, setUnreadSessionIds] = useState(() => new Set());
   const marketing = useMarketing(account);
+  useEffect(() => { if (view === 'app-center') setAppTabOpen(true); }, [view]);
+  useEffect(() => {
+    const publish = () =>
+      window.dispatchEvent(
+        new CustomEvent("mli:connection-status", { detail: connection }),
+      );
+    const reconnect = () => connectEvents(true);
+    publish();
+    window.addEventListener("mli:reconnect", reconnect);
+    return () => window.removeEventListener("mli:reconnect", reconnect);
+  }, [connection]);
+  useEffect(() => {
+    if (!current?.goal?.text) return;
+    setDraft(value => {
+      const source = String(value || '');
+      const cleaned = source.replace(/@goal\(("(?:[^"\\]|\\.)*")\)[ \t]*/g, '');
+      return cleaned === source ? value : cleaned.replace(/^\r?\n/, '');
+    });
+  }, [current?.id, current?.goal?.text]);
   const currentId = useRef(null),
-    terminalId = useRef(null),
-    terminalLaunch = useRef(false),
-    terminalEvents = useRef([]),
+    terminalPaneSequence = useRef(1),
+    terminalPaneByRun = useRef(new Map()),
+    terminalEventQueue = useRef(new Map()),
+    terminalCloseRequested = useRef(new Set()),
+    terminalReturnView = useRef({ view: 'workbench', activeWorkspaceTab: 'conversation' }),
     stageRef = useRef(null),
     followOutput = useRef(true),
     eventSourceRef = useRef(null),
     reconnectTimerRef = useRef(null),
     eventStreamActive = useRef(true),
     reconnectAttempt = useRef(0),
+    pendingWorkspaceAction = useRef(null),
     notifiedRuns = useRef(new Set());
   useEffect(() => {
     if (!toast) return undefined;
@@ -286,6 +346,15 @@ function App() {
     setWorkspaces(d.workspaces || []);
     return d;
   }
+  async function loadAppCatalog() {
+    try {
+      const data = await get("/api/app-center");
+      setAppCatalog(data);
+      return data;
+    } catch {
+      return null;
+    }
+  }
   async function reloadConfiguration() {
     await loadInfo();
     if (currentId.current)
@@ -294,11 +363,18 @@ function App() {
   async function loadSessions(selectFirst = false) {
     const d = await get("/api/sessions");
     setSessions(d.sessions || []);
+    setWorkspaceSessions(d.workspaceSessions || {});
     if (selectFirst && !currentId.current && d.sessions?.[0])
       await loadSession(d.sessions[0].id);
   }
   async function loadSession(id, { preserveScroll = false } = {}) {
     if (!id) return;
+    setUnreadSessionIds((items) => {
+      if (!items.has(id)) return items;
+      const next = new Set(items);
+      next.delete(id);
+      return next;
+    });
     const request = ++sessionRequest.current;
     sessionAbort.current?.abort();
     const controller = new AbortController();
@@ -307,7 +383,6 @@ function App() {
     setPendingExpert(null);
     if (!preserveScroll) {
       followOutput.current = true;
-      setContextSplitOpen(false);
       setPreviewOpen(false);
       setPreviewMedia(null);
       setLive(null);
@@ -539,7 +614,7 @@ function App() {
   }
   useEffect(() => {
     eventStreamActive.current = true;
-    Promise.all([loadInfo(), loadSessions(false)])
+    Promise.all([loadInfo(), loadSessions(false), loadAppCatalog()])
       .then(async ([data]) => {
         if (!data.account?.authenticated) return;
         const refreshed = await post("/api/account/refresh");
@@ -571,6 +646,11 @@ function App() {
     };
     window.addEventListener("mli:open-settings", openSettings);
     return () => window.removeEventListener("mli:open-settings", openSettings);
+  }, []);
+  useEffect(() => {
+    const toggle = () => setSidebarOpen((value) => !value);
+    window.addEventListener("mli:toggle-sidebar", toggle);
+    return () => window.removeEventListener("mli:toggle-sidebar", toggle);
   }, []);
   useLayoutEffect(() => {
     if (view === "task" && followOutput.current)
@@ -644,9 +724,17 @@ function App() {
       setView("app-center");
       return;
     }
+    if (e.type === "browser_open_required") {
+      const id = e.browserId;
+      setBrowserTabs(tabs => tabs.some(tab => tab.id === id) ? tabs : [...tabs, { id, url: e.url, title: '正在加载…' }]);
+      setActiveWorkspaceTab(id);
+      setView('browser');
+      return;
+    }
     if (e.type === "server_connected") {
       get("/api/app-center")
         .then((data) => {
+          setAppCatalog(data);
           if (data.pending?.[0]) {
             setAppRequest(data.pending[0]);
             setView("app-center");
@@ -666,16 +754,29 @@ function App() {
     if (
       ["terminal_started", "terminal_output", "terminal_exit"].includes(e.type)
     ) {
-      if (terminalLaunch.current && e.terminalId !== terminalId.current) {
-        terminalEvents.current.push(e);
+      const paneId = terminalPaneByRun.current.get(e.terminalId);
+      if (!paneId) {
+        const queued = terminalEventQueue.current.get(e.terminalId) || [];
+        queued.push(e); terminalEventQueue.current.set(e.terminalId, queued);
         return;
       }
-      setTerminal((value) => applyTerminalEvent(value, e));
+      setTerminalPanes(panes => panes.map(pane => pane.id === paneId ? { ...pane, terminal: applyTerminalEvent(pane.terminal, e) } : pane));
       return;
     }
     if (e.type === "workspace_changed") {
+      const pendingAction = pendingWorkspaceAction.current;
+      pendingWorkspaceAction.current = null;
+      setWorkspaceTabs([]);
+      setActiveWorkspaceTab('conversation');
+      setSelectedFile(null);
       openWorkbench();
-      loadInfo().then(() => loadSessions(false));
+      loadInfo()
+        .then(() => loadSessions(false))
+        .then(() => {
+          if (pendingAction?.type === "select") return loadSession(pendingAction.sessionId);
+          if (pendingAction?.type === "delete") return deleteSession(pendingAction.sessionId, pendingAction.title);
+        })
+        .catch((error) => setError(toUiError(error, "workspace_change")));
       return;
     }
     if (e.type === "workspace_removed") {
@@ -731,10 +832,12 @@ function App() {
       setSessionRunning(e.sessionId, true);
     if (e.sessionId && e.type === "session_run_finished") {
       setSessionRunning(e.sessionId, false);
+      if (e.sessionId !== currentId.current) setUnreadSessionIds((items) => new Set(items).add(e.sessionId));
       notifyAgentFinished(e);
     }
     if (e.sessionId && e.type === "error") {
       setSessionRunning(e.sessionId, false);
+      if (e.sessionId !== currentId.current) setUnreadSessionIds((items) => new Set(items).add(e.sessionId));
       notifyAgentFinished(e);
     }
     const sameGroup =
@@ -766,6 +869,8 @@ function App() {
     if (e.sessionId && e.sessionId !== currentId.current) return;
     if (e.type === "queue_updated")
       setCurrent((x) => (x ? { ...x, queue: e.queue } : x));
+    else if (e.type === "goal_updated")
+      setCurrent((x) => (x ? { ...x, goal: e.goal } : x));
     else if (e.type === "user_message") {
       if (e.entry)
         setCurrent((x) => {
@@ -865,6 +970,14 @@ function App() {
           },
         })),
       );
+    else if (e.type === "step_adjusted")
+      setLive((x) =>
+        updateLiveStep(x, e, (step) => ({
+          ...step,
+          retry: null,
+          status: "adjusted",
+        })),
+      );
     else if (e.type === "permission_request") setPermission(e.request);
     else if (e.type === "permission_resolved") setPermission(null);
     else if (e.type === "ui_request") setUiRequest(e.request);
@@ -907,7 +1020,6 @@ function App() {
     setUiRequest(null);
     setRunning(false);
     setPendingMode(savedPermissionMode());
-    setContextSplitOpen(false);
     setPreviewOpen(false);
     setPreviewMedia(null);
     setView("workbench");
@@ -1168,9 +1280,13 @@ function App() {
     if (current) await loadSession(current.id);
   }
   async function setDesktop(enabled) {
-    if (!current) return;
-    await post(`/api/session/${current.id}/desktop`, { enabled });
-    await loadSession(current.id);
+    try {
+      await post("/api/ui/preferences", { desktopEnabled: Boolean(enabled) });
+      await loadInfo();
+      if (currentId.current) await loadSession(currentId.current, { preserveScroll: true });
+    } catch (error) {
+      setError(toUiError(error, "desktop_session"));
+    }
   }
   async function applyExpert(expert) {
     if (!expert) return;
@@ -1241,12 +1357,14 @@ function App() {
     }
   }
   function openFile(file) {
-    setContextSplitOpen(false);
-    setContextPanelOpen(false);
     setSelectedFile(file || null);
     setPreviewMedia(null);
-    if (current && view === "task") setPreviewOpen(Boolean(file));
-    else setView(file ? "file" : "workbench");
+    if (file) {
+      const id = `file:${activeWorkspace?.path || ''}:${file.path}`;
+      setWorkspaceTabs(tabs => tabs.some(tab => tab.id === id) ? tabs.map(tab => tab.id === id ? { ...tab, file } : tab) : [...tabs, { id, file, workspace: activeWorkspace }]);
+      setActiveWorkspaceTab(id);
+      setView('file');
+    } else { setActiveWorkspaceTab('conversation'); setView(current ? 'task' : 'workbench'); }
     if (window.innerWidth <= 800) setSidebarOpen(false);
   }
   function openMediaPreview(item) {
@@ -1255,62 +1373,147 @@ function App() {
       return;
     }
     if (!item?.dataUrl && !item?.url) return;
-    setContextSplitOpen(false);
-    setContextPanelOpen(false);
     setPreviewMedia(item);
     setSelectedFile(null);
     setPreviewOpen(true);
+    const id = `media:${item.dataUrl || item.url}`;
+    setWorkspaceTabs(tabs => tabs.some(tab => tab.id === id) ? tabs : [...tabs, { id, media: item, workspace: activeWorkspace }]);
+    setActiveWorkspaceTab(id);
+    setView('file');
+  }
+  async function closeWorkspaceTab(id) {
+    const tab = workspaceTabs.find(item => item.id === id);
+    if (tab?.dirty && !(await confirmAction(`“${tab.file?.name || '文件'}”有未保存修改，关闭并放弃修改吗？`, { confirmLabel: '放弃修改并关闭' }))) return;
+    setWorkspaceTabs(tabs => tabs.filter(tab => tab.id !== id));
+    if (activeWorkspaceTab === id) { setActiveWorkspaceTab('conversation'); setView(current ? 'task' : 'workbench'); }
+  }
+  function newBrowserTab() {
+    const id = `browser-${crypto.randomUUID()}`;
+    setBrowserTabs(tabs => [...tabs, { id, url: '', title: '新标签页' }]);
+    setActiveWorkspaceTab(id);
+    setView('browser');
+  }
+  function openSavedApp(appId) {
+    setAppRequest({ appId, requestId: `manual-${Date.now()}` });
+    setAppTabOpen(true);
+    setView('app-center');
+  }
+  function updateBrowserTab(id, state) {
+    setBrowserTabs(tabs => tabs.map(tab => tab.id === id ? { ...tab, url: state.url || tab.url, title: state.title || tab.title } : tab));
+  }
+  async function closeBrowserTab(id) {
+    await window.desktop?.closeBrowserTab?.(id).catch(() => {});
+    setBrowserTabs(tabs => tabs.filter(tab => tab.id !== id));
+    if (activeWorkspaceTab === id) { setActiveWorkspaceTab('conversation'); setView(current ? 'task' : 'workbench'); }
   }
   function closePreview() {
     setPreviewOpen(false);
     setPreviewMedia(null);
   }
   function openTerminal() {
+    if (view !== 'terminal') terminalReturnView.current = { view, activeWorkspaceTab };
     setView("terminal");
     if (window.innerWidth <= 800) setSidebarOpen(false);
   }
-  async function runTerminal(command) {
-    if (
-      !String(command || "").trim() ||
-      terminalLaunch.current ||
-      terminal?.status === "running" ||
-      terminal?.status === "starting"
-    )
-      return false;
-    terminalLaunch.current = true;
-    terminalEvents.current = [];
+  async function manageGoal() {
+    if (!current) return;
+    const text = await promptAction('设置持续目标', current.goal?.text || '');
+    if (text == null) return;
+    try {
+      const result = await post(`/api/session/${current.id}/goal`, { text, status: text.trim() ? 'active' : 'completed' });
+      setCurrent(value => value ? { ...value, goal: result.goal } : value);
+    } catch (error) { setError(toUiError(error, 'goal')); }
+  }
+  async function clearGoal() {
+    if (!current?.goal?.text) return;
+    const accepted = await confirmAction('清除当前目标？', {
+      confirmLabel: '清除目标',
+      description: '清除后，后续消息将不再把它作为持续目标。',
+    });
+    if (!accepted) return;
+    try {
+      const result = await post(`/api/session/${current.id}/goal`, { text: '', status: 'completed' });
+      setCurrent(value => value ? { ...value, goal: result.goal } : value);
+    } catch (error) { setError(toUiError(error, 'goal')); }
+  }
+  async function runTerminal(paneId, command) {
+    const pane = terminalPanes.find(item => item.id === paneId);
+    if (!String(command || '').trim() || pane?.launching || ['running', 'starting'].includes(pane?.terminal?.status)) return false;
+    setTerminalPanes(panes => panes.map(item => item.id === paneId ? { ...item, launching: true } : item));
     try {
       const result = await post("/api/terminal/run", { command });
-      terminalId.current = result.terminalId;
-      const events = terminalEvents.current;
-      setTerminal((value) => createTerminalSession(value, result, events));
+      terminalPaneByRun.current.set(result.terminalId, paneId);
+      const events = terminalEventQueue.current.get(result.terminalId) || [];
+      terminalEventQueue.current.delete(result.terminalId);
+      setTerminalPanes(panes => panes.map(item => item.id === paneId ? { ...item, launching: false, terminal: createTerminalSession(item.terminal, result, events) } : item));
       setView("terminal");
       return true;
     } catch (e) {
       setError(toUiError(e, "terminal_run"));
+      setTerminalPanes(panes => panes.map(item => item.id === paneId ? { ...item, launching: false } : item));
       return false;
-    } finally {
-      terminalLaunch.current = false;
-      terminalEvents.current = [];
     }
   }
-  async function stopTerminal() {
-    if (!terminal?.terminalId) return;
+  async function startInteractiveTerminal(paneId, dimensions = {}) {
+    const pane = terminalPanes.find(item => item.id === paneId);
+    if (pane?.terminal?.terminalId || pane?.launching) return pane?.terminal?.terminalId || false;
+    setTerminalPanes(panes => panes.map(item => item.id === paneId ? { ...item, launching: true } : item));
     try {
-      await post(`/api/terminal/${terminal.terminalId}/stop`);
+      const result = await post('/api/terminal/interactive', dimensions);
+      terminalPaneByRun.current.set(result.terminalId, paneId);
+      const events = terminalEventQueue.current.get(result.terminalId) || [];
+      terminalEventQueue.current.delete(result.terminalId);
+      if (terminalCloseRequested.current.delete(paneId)) {
+        await post(`/api/terminal/${result.terminalId}/stop`).catch(() => {});
+        return false;
+      }
+      setTerminalPanes(panes => panes.map(item => item.id === paneId ? { ...item, launching: false, terminal: createTerminalSession(item.terminal, result, events) } : item));
+      return result.terminalId;
+    } catch (e) {
+      setError(toUiError(e, 'terminal_start'));
+      setTerminalPanes(panes => panes.map(item => item.id === paneId ? { ...item, launching: false } : item));
+      return false;
+    }
+  }
+  async function writeInteractiveTerminal(terminalId, data) {
+    if (!terminalId || !data) return;
+    try { await post(`/api/terminal/${terminalId}/input`, { data }); } catch (e) { setError(toUiError(e, 'terminal_input')); }
+  }
+  async function resizeInteractiveTerminal(terminalId, dimensions) {
+    if (!terminalId) return;
+    try { await post(`/api/terminal/${terminalId}/resize`, dimensions); } catch {}
+  }
+  async function stopTerminal(paneId) {
+    const terminalId = terminalPanes.find(item => item.id === paneId)?.terminal?.terminalId;
+    if (!terminalId) return;
+    try {
+      await post(`/api/terminal/${terminalId}/stop`);
     } catch (e) {
       setError(toUiError(e, "terminal_stop"));
     }
   }
-  function clearTerminal() {
-    setTerminal((value) => (value ? { ...value, lines: [] } : value));
+  function clearTerminal(paneId) {
+    setTerminalPanes(panes => panes.map(pane => pane.id === paneId && pane.terminal ? { ...pane, terminal: { ...pane.terminal, lines: [] } } : pane));
+  }
+  function addTerminalPane() {
+    setTerminalPanes(panes => [...panes, { id: `terminal-${++terminalPaneSequence.current}`, terminal: null, launching: false }]);
+  }
+  function closeTerminalPane(paneId) {
+    const pane = terminalPanes.find(item => item.id === paneId);
+    if (pane?.launching && !pane?.terminal?.terminalId) terminalCloseRequested.current.add(paneId);
+    if (pane?.terminal?.terminalId) post(`/api/terminal/${pane.terminal.terminalId}/stop`).catch(() => {});
+    setTerminalPanes(panes => panes.length <= 1 ? panes : panes.filter(item => item.id !== paneId));
   }
   function closeTerminal() {
-    if (terminal?.status === "running" || terminal?.status === "starting")
-      return;
-    terminalId.current = null;
-    setTerminal(null);
-    setView("file");
+    for (const pane of terminalPanes) {
+      if (pane.launching && !pane.terminal?.terminalId) terminalCloseRequested.current.add(pane.id);
+      if (pane.terminal?.terminalId) post(`/api/terminal/${pane.terminal.terminalId}/stop`).catch(() => {});
+    }
+    terminalPaneByRun.current.clear(); terminalEventQueue.current.clear();
+    setTerminalPanes([{ id: `terminal-${++terminalPaneSequence.current}`, terminal: null, launching: false }]);
+    const destination = terminalReturnView.current;
+    setActiveWorkspaceTab(destination.activeWorkspaceTab || 'conversation');
+    setView(destination.view === 'terminal' || destination.view === 'file' && !selectedFile ? (current ? 'task' : 'workbench') : destination.view);
   }
   function openAsset(asset) {
     setSelectedAsset(asset);
@@ -1418,37 +1621,45 @@ function App() {
     setAccountOpen(false);
   }
   const toggleSidebar = () => setSidebarOpen((x) => !x);
-  const toggleContextPanel = () =>
-    setContextPanelOpen((value) => {
-      const next = !value;
+  const toggleContextPopup = () =>
+    setContextPopupOpen((current) => {
+      const next = !current;
       if (next) {
-        setContextSplitOpen(false);
+        setRightPanel(null);
         closePreview();
+        try {
+          localStorage.removeItem("mli.right-panel");
+        } catch {}
       }
       try {
         localStorage.setItem("mli.context-panel-open", String(next));
       } catch {}
       return next;
     });
-  const toggleContextSplit = () => {
-    const update = () => {
-      const next = !contextSplitOpen;
-      if (next) {
-        setContextPanelOpen(false);
-        closePreview();
-      }
-      setContextSplitOpen(next);
-    };
-    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    if (!document.startViewTransition || reduceMotion || window.innerWidth <= 800) {
-      update();
-      return;
-    }
-    document.documentElement.classList.add("context-split-transition");
-    const transition = document.startViewTransition(() => flushSync(update));
-    transition.finished.finally(() =>
-      document.documentElement.classList.remove("context-split-transition"),
-    );
+  const updateRightPanel = (panel) =>
+    setRightPanel((current) => {
+      const next = current === panel ? null : panel;
+      if (next) setContextPopupOpen(false);
+      try {
+        if (next) localStorage.setItem("mli.right-panel", next);
+        else localStorage.removeItem("mli.right-panel");
+        localStorage.setItem(
+          "mli.context-panel-open",
+          String(next === "context"),
+        );
+      } catch {}
+      return next;
+    });
+  const openRightPanel = (panel) => {
+    setContextPopupOpen(false);
+    setRightPanel(panel);
+    try {
+      localStorage.setItem("mli.right-panel", panel);
+      localStorage.setItem(
+        "mli.context-panel-open",
+        String(panel === "context"),
+      );
+    } catch {}
   };
   function startSidebarResize(event) {
     if (window.innerWidth <= 800 || !sidebarOpen) return;
@@ -1474,6 +1685,35 @@ function App() {
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", finish, { once: true });
   }
+  function startRightPanelResize(event) {
+    if (window.innerWidth <= 800 || rightPanelContent !== "files") return;
+    event.preventDefault();
+    const startX = event.clientX,
+      startWidth = rightPanelWidth;
+    const move = (nextEvent) => {
+      const availableWidth = Math.max(260, window.innerWidth - sidebarWidth - 320);
+      const width = Math.max(
+        260,
+        Math.min(640, availableWidth, startWidth + startX - nextEvent.clientX),
+      );
+      setRightPanelWidth(width);
+      localStorage.setItem("mli.right-panel-width", String(width));
+    };
+    const finish = () => {
+      setRightPanelResizing(false);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+    };
+    setRightPanelResizing(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", finish, { once: true });
+    window.addEventListener("pointercancel", finish, { once: true });
+  }
   const whiteboardKey = current?.id
     ? `session:${current.id}`
     : `workspace:${activeWorkspace?.id || "default"}`;
@@ -1494,10 +1734,19 @@ function App() {
     <SubagentPanel
       key={current.id}
       current={current}
-      onOpen={loadSession}
+      open={agentWorkspaceOpen}
+      onClose={() => setAgentWorkspaceOpen(false)}
       onStop={(agentId) =>
         manageSubagents(() =>
           post(`/api/session/${current.id}/agents/${agentId}/stop`),
+        )
+      }
+      onMessage={(agentId, text, kind) =>
+        manageSubagents(() =>
+          post(`/api/session/${current.id}/agents/${agentId}/message`, {
+            text,
+            kind,
+          }),
         )
       }
     />
@@ -1511,6 +1760,8 @@ function App() {
         setAttachmentLoading((count) => Math.max(0, count + delta))
       }
       onCompact={compactContext}
+      onGoal={manageGoal}
+      onClearGoal={clearGoal}
       compacting={compacting}
       canCompact={Boolean(
         current &&
@@ -1561,19 +1812,40 @@ function App() {
       onWorkspace={current ? changeSessionWorkspace : addWorkspace}
       onMode={setMode}
       onModelsChanged={reloadConfiguration}
+      onAgents={() => setAgentWorkspaceOpen(true)}
       onError={(value) => setError(toUiError(value, "composer"))}
     />
   );
-  const taskSession = view === "task" && current && hasSessionContext;
+  const taskSession = Boolean(current && hasSessionContext);
   const taskConversation = taskSession ? (
     <section className="task-session">
       <TaskTopbar
         current={current}
         onToggle={toggleSidebar}
-        contextOpen={contextPanelOpen}
-        contextSplitOpen={contextSplitOpen}
-        onToggleContext={toggleContextPanel}
-        onToggleContextSplit={toggleContextSplit}
+        contextOpen={contextPopupOpen}
+        contextSplitOpen={rightPanel === "context"}
+        onToggleContext={toggleContextPopup}
+        contextMode={contextPopupMode}
+        onShowContext={() => {
+          if (contextPopupOpen && contextPopupMode === "context") {
+            toggleContextPopup();
+            return;
+          }
+          setContextPopupMode("context");
+          if (!contextPopupOpen) setContextPopupOpen(true);
+        }}
+        onShowAvailable={() => {
+          if (contextPopupOpen && contextPopupMode === "available") {
+            toggleContextPopup();
+            return;
+          }
+          setContextPopupMode("available");
+          if (!contextPopupOpen) setContextPopupOpen(true);
+        }}
+        onToggleContextSplit={() => updateRightPanel("context")}
+        filesOpen={rightPanel === "files"}
+        hideHeader
+        onToggleFiles={() => updateRightPanel("files")}
       />
       <div
         className="main-stage"
@@ -1596,7 +1868,6 @@ function App() {
           </div>
         ) : (
           <>
-            {subagentPanel}
             <Conversation
               entries={entries}
               live={live}
@@ -1635,30 +1906,43 @@ function App() {
         ) : (
           composer
         ))}
+      {subagentPanel}
     </section>
   ) : null;
-  const contextPanel =
-    taskSession && contextPanelOpen ? (
+  const contextPopup =
+    taskSession && contextPopupOpen && ["task", "workbench"].includes(view) ? (
       <SessionContextPanel
         entries={entries}
         live={live}
-        onClose={toggleContextPanel}
-        onExpand={() => {
-          setContextPanelOpen(false);
-          setContextSplitOpen(true);
-          closePreview();
-        }}
+        info={info}
+        current={current}
+        appCatalog={appCatalog}
+        mode={contextPopupMode}
+        onOpenAsset={openAsset}
+        onClose={toggleContextPopup}
+        onExpand={() => openRightPanel("context")}
         onOpenFile={openFile}
         onOpenMedia={openMediaPreview}
       />
     ) : null;
+  if (rightPanel) lastRightPanel.current = rightPanel;
+  const contextPanelAvailable =
+    taskSession && ["task", "workbench"].includes(view);
+  const visibleRightPanel =
+    rightPanel === "context" && !contextPanelAvailable ? null : rightPanel;
+  const rightPanelContent = visibleRightPanel || lastRightPanel.current;
   return (
     <div
-      className={`app-shell ${sidebarOpen ? "" : "sidebar-collapsed"} ${taskSession && previewOpen ? "preview-layout-active" : ""}`}
-      style={{ "--sidebar-width": `${sidebarWidth}px` }}
+      className={`app-shell ${sidebarOpen ? "" : "sidebar-collapsed"}`}
+      style={{
+        "--sidebar-width": `${sidebarWidth}px`,
+        "--right-panel-width": `${rightPanelWidth}px`,
+      }}
     >
       <Sidebar
         marketing={marketing.data}
+        info={info}
+        appCatalog={appCatalog}
         view={view}
         onView={(next) => {
           if (next === "workbench") openWorkbench();
@@ -1670,6 +1954,8 @@ function App() {
         }}
         workspaces={workspaces}
         sessions={sessions}
+        workspaceSessions={workspaceSessions}
+        unreadSessionIds={unreadSessionIds}
         current={current}
         activeWorkspace={activeWorkspace}
         account={account}
@@ -1687,8 +1973,32 @@ function App() {
         onDropWorkspace={addDroppedWorkspace}
         onActivate={activateWorkspace}
         onRemoveWorkspace={removeWorkspaceFromList}
-        onSelect={loadSession}
-        onDelete={deleteSession}
+        onSelect={async (workspaceId, sessionId) => {
+          if (workspaceId !== activeWorkspace?.id) {
+            pendingWorkspaceAction.current = { type: "select", sessionId };
+            try {
+              await activateWorkspace(workspaceId);
+            } catch (error) {
+              pendingWorkspaceAction.current = null;
+              setError(toUiError(error, "workspace_change"));
+            }
+            return;
+          }
+          await loadSession(sessionId);
+        }}
+        onDelete={async (workspaceId, sessionId, title) => {
+          if (workspaceId !== activeWorkspace?.id) {
+            pendingWorkspaceAction.current = { type: "delete", sessionId, title };
+            try {
+              await activateWorkspace(workspaceId);
+            } catch (error) {
+              pendingWorkspaceAction.current = null;
+              setError(toUiError(error, "workspace_change"));
+            }
+            return;
+          }
+          await deleteSession(sessionId, title);
+        }}
         onOpenFile={openFile}
         onOpenTerminal={openTerminal}
         selectedFile={selectedFile}
@@ -1704,71 +2014,62 @@ function App() {
           onPointerDown={startSidebarResize}
         />
       )}{" "}
-      <button
-        className="mobile-nav-toggle"
-        title="切换导航"
-        onClick={toggleSidebar}
-      >
-        <Menu size={18} />
-      </button>
       <main className={`workspace-main ${taskSession ? "has-task-session" : ""}`}>
-        {taskSession ? (
-          <TaskSplitLayout
-            panel={contextPanel}
-            splitPanel={
-              contextSplitOpen ? (
-                <SessionContextPanel
-                  entries={entries}
-                  live={live}
-                  full
-                  onClose={() => setContextSplitOpen(false)}
-                  onOpenFile={openFile}
-                  onOpenMedia={openMediaPreview}
-                />
-              ) : null
-            }
-            preview={
-              previewOpen ? (
-                <PreviewWorkspace
-                  file={selectedFile}
-                  media={previewMedia}
-                  workspace={activeWorkspace}
-                  onClose={closePreview}
-                  onSaved={() => setFileRevision((x) => x + 1)}
-                  onError={(value) => setError(toUiError(value, "preview"))}
-                />
-              ) : null
-            }
-          >
-            {taskConversation}
-          </TaskSplitLayout>
-        ) : ["task", "workbench"].includes(view) ? (
-          <WorkbenchState
-            workspace={activeWorkspace}
-            draft={draft}
-            setDraft={setDraft}
-            composer={composer}
-            onWorkspace={addWorkspace}
-            onCapabilities={showCapabilityGuide}
-            capabilityBusy={running}
-          />
-        ) : view === "app-center" ? (
-          <AppCenter
-            get={get}
-            post={post}
-            request={appRequest}
-            overlayVisible={Boolean(
-              error ||
-              accountOpen ||
-              (uiRequest && uiRequest.presentation !== "inline"),
-            )}
-            onResume={(id) => {
-              setAppRequest(null);
-              loadSession(id);
-            }}
-            onError={(value) => setError(toUiError(value, "app_center"))}
-            onToggle={toggleSidebar}
-          />
+        {["task", "workbench", "file", "browser", "app-center"].includes(view) ? (
+          <div className="tabbed-workspace">
+            <header className="workspace-tabbar">
+              <div className="workspace-tabs" role="tablist" aria-label="工作区标签页">
+                <button role="tab" title={current?.title || '会话'} aria-selected={["task", "workbench"].includes(view)} onClick={() => { setActiveWorkspaceTab('conversation'); setView(current ? 'task' : 'workbench'); }}><MessageSquare size={14}/><span>{current?.title || '会话'}</span></button>
+                {appTabOpen && <div className={`workspace-file-tab ${view === 'app-center' ? 'active' : ''}`}><button role="tab" aria-selected={view === 'app-center'} onClick={() => setView('app-center')}><Globe size={14}/>应用台</button><button className="workspace-tab-close" aria-label="关闭应用台标签页" title="关闭标签页" onClick={() => { setAppTabOpen(false); if (view === 'app-center') setView(current ? 'task' : 'workbench'); }}><X size={12}/></button></div>}
+                {browserTabs.map(tab => <div className={`workspace-file-tab ${view === 'browser' && activeWorkspaceTab === tab.id ? 'active' : ''}`} key={tab.id}>
+                  <button role="tab" aria-selected={view === 'browser' && activeWorkspaceTab === tab.id} title={tab.url || tab.title} onClick={() => { setActiveWorkspaceTab(tab.id); setView('browser'); }}><Globe size={14}/><span>{tab.title || '新标签页'}</span></button>
+                  <button className="workspace-tab-close" aria-label={`关闭 ${tab.title || '网页标签页'}`} title="关闭标签页" onClick={() => closeBrowserTab(tab.id)}><X size={12}/></button>
+                </div>)}
+                {workspaceTabs.map(tab => <div className={`workspace-file-tab ${view === 'file' && activeWorkspaceTab === tab.id ? 'active' : ''}`} key={tab.id}>
+                  <button role="tab" aria-selected={view === 'file' && activeWorkspaceTab === tab.id} title={tab.file?.path || tab.media?.name} onClick={() => { setActiveWorkspaceTab(tab.id); setSelectedFile(tab.file || null); setView('file'); }}><File size={14}/><span>{tab.file?.name || tab.media?.name || '预览'}{tab.dirty ? ' *' : ''}</span></button>
+                  <button className="workspace-tab-close" aria-label={`关闭 ${tab.file?.name || tab.media?.name || '预览'}`} title="关闭标签页" onClick={() => closeWorkspaceTab(tab.id)}><X size={12}/></button>
+                </div>)}
+                <button className="workspace-new-tab" title="新建网页标签页" aria-label="新建网页标签页" onClick={newBrowserTab}><Plus size={17}/></button>
+              </div>
+              {taskSession && ['task', 'workbench'].includes(view) ? <TaskTopbar actionsOnly contextOpen={contextPopupOpen} contextMode={contextPopupMode} onShowContext={() => { if (contextPopupOpen && contextPopupMode === 'context') { toggleContextPopup(); return; } setContextPopupMode('context'); if (!contextPopupOpen) setContextPopupOpen(true); }} onShowAvailable={() => { if (contextPopupOpen && contextPopupMode === 'available') { toggleContextPopup(); return; } setContextPopupMode('available'); if (!contextPopupOpen) setContextPopupOpen(true); }} contextSplitOpen={rightPanel === 'context'} onToggleContext={toggleContextPopup} onToggleContextSplit={() => updateRightPanel('context')} filesOpen={rightPanel === 'files'} onToggleFiles={() => updateRightPanel('files')}/> : <button className={`workspace-files-toggle ${rightPanel === 'files' ? 'active' : ''}`} title={rightPanel === 'files' ? '关闭文件目录' : '打开文件目录'} aria-label={rightPanel === 'files' ? '关闭文件目录' : '打开文件目录'} aria-pressed={rightPanel === 'files'} onClick={() => updateRightPanel('files')}><FolderOpen size={17}/></button>}
+              {!window.desktop?.isElectron && connection.status !== "connected" && (
+                <button
+                  className="workspace-connection-status"
+                  title={connection.status === "retrying" ? "连接已断开，点击重连" : "正在连接本地 Agent"}
+                  aria-label={connection.status === "retrying" ? "连接已断开，点击重连" : "正在连接本地 Agent"}
+                  onClick={() => connectEvents(true)}
+                >
+                  <LoaderCircle className="spin" size={14} />
+                </button>
+              )}
+            </header>
+            <div className="workspace-tab-body">
+              <div className="workspace-tab-content">
+                <div className="workspace-tab-pane" hidden={!["task", "workbench"].includes(view)}>
+                  {taskSession ? <TaskSplitLayout panel={contextPopup}>{taskConversation}</TaskSplitLayout> : <WorkbenchState workspace={activeWorkspace} draft={draft} setDraft={setDraft} composer={composer} onWorkspace={addWorkspace} onCapabilities={showCapabilityGuide} capabilityBusy={running}/>}
+                </div>
+                <div className="workspace-tab-pane" hidden={view !== 'app-center'}>
+                  {appTabOpen && <AppCenter get={get} post={post} request={appRequest} onFiles={() => openRightPanel('files')} onTerminal={openTerminal} overlayVisible={Boolean(view !== 'app-center' || error || accountOpen || (uiRequest && uiRequest.presentation !== 'inline'))} onResume={id => { setAppRequest(null); loadSession(id); }} onError={value => setError(toUiError(value, 'app_center'))} onToggle={toggleSidebar}/>}
+                </div>
+                {browserTabs.map(tab => <div className="workspace-tab-pane" key={tab.id} hidden={view !== 'browser' || activeWorkspaceTab !== tab.id}>
+                  <BrowserWorkspace browserId={tab.id} initialUrl={tab.url} active={view === 'browser' && activeWorkspaceTab === tab.id} onFiles={() => openRightPanel('files')} onTerminal={openTerminal} onOpenApp={openSavedApp} onState={state => updateBrowserTab(tab.id, state)} onError={value => setError(toUiError(value, 'browser'))}/>
+                </div>)}
+                {workspaceTabs.map(tab => <div className="workspace-tab-pane" key={tab.id} hidden={view !== 'file' || activeWorkspaceTab !== tab.id}>
+                  <PreviewWorkspace active={view === 'file' && activeWorkspaceTab === tab.id} file={tab.file} media={tab.media} workspace={tab.workspace} onDirtyChange={dirty => setWorkspaceTabs(tabs => tabs.map(item => item.id === tab.id && item.dirty !== dirty ? { ...item, dirty } : item))} onClose={() => closeWorkspaceTab(tab.id)} onSaved={() => setFileRevision(x => x + 1)} onError={value => setError(toUiError(value, 'preview'))}/>
+                </div>)}
+              </div>
+              <aside className={`workspace-right-panel ${visibleRightPanel ? 'is-open' : ''} ${rightPanelContent === 'files' ? 'is-files' : ''} ${rightPanelResizing ? 'is-resizing' : ''}`} aria-label={rightPanelContent === 'context' ? '任务上下文' : '文件目录'} aria-hidden={!visibleRightPanel} inert={!visibleRightPanel}>
+                {visibleRightPanel === 'files' && <div className="workspace-right-panel-resize" role="separator" aria-label="调整文件目录宽度" aria-orientation="vertical" onPointerDown={startRightPanelResize}/>} 
+                <div className="workspace-right-panel-content">
+                  {rightPanelContent === 'context' && <SessionContextPanel entries={entries} live={live} info={info} current={current} appCatalog={appCatalog} full mode="context" onClose={() => updateRightPanel('context')} onOpenFile={openFile} onOpenMedia={openMediaPreview}/>} 
+                  {rightPanelContent === 'files' && <div className="workspace-files-panel">
+                    <header><b>文件目录</b><button title="关闭文件目录" aria-label="关闭文件目录面板" onClick={() => updateRightPanel('files')}><X size={15}/></button></header>
+                    <FileExplorer workspace={activeWorkspace} selectedFile={selectedFile} revision={fileRevision} onOpen={openFile} onOpenTerminal={openTerminal} onMutated={() => setFileRevision(x => x + 1)}/>
+                  </div>}
+                </div>
+              </aside>
+            </div>
+          </div>
         ) : view === "meetings" ? (
           <MeetingHistory
             workspace={activeWorkspace}
@@ -1833,11 +2134,16 @@ function App() {
           />
         ) : view === "terminal" ? (
           <TerminalWorkspace
-            terminal={terminal}
+            panes={terminalPanes}
             workspace={activeWorkspace}
+            onStart={startInteractiveTerminal}
+            onInput={writeInteractiveTerminal}
+            onResize={resizeInteractiveTerminal}
             onRun={runTerminal}
             onStop={stopTerminal}
             onClear={clearTerminal}
+            onAddPane={addTerminalPane}
+            onClosePane={closeTerminalPane}
             onClose={closeTerminal}
             onToggle={toggleSidebar}
           />
@@ -1919,10 +2225,14 @@ function updateLiveStep(live, event, updater) {
 
 function Sidebar({
   marketing,
+  info,
+  appCatalog,
   view,
   onView,
   workspaces,
   sessions,
+  workspaceSessions,
+  unreadSessionIds,
   current,
   activeWorkspace,
   account,
@@ -1952,15 +2262,19 @@ function Sidebar({
   const [searching, setSearching] = useState(false),
     [query, setQuery] = useState(""),
     [section, setSection] = useState("project"),
+    [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState(
+      () => new Set(workspaces.filter((workspace) => workspace.active).map((workspace) => workspace.id)),
+    ),
     [dragging, setDragging] = useState(false),
     [subjectMenuOpen, setSubjectMenuOpen] = useState(false);
-  const visibleSessions = sessions.filter((s) =>
-    (s.title || "未命名会话")
-      .toLowerCase()
-      .includes(query.trim().toLowerCase()),
-  );
+  const normalizedQuery = query.trim().toLowerCase();
+  const sessionsForWorkspace = (workspace) =>
+    (workspaceSessions[workspace.id] || (workspace.active ? sessions : [])).filter((session) =>
+      (session.title || "未命名会话").toLowerCase().includes(normalizedQuery),
+    );
   const dragDepth = useRef(0);
   const subjectSwitcher = useRef(null);
+  const previousActiveWorkspaceId = useRef(null);
   const isFileDrag = (event) =>
     Array.from(event.dataTransfer?.types || []).includes("Files");
   function dragEnter(event) {
@@ -1980,6 +2294,16 @@ function Sidebar({
     dragDepth.current = Math.max(0, dragDepth.current - 1);
     if (!dragDepth.current) setDragging(false);
   }
+  useEffect(() => {
+    setExpandedWorkspaceIds((currentIds) => {
+      const available = new Set(workspaces.map((workspace) => workspace.id));
+      const next = new Set([...currentIds].filter((id) => available.has(id)));
+      const activeId = workspaces.find((workspace) => workspace.active)?.id;
+      if (activeId && activeId !== previousActiveWorkspaceId.current) next.add(activeId);
+      previousActiveWorkspaceId.current = activeId || null;
+      return next;
+    });
+  }, [workspaces]);
   useEffect(() => {
     const reset = () => {
       dragDepth.current = 0;
@@ -2043,21 +2367,6 @@ function Sidebar({
           <span className="brand-mark">M</span>
           <strong>魔力工作台</strong>
         </button>
-        <div className="brand-actions">
-          <button
-            title="搜索当前项目的会话"
-            aria-label="搜索当前项目的会话"
-            onClick={() => {
-              setSection("project");
-              setSearching(true);
-              requestAnimationFrame(() =>
-                document.querySelector(".session-search input")?.focus(),
-              );
-            }}
-          >
-            <Search size={16} />
-          </button>
-        </div>
       </div>
       <nav className="main-nav">
         <div className="primary-nav">
@@ -2065,74 +2374,75 @@ function Sidebar({
             className={view === "workbench" ? "active" : ""}
             onClick={() => onView("workbench")}
           >
-            <LayoutDashboard size={16} />
+            <LayoutGrid size={15} />
             工作台
           </button>
-          <button
-            className={view === "app-center" ? "active" : ""}
-            onClick={() => onView("app-center")}
-          >
-            <ExternalLink size={16} />
-            应用台
-          </button>
+          <button className={view === 'app-center' ? 'active' : ''} onClick={() => onView('app-center')}><AppWindow size={15}/>应用台</button>
           <button
             className={view === "models" ? "active" : ""}
             onClick={() => onView("models")}
           >
-            <Bot size={16} />
+            <BrainCircuit size={15} />
             模型
           </button>
         </div>
         <SidebarFunctions view={view} onView={onView} />
       </nav>
-      <div className="explorer-tabs" role="tablist">
-        <button
-          role="tab"
-          aria-selected={section === "project"}
-          className={section === "project" ? "active" : ""}
-          onClick={() => setSection("project")}
-        >
-          会话
-        </button>
-        <button
-          role="tab"
-          aria-selected={section === "files"}
-          className={section === "files" ? "active" : ""}
-          onClick={() => setSection("files")}
-        >
-          文件
-        </button>
-        {(workspaces.length > 0 || section === "files") && (
+      <div className={`explorer-tabs ${searching ? "is-searching" : ""}`}>
+        <div className="project-heading" role="tablist">
           <button
-            className="tab-add"
-            onClick={onAddWorkspace}
-            title="添加工作目录"
+            role="tab"
+            aria-selected={section === "project"}
+            className={section === "project" ? "active" : ""}
+            onClick={() => setSection("project")}
           >
-            <Plus size={15} />
+            项目
           </button>
-        )}
+          <div className="project-heading-actions">
+            <button
+              className="project-search-trigger"
+              title="搜索项目会话"
+              aria-label="搜索项目会话"
+              onClick={() => {
+                setSection("project");
+                setSearching(true);
+                requestAnimationFrame(() =>
+                  document.querySelector(".session-search input")?.focus(),
+                );
+              }}
+            >
+              <Search size={15} />
+            </button>
+            {workspaces.length > 0 && (
+              <button className="tab-add" onClick={onAddWorkspace} title="添加工作目录" aria-label="添加工作目录">
+                <Plus size={15} />
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="session-search" aria-hidden={!searching}>
+          <Search size={14} />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="搜索会话"
+            tabIndex={searching ? 0 : -1}
+          />
+          <button
+            title="关闭搜索"
+            aria-label="关闭搜索"
+            tabIndex={searching ? 0 : -1}
+            onClick={() => {
+              setSearching(false);
+              setQuery("");
+            }}
+          >
+            <X size={14} />
+          </button>
+        </div>
       </div>
       {section === "project" ? (
         <>
-          {searching && (
-            <div className="session-search">
-              <Search size={14} />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="搜索会话"
-              />
-              <button
-                title="关闭搜索"
-                onClick={() => {
-                  setSearching(false);
-                  setQuery("");
-                }}
-              >
-                <X size={14} />
-              </button>
-            </div>
-          )}
           <div
             className={`project-list ${!workspaces.length ? "is-empty" : ""}`}
           >
@@ -2151,19 +2461,38 @@ function Sidebar({
                 </button>
               </div>
             )}
-            {workspaces.map((w) => (
-              <div className="project-group" key={w.id}>
+            {workspaces.map((w) => {
+              const expanded = expandedWorkspaceIds.has(w.id);
+              const visibleSessions = sessionsForWorkspace(w);
+              return (
+              <div className={`project-group ${w.active ? "active" : ""}`} key={w.id}>
                 <div className="project-row">
+                  <span className="project-folder" aria-hidden="true">
+                    {expanded ? <FolderOpen size={16} /> : <Folder size={16} />}
+                  </span>
                   <button
                     className="project-open"
                     onClick={() =>
                       w.active ? onView("workbench") : onActivate(w.id)
                     }
                   >
-                    <Folder size={16} />
                     <span>
                       <b>{w.name}</b>
                     </span>
+                  </button>
+                  <button
+                    className="project-collapse"
+                    title={expanded ? `收起 ${w.name}` : `展开 ${w.name}`}
+                    aria-label={expanded ? `收起 ${w.name}` : `展开 ${w.name}`}
+                    aria-expanded={expanded}
+                    onClick={() => setExpandedWorkspaceIds((currentIds) => {
+                      const next = new Set(currentIds);
+                      if (next.has(w.id)) next.delete(w.id);
+                      else next.add(w.id);
+                      return next;
+                    })}
+                  >
+                    <ChevronRight className={expanded ? "rotated" : ""} size={14} />
                   </button>
                   <WorkspaceRemoveButton
                     workspace={w}
@@ -2177,16 +2506,16 @@ function Sidebar({
                     <Plus size={14} />
                   </button>
                 </div>
-                {w.active && (
+                {expanded && (
                   <div className="project-sessions">
                     {visibleSessions.map((s) => (
                       <div
                         className={`session-row ${s.id === current?.id && view === "task" ? "active" : ""}`}
                         key={s.id}
                       >
-                        <button
+                          <button
                           className="session-open"
-                          onClick={() => onSelect(s.id)}
+                          onClick={() => onSelect(w.id, s.id)}
                           title={s.title || "未命名会话"}
                         >
                           <span
@@ -2195,27 +2524,28 @@ function Sidebar({
                           <span className="session-title">
                             {s.title || "未命名会话"}
                           </span>
-                          {s.running && (
-                            <small className="session-running">运行中</small>
-                          )}
+                            <span className="session-status" aria-label={s.running ? "运行中" : unreadSessionIds?.has(s.id) ? "有未查看更新" : undefined}>
+                              {s.running ? <LoaderCircle className="session-status-icon" size={14} /> : unreadSessionIds?.has(s.id) ? <i className="session-unread" /> : null}
+                            </span>
                         </button>
                         <button
                           className="session-delete"
                           title="删除会话"
                           aria-label={`删除会话 ${s.title || "未命名会话"}`}
-                          onClick={() => onDelete(s.id, s.title)}
+                          onClick={() => onDelete(w.id, s.id, s.title)}
                         >
                           <Trash2 size={13} />
                         </button>
                       </div>
                     ))}
-                    {query && !visibleSessions.length && (
+                    {normalizedQuery && !visibleSessions.length && (
                       <div className="session-empty">没有匹配的会话</div>
                     )}
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </>
       ) : (
@@ -3164,42 +3494,62 @@ function AccountDialog({
   );
 }
 function TaskTopbar({
+  hideHeader = false,
+  actionsOnly = false,
   current,
   onToggle,
   contextOpen,
   contextSplitOpen,
   onToggleContext,
+  contextMode = "context",
+  onShowContext,
+  onShowAvailable,
   onToggleContextSplit,
+  filesOpen,
+  onToggleFiles,
 }) {
+  if (hideHeader) return null;
   return (
-    <header className="topbar">
-      <div className="topbar-title">
+    <header className={actionsOnly ? 'workspace-header-actions' : 'topbar'}>
+      {!actionsOnly && <div className="topbar-title">
         <button className="mobile-menu" onClick={onToggle}>
           <Menu size={18} />
         </button>
         <div>
           <b>{current?.title || "新任务"}</b>
         </div>
-      </div>
+      </div>}
       <div className="topbar-actions">
         <button
-          className={contextOpen ? "active" : ""}
-          title={contextOpen ? "收起任务上下文" : "打开任务上下文"}
-          aria-label={contextOpen ? "收起任务上下文" : "打开任务上下文"}
-          aria-pressed={contextOpen}
-          onClick={onToggleContext}
-        >
-          <PanelRight size={17} />
-        </button>
+          className={contextOpen && contextMode === "context" ? "active" : ""}
+          title="打开任务上下文"
+          aria-label="打开任务上下文"
+          aria-pressed={contextOpen && contextMode === "context"}
+          onClick={onShowContext}
+        ><PanelRight size={17} /></button>
+        <button
+          className={contextMode === "available" && contextOpen ? "active" : ""}
+          title="打开当前可用"
+          aria-label="打开当前可用"
+          aria-pressed={contextMode === "available" && contextOpen}
+          onClick={onShowAvailable}
+        ><Wrench size={17} /></button>
         <button
           className={contextSplitOpen ? "active" : ""}
-          title={contextSplitOpen ? "关闭上下文分屏" : "分屏显示全部上下文"}
-          aria-label={contextSplitOpen ? "关闭上下文分屏" : "分屏显示全部上下文"}
+          title={contextSplitOpen ? "关闭上下文分屏" : "在右侧分屏显示任务上下文"}
+          aria-label={contextSplitOpen ? "关闭上下文分屏" : "在右侧分屏显示任务上下文"}
           aria-pressed={contextSplitOpen}
           onClick={onToggleContextSplit}
         >
           <PanelRightOpen size={17} />
         </button>
+        <button
+          className={filesOpen ? 'active' : ''}
+          title={filesOpen ? '关闭文件目录' : '打开文件目录'}
+          aria-label={filesOpen ? '关闭文件目录' : '打开文件目录'}
+          aria-pressed={filesOpen}
+          onClick={onToggleFiles}
+        ><FolderOpen size={17}/></button>
       </div>
     </header>
   );
@@ -4034,6 +4384,14 @@ function buildConversationTimeline(entries, running) {
         };
         if (index >= 0) node.tools[index] = tool;
         else node.tools.push(tool);
+        if (entry.retryOfCallId) {
+          for (const step of steps.values()) {
+            const original = step.tools.find(
+              (candidate) => candidate.id === entry.retryOfCallId,
+            );
+            if (original) original.unsandboxedRetryCompleted = true;
+          }
+        }
       }
       continue;
     }
@@ -4468,15 +4826,78 @@ function LazyRunRecord({ summary, recordCount, children }) {
       <summary>
         <ChevronRight size={14} />
         运行记录
-        <span>
+        <span className="turn-record-meta">
+          <span>
           {summary.durationMs == null
             ? "用时未记录"
             : formatDuration(summary.durationMs)}{" "}
           · {recordCount} 次工具调用
+          </span>
+          <TaskUsageSummary billing={summary.billing} />
         </span>
       </summary>
       {open && <div>{children()}</div>}
     </details>
+  );
+}
+
+function compactUsageNumber(value) {
+  return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 }).format(
+    Math.max(0, Number(value) || 0),
+  );
+}
+
+function compactBillingValue(value, digits = 6) {
+  return new Intl.NumberFormat("zh-CN", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: digits,
+  }).format(Math.max(0, Number(value) || 0));
+}
+
+function currencyValue(value, currency) {
+  const number = Math.max(0, Number(value) || 0);
+  try {
+    return new Intl.NumberFormat("zh-CN", {
+      style: "currency",
+      currency: currency || "USD",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 6,
+    }).format(number);
+  } catch {
+    return `${currency || "USD"} ${compactBillingValue(number)}`;
+  }
+}
+
+function TaskUsageSummary({ billing, inline = false }) {
+  if (!billing?.requestCount) return null;
+  const costs = Object.entries(billing.costs || {}).filter(
+    ([, value]) => Number.isFinite(Number(value)),
+  );
+  const charge = billing.official
+    ? `${compactBillingValue(billing.magicValue)} 魔力值`
+    : billing.pricingConfigured && costs.length
+      ? costs.map(([currency, value]) => currencyValue(value, currency)).join(" + ")
+      : "";
+  const cacheTitle = `缓存创建 ${compactUsageNumber(billing.cacheCreationTokens)} tokens，缓存读取 ${compactUsageNumber(billing.cacheReadTokens)} tokens`;
+  const parts = [
+    charge,
+    `输入 ${compactUsageNumber(billing.promptTokens)}`,
+    `输出 ${compactUsageNumber(billing.completionTokens)}`,
+    `缓存 ${compactUsageNumber(billing.cacheTokens)}`,
+  ].filter(Boolean);
+  return (
+    <span
+      className={`task-usage-summary ${inline ? "is-inline" : ""}`}
+      title={`${cacheTitle}${billing.estimatedTokens ? "；token 为估算值" : ""}`}
+    >
+      {parts.map((part, index) => (
+        <span key={part}>
+          {index > 0 && <i aria-hidden="true">·</i>}
+          {part}
+        </span>
+      ))}
+      {billing.estimatedTokens && <em>估算</em>}
+    </span>
   );
 }
 function DeleteEntryButton({ entryId, onDelete, disabled }) {
@@ -4795,6 +5216,8 @@ function Live({ live, sessionId, onOpenMedia, onAssetAdded }) {
 }
 function Tool({ item, sessionId, onOpenMedia, onAssetAdded }) {
   const [open, setOpen] = useState(false),
+    [hostRetry, setHostRetry] = useState(null),
+    [hostRetryBusy, setHostRetryBusy] = useState(false),
     status = item.status || "ok",
     label =
       status === "running"
@@ -4806,6 +5229,45 @@ function Tool({ item, sessionId, onOpenMedia, onAssetAdded }) {
             : status === "interrupted"
               ? "运行中断"
               : "已运行";
+  const canRetryWithoutSandbox =
+    item.name === "bash" &&
+    status === "error" &&
+    item.canRetryWithoutSandbox === true &&
+    ["SANDBOX_UNAVAILABLE", "SANDBOX_BUSY", "SANDBOX_DENIED"].includes(item.errorDetails?.code) &&
+    !item.sandboxBypassed &&
+    !item.unsandboxedRetryCompleted &&
+    !hostRetry;
+  async function retryWithoutSandbox(event) {
+    event.stopPropagation();
+    const accepted = await confirmAction("不使用沙箱重试这条命令？", {
+      confirmLabel: "确认重试",
+      destructive: false,
+      description:
+        (item.errorDetails?.code === "SANDBOX_DENIED"
+          ? "这条命令已在沙箱中运行过并被拒绝访问，可能已产生部分修改。"
+          : "") +
+        "仅重试上方原始 Bash 命令一次。它将以当前系统用户的宿主权限运行，可访问沙箱外的文件、网络和进程；不会永久关闭沙箱。",
+    });
+    if (!accepted) return;
+    setHostRetryBusy(true);
+    try {
+      const response = await post(
+        `/api/session/${sessionId}/tool/${encodeURIComponent(item.id)}/retry-unsandboxed`,
+        { confirmed: true },
+      );
+      setHostRetry(response.result);
+      setOpen(true);
+    } catch (error) {
+      setHostRetry({
+        status: "error",
+        content: error.message,
+        sandboxBypassed: true,
+      });
+      setOpen(true);
+    } finally {
+      setHostRetryBusy(false);
+    }
+  }
   return (
     <div className={`tool-activity ${status}`}>
       <button className="tool-summary" onClick={() => setOpen(!open)}>
@@ -4820,6 +5282,7 @@ function Tool({ item, sessionId, onOpenMedia, onAssetAdded }) {
         </span>
         <small>{label}</small>
         <b>{item.name}</b>
+        {item.sandboxBypassed && <em className="tool-bypass-label">未使用沙箱</em>}
         <span>{preview(item.args)}</span>
         {item.durationMs != null && (
           <time>{formatDuration(item.durationMs)}</time>
@@ -4833,6 +5296,25 @@ function Tool({ item, sessionId, onOpenMedia, onAssetAdded }) {
             {item.content ? `\n\n${formatContent(item.content)}` : ""}
           </pre>
           {item.errorDetails && <ErrorDetails details={item.errorDetails} />}
+        </div>
+      )}
+      {canRetryWithoutSandbox && (
+        <div className="tool-recovery-actions">
+          <span>沙箱未能启动，原命令尚未在沙箱内执行。可修复沙箱、切换后端，或确认一次宿主权限重试。</span>
+          <button disabled={hostRetryBusy} onClick={retryWithoutSandbox}>
+            {hostRetryBusy ? (
+              <LoaderCircle className="spin" size={13} />
+            ) : (
+              <ShieldAlert size={13} />
+            )}
+            {hostRetryBusy ? "正在重试…" : "不使用沙箱重试"}
+          </button>
+        </div>
+      )}
+      {hostRetry && (
+        <div className={`tool-host-retry ${hostRetry.status}`} role="status">
+          <b>未使用沙箱 · {hostRetry.status === "ok" ? "重试成功" : "重试失败"}</b>
+          <pre>{formatContent(hostRetry.content || "(无输出)")}</pre>
         </div>
       )}
       <MessageMedia
@@ -5034,6 +5516,13 @@ function TaskSummary({ item, candidates = [], onOpenFile, entryActions }) {
   const verified =
     ["done", undefined].includes(item.reason) &&
     !["limited", "needs_validation"].includes(item.quality?.status);
+  const hasBody = Boolean(
+    (item.quality && item.quality.status !== "not_applicable") ||
+    item.summaryText ||
+    item.error ||
+    primary ||
+    otherFiles.length,
+  );
   return (
     <article className="agent-response">
       <div className="agent-response-header">
@@ -5043,7 +5532,7 @@ function TaskSummary({ item, candidates = [], onOpenFile, entryActions }) {
         </div>
       </div>
       <div className="message-body agent-response-body">
-        <section className={`task-summary ${verified ? "" : "not-done"}`}>
+        <section className={`task-summary ${verified ? "" : "not-done"} ${hasBody ? "" : "is-header-only"}`}>
           <div className="task-summary-head">
             <span className="summary-icon">
               {verified ? <Check size={17} /> : <ShieldAlert size={17} />}
@@ -5051,6 +5540,7 @@ function TaskSummary({ item, candidates = [], onOpenFile, entryActions }) {
             <span>
               <b>{title}</b>
               <small>
+                <span>
                 {[
                   item.durationMs != null && formatDuration(item.durationMs),
                   item.toolCount != null && `${item.toolCount} 次工具调用`,
@@ -5060,6 +5550,8 @@ function TaskSummary({ item, candidates = [], onOpenFile, entryActions }) {
                   (files.length
                     ? `已变更 ${files.length} 个文件`
                     : "未检测到文件变更")}
+                </span>
+                <TaskUsageSummary billing={item.billing} inline />
               </small>
             </span>
             {Boolean(files.length) && (
@@ -5624,15 +6116,18 @@ function FileExplorer({
       setError(e.message);
     }
   }
-  function openMenu(event, item) {
-    event.preventDefault();
-    event.stopPropagation();
+  function showMenu(item, clientX, clientY) {
     setSelectedPath(item.path);
     setMenu({
       item,
-      x: Math.min(event.clientX, window.innerWidth - 218),
-      y: Math.min(event.clientY, window.innerHeight - 330),
+      x: Math.max(8, Math.min(clientX, window.innerWidth - 218)),
+      y: Math.max(8, Math.min(clientY, window.innerHeight - 330)),
     });
+  }
+  function openMenu(event, item) {
+    event.preventDefault();
+    event.stopPropagation();
+    showMenu(item, event.clientX, event.clientY);
   }
   function key(event, item) {
     if (editing) return;
@@ -5768,17 +6263,10 @@ function FileExplorer({
                   className="tree-menu"
                   title="更多操作"
                   onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
                     const rect = event.currentTarget.getBoundingClientRect();
-                    openMenu(
-                      {
-                        ...event,
-                        preventDefault: () => event.preventDefault(),
-                        stopPropagation: () => event.stopPropagation(),
-                        clientX: rect.right,
-                        clientY: rect.bottom,
-                      },
-                      item,
-                    );
+                    showMenu(item, rect.right, rect.bottom);
                   }}
                 >
                   <MoreHorizontal size={14} />
@@ -5952,10 +6440,12 @@ function FileMenu({
   onDelete,
 }) {
   const item = menu.item;
-  return (
+  return createPortal(
     <div
       className="file-menu"
       style={{ left: menu.x, top: menu.y }}
+      role="menu"
+      aria-label={`${item.name} 的更多操作`}
       onPointerDown={(event) => event.stopPropagation()}
     >
       {item.type === "directory" && (
@@ -6015,7 +6505,8 @@ function FileMenu({
           </button>
         </>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -6028,6 +6519,8 @@ function FileIcon({ name }) {
 }
 
 function PreviewWorkspace({
+  active = true,
+  onDirtyChange,
   file,
   media,
   workspace,
@@ -6069,6 +6562,8 @@ function PreviewWorkspace({
   }
   return (
     <FileWorkspace
+      active={active}
+      onDirtyChange={onDirtyChange}
       file={file}
       workspace={workspace}
       previewMode
@@ -6080,6 +6575,8 @@ function PreviewWorkspace({
 }
 
 function FileWorkspace({
+  active = true,
+  onDirtyChange,
   file,
   workspace,
   onToggle,
@@ -6095,6 +6592,7 @@ function FileWorkspace({
     [htmlPreview, setHtmlPreview] = useState(
       previewMode && /\.html?$/i.test(file?.name || ""),
     ),
+    [markdownPreview, setMarkdownPreview] = useState(false),
     [htmlRevision, setHtmlRevision] = useState(0);
   async function load() {
     if (!file?.path) return;
@@ -6112,10 +6610,14 @@ function FileWorkspace({
   }
   useEffect(() => {
     setHtmlPreview(previewMode && /\.html?$/i.test(file?.name || ""));
+    setMarkdownPreview(false);
     setHtmlRevision(0);
     load();
   }, [file?.path, previewMode]);
   const dirty = data?.kind === "text" && content !== saved;
+  const dirtyCallback = useRef(onDirtyChange);
+  dirtyCallback.current = onDirtyChange;
+  useEffect(() => { dirtyCallback.current?.(dirty); }, [dirty]);
   async function save() {
     if (!dirty) return;
     try {
@@ -6129,24 +6631,24 @@ function FileWorkspace({
   }
   useEffect(() => {
     const key = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+      if (active && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
         save();
       }
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [dirty, content, file?.path]);
+  }, [active, dirty, content, file?.path]);
   if (!file)
     return (
       <div className="file-empty">
         <FolderOpen size={36} />
-        <b>从左侧文件树选择文件</b>
+        <b>从右侧文件目录选择文件</b>
         <span>代码、文本、图片和 PDF 会在这里打开。</span>
       </div>
     );
   const rawUrl = `/api/file/raw?path=${encodeURIComponent(file.path)}`;
-  const browserUrl = `/api/file/raw/${encodeURIComponent(file.path)}${htmlRevision ? `?v=${htmlRevision}` : ""}`;
+  const browserUrl = `/api/file/raw/${file.path.split("/").map(encodeURIComponent).join("/")}${htmlRevision ? `?v=${htmlRevision}` : ""}`;
   return (
     <div className={`file-workspace ${previewMode ? "preview-workspace" : ""}`}>
       <header className="file-topbar">
@@ -6191,7 +6693,16 @@ function FileWorkspace({
               )}
             </>
           )}
-          {data?.kind === "text" && (!previewMode || !htmlPreview) && (
+          {previewMode && /\.mdx?$/i.test(file.name) && (
+            <button
+              title={markdownPreview ? "查看源码" : "打开预览"}
+              aria-label={markdownPreview ? "查看源码" : "打开预览"}
+              onClick={() => setMarkdownPreview((value) => !value)}
+            >
+              {markdownPreview ? <Code2 size={15} /> : <Eye size={15} />}
+            </button>
+          )}
+          {data?.kind === "text" && (!previewMode || (!htmlPreview && !markdownPreview)) && (
             <button className="file-save" onClick={save} disabled={!dirty}>
               <Save size={14} />
               保存
@@ -6237,6 +6748,7 @@ function FileWorkspace({
             setContent={setContent}
             rawUrl={htmlPreview ? browserUrl : rawUrl}
             renderHtml={htmlPreview}
+            renderMarkdown={markdownPreview}
           />
         )}
       </div>
@@ -6250,6 +6762,7 @@ function FilePreview({
   setContent,
   rawUrl,
   renderHtml = false,
+  renderMarkdown = false,
 }) {
   if (!data) return null;
   if (renderHtml && /\.html?$/i.test(data.name || ""))
@@ -6261,6 +6774,8 @@ function FilePreview({
         sandbox="allow-scripts allow-forms"
       />
     );
+  if (renderMarkdown && /\.mdx?$/i.test(data.name || ""))
+    return <div className="markdown-file-preview"><Markdown text={content} /></div>;
   if (data.kind === "text")
     return (
       <CodeMirror
@@ -6634,8 +7149,55 @@ function formatDuration(value = 0) {
   return `${minutes} 分 ${rest} 秒`;
 }
 
+function modelReasoningChoices(model = {}) {
+  const choices = reasoningChoices(model);
+  if (choices.length) return choices;
+  if (!model.capabilities?.thinking) return [];
+  return (model.reasoningOptions?.efforts || []).map((value) => ({
+    value,
+    label: String(value),
+  }));
+}
+
+function reasoningChoiceLabel(choice) {
+  const value = choice.label || String(choice.value);
+  return ({ low: "低", medium: "中", high: "高", xhigh: "超高", ultra: "极高", minimal: "最低", none: "关闭", auto: "自动" })[value.toLowerCase()] || value;
+}
+
+function modelReasoningLabel(model = {}) {
+  const setting = model.reasoningSettings || {};
+  const value = Object.hasOwn(setting, "value")
+    ? setting.value
+    : setting.mode === "effort"
+      ? setting.effort
+      : setting.mode === "budget"
+        ? setting.budget
+        : setting.mode === "enabled"
+          ? "auto"
+          : setting.mode === "disabled"
+            ? "none"
+            : undefined;
+  if (value === undefined) return "";
+  return (
+    reasoningChoiceLabel(modelReasoningChoices(model).find((choice) => choice.value === value) || { value }) ||
+    String(value)
+  );
+}
+
+function modelReasoningSetting(model, choice) {
+  return reasoningChoices(model).length
+    ? { value: choice.value }
+    : {
+        mode: "effort",
+        effort: String(choice.value),
+        adapter: model.reasoningOptions?.suggested || "auto",
+      };
+}
+
 function ComposerBase({
   onCompact,
+  onGoal,
+  onClearGoal,
   canCompact,
   compacting,
   compactNotice,
@@ -6662,6 +7224,7 @@ function ComposerBase({
   onWorkspace,
   onMode,
   onModelsChanged,
+  onAgents,
   onError,
   onOpenBoard,
   uiRequest,
@@ -6671,9 +7234,12 @@ function ComposerBase({
 }) {
   const [modeOpen, setModeOpen] = useState(false),
     [modelOpen, setModelOpen] = useState(false),
+    [expandedModelId, setExpandedModelId] = useState(""),
+    [reasoningPosition, setReasoningPosition] = useState(null),
     [attachmentOpen, setAttachmentOpen] = useState(false),
     modeRef = useRef(null),
     modelRef = useRef(null),
+    reasoningRef = useRef(null),
     attachmentRef = useRef(null),
     fileInput = useRef(null);
   const selectedMode = current ? modeKey(current.mode) : modeKey(pendingMode),
@@ -6681,12 +7247,23 @@ function ComposerBase({
     providers = info?.providers || [],
     models = info?.models || [],
     activeModel = models.find((item) => item.id === info?.activeModelId),
+    activeProvider = providers.find((item) => item.id === activeModel?.providerId),
+    activeModelDisplay = activeModel
+      ? activeProvider?.managed
+        ? activeModel.name || activeModel.model
+        : activeModel.model || activeModel.name
+      : info?.provider?.model || "未配置模型",
     canCompose = Boolean(workspace);
   const appliedExpert = current?.expertId
     ? info?.experts?.find((item) => item.id === current.expertId)
     : pendingExpert;
+  function closeModelPicker() {
+    setModelOpen(false);
+    setExpandedModelId("");
+    setReasoningPosition(null);
+  }
   useOutsideClose(modeRef, modeOpen, () => setModeOpen(false));
-  useOutsideClose(modelRef, modelOpen, () => setModelOpen(false));
+  useOutsideClose(modelRef, modelOpen, closeModelPicker, [reasoningRef]);
   useOutsideClose(attachmentRef, attachmentOpen, () =>
     setAttachmentOpen(false),
   );
@@ -6701,14 +7278,43 @@ function ComposerBase({
     document.addEventListener("keydown", close);
     return () => document.removeEventListener("keydown", close);
   }, [attachmentOpen]);
-  async function activateModel(id) {
+  useEffect(() => {
+    if (!expandedModelId) return undefined;
+    const closeReasoning = () => {
+      setExpandedModelId("");
+      setReasoningPosition(null);
+    };
+    window.addEventListener("resize", closeReasoning);
+    return () => window.removeEventListener("resize", closeReasoning);
+  }, [expandedModelId]);
+  async function activateModel(id, reasoningSettings) {
     try {
-      await post("/api/settings", { action: "activate_model", modelId: id });
-      setModelOpen(false);
+      await post("/api/settings", {
+        action: "activate_model",
+        modelId: id,
+        ...(reasoningSettings ? { reasoningSettings } : {}),
+      });
+      closeModelPicker();
       await onModelsChanged();
     } catch (e) {
       onError(e);
     }
+  }
+  function toggleModelReasoning(event, item, choices) {
+    if (expandedModelId === item.id) {
+      setExpandedModelId("");
+      setReasoningPosition(null);
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const width = 132;
+    const height = 38 + choices.length * 30;
+    const right = rect.right + 7;
+    setReasoningPosition({
+      left: right + width <= window.innerWidth - 8 ? right : Math.max(8, rect.left - width - 7),
+      top: Math.max(8, Math.min(rect.top - 5, window.innerHeight - height - 8)),
+    });
+    setExpandedModelId(item.id);
   }
   const [fileDragging, setFileDragging] = useState(false);
   const loadChain = useRef(Promise.resolve()),
@@ -6816,9 +7422,6 @@ function ComposerBase({
     "未选择工作目录";
   return (
     <div className="composer-wrap">
-      {connection?.status !== "connected" && (
-        <ConnectionNotice connection={connection} onReconnect={onReconnect} />
-      )}{" "}
       {uiRequest && (
         <InlineUiRequest
           key={uiRequest.reqId}
@@ -6833,6 +7436,17 @@ function ComposerBase({
           sessionId={current.id}
           onResolved={onPermissionResolved}
         />
+      )}
+      {current?.goal?.text && (
+        <div className={`composer-goal-tag ${current.goal.status}`}>
+          <button type="button" className="composer-goal-edit" title="编辑任务目标" onClick={onGoal}>
+            <Target size={13} />
+            <span>{current.goal.text}</span>
+          </button>
+          <button type="button" className="composer-goal-clear" title="清除任务目标" aria-label="清除任务目标" onClick={onClearGoal}>
+            <X size={12} />
+          </button>
+        </div>
       )}
       <div
         className={`composer ${fileDragging ? "file-dragging" : ""}`}
@@ -6866,7 +7480,7 @@ function ComposerBase({
                   disabled={!running || item.mode === "adjust"}
                   onClick={() => onAdjustQueued(item)}
                 >
-                  {item.mode === "adjust" ? "待注入" : "立即调整"}
+                  {item.mode === "adjust" ? "正在注入…" : "立即调整"}
                 </button>
                 <button title="取回编辑" onClick={() => onEditQueued(item)}>
                   继续编辑
@@ -6909,6 +7523,7 @@ function ComposerBase({
         )}
         <ComposerInput
           onCompact={onCompact}
+          onGoal={onGoal}
           canCompact={canCompact}
           compacting={compacting}
           value={draft}
@@ -7005,18 +7620,22 @@ function ComposerBase({
                 </button>
               </span>
             )}
+            <AgentStatusButton current={current} onClick={onAgents} />
             <div className="model-picker" ref={modelRef}>
               <button
                 className="model-chip"
-                onClick={() => setModelOpen(!modelOpen)}
+                onClick={() => modelOpen ? closeModelPicker() : setModelOpen(true)}
                 disabled={running}
               >
                 <Bot size={13} />
-                {activeModel?.name || info?.provider?.model || "未配置模型"}
+                {`${activeModelDisplay}${activeModel && modelReasoningLabel(activeModel) ? ` · ${modelReasoningLabel(activeModel)}` : ""}`}
                 <ChevronDown size={11} />
               </button>
               {modelOpen && (
-                <div className="model-tree-popover">
+                <div className="model-tree-popover" onScroll={() => {
+                  setExpandedModelId("");
+                  setReasoningPosition(null);
+                }}>
                   {providers.map((provider) => (
                     <div className="model-tree-group" key={provider.id}>
                       <div>
@@ -7025,35 +7644,52 @@ function ComposerBase({
                       </div>
                       {models
                         .filter((item) => item.providerId === provider.id)
-                        .map((item) => (
-                          <button
-                            className={
-                              item.id === info?.activeModelId ? "active" : ""
-                            }
-                            key={item.id}
-                            onClick={() => activateModel(item.id)}
-                          >
-                            <span className="tree-branch" />
-                            <Bot size={13} />
-                            <span>
-                              <b>{item.name}</b>
-                              <small>
-                                {!provider.managed && item.model}
-                                {item.capabilities &&
-                                  `${provider.managed ? "" : " · "}${[item.capabilities.image && "图片", item.capabilities.video && "视频", item.capabilities.thinking && "思考", item.capabilities.webSearch && "联网"].filter(Boolean).join(" · ") || "文本"}`}
-                                {provider.managed &&
-                                  ` · 倍率 ${modelMultiplier(item.displayMultiplier)}x`}
-                              </small>
-                            </span>
-                            {item.id === info?.activeModelId && (
-                              <Check size={13} />
-                            )}
-                          </button>
-                        ))}
+                        .map((item) => {
+                          const choices = modelReasoningChoices(item);
+                          const expanded = expandedModelId === item.id;
+                          return (
+                            <div className="model-tree-item" key={item.id}>
+                              <button
+                                className={item.id === info?.activeModelId ? "active" : ""}
+                                aria-expanded={choices.length ? expanded : undefined}
+                                onClick={(event) => choices.length ? toggleModelReasoning(event, item, choices) : activateModel(item.id)}
+                              >
+                                <span className="tree-branch" />
+                                <Bot size={13} />
+                                <span>
+                                  <b>{item.name}</b>
+                                  <small>
+                                    {!provider.managed && item.model}
+                                    {item.capabilities &&
+                                      `${provider.managed ? "" : " · "}${[item.capabilities.image && "图片", item.capabilities.video && "视频", item.capabilities.thinking && "思考", item.capabilities.webSearch && "联网"].filter(Boolean).join(" · ") || "文本"}`}
+                                    {provider.managed && ` · 倍率 ${modelMultiplier(item.displayMultiplier)}x`}
+                                  </small>
+                                </span>
+                                {choices.length ? <ChevronRight className={expanded ? "rotated" : ""} size={13} /> : item.id === info?.activeModelId && <Check size={13} />}
+                              </button>
+                            </div>
+                          );
+                        })}
                     </div>
                   ))}
                 </div>
               )}
+              {modelOpen && expandedModelId && reasoningPosition && (() => {
+                const item = models.find((model) => model.id === expandedModelId);
+                const choices = modelReasoningChoices(item);
+                if (!item || !choices.length) return null;
+                return createPortal(
+                  <div ref={reasoningRef} className="model-reasoning-popover" role="menu" aria-label={`${item.name} 思考强度`} style={reasoningPosition}>
+                    <strong>思考强度</strong>
+                    {choices.map((choice, index) => {
+                      const label = reasoningChoiceLabel(choice);
+                      const selected = modelReasoningLabel(item) === label;
+                      return <button role="menuitem" className={selected ? "active" : ""} key={index} onClick={() => activateModel(item.id, modelReasoningSetting(item, choice))}><span>{label}</span>{selected && <Check size={13}/>}</button>;
+                    })}
+                  </div>,
+                  document.body,
+                );
+              })()}
             </div>
             <div className="mode-picker" ref={modeRef}>
               <button
@@ -7401,11 +8037,11 @@ function PermissionBar({ request, sessionId, onResolved }) {
 function modeKey(value) {
   return value === "auto-all" ? "auto-all" : "default";
 }
-function useOutsideClose(ref, open, close) {
+function useOutsideClose(ref, open, close, additionalRefs = []) {
   useEffect(() => {
     if (!open) return;
     const listener = (event) => {
-      if (!ref.current?.contains(event.target)) close();
+      if (!ref.current?.contains(event.target) && !additionalRefs.some((item) => item.current?.contains(event.target))) close();
     };
     document.addEventListener("pointerdown", listener);
     return () => document.removeEventListener("pointerdown", listener);
@@ -8027,11 +8663,13 @@ function emptyModel(providerId) {
     cacheReadEnabled: false,
     capabilities: { image: true, file: false, pdf: false, audio: false },
     currency: "USD",
+    reasoningSettings: { mode: "default", adapter: "auto" },
   };
 }
 function editableModel(item) {
   return {
     ...item,
+    reasoningSettings: { mode: "default", adapter: "auto", ...item.reasoningSettings },
     capabilities: {
       image: true,
       file: false,
@@ -8056,6 +8694,7 @@ function modelPayload(draft, providerId) {
     model: draft.model,
     contextWindow: Number(draft.contextWindow),
     capabilities: draft.capabilities,
+    reasoningSettings: draft.reasoningSettings || { mode: "default" },
     pricing: {
       inputPer1M: Number(draft.input),
       outputPer1M: Number(draft.output),
@@ -8108,6 +8747,7 @@ function Models({ info, onSaved, onError }) {
     [customContext, setCustomContext] = useState(false);
   const [remoteModels, setRemoteModels] = useState([]),
     [selectedRemote, setSelectedRemote] = useState([]);
+  const [remoteProfiles, setRemoteProfiles] = useState({});
   const [remoteSearch, setRemoteSearch] = useState(""),
     [modelTestStatus, setModelTestStatus] = useState(null);
   const [status, setStatus] = useState(""),
@@ -8211,6 +8851,7 @@ function Models({ info, onSaved, onError }) {
     }
   }
   async function fetchModels() {
+    setRemoteProfiles({});
     const known = providerModels.map((item) => item.model);
     setRemoteModels(known);
     setSelectedRemote(known);
@@ -8220,6 +8861,7 @@ function Models({ info, onSaved, onError }) {
     setRemoteDialog(true);
     try {
       const result = await post("/api/settings/models", { providerId });
+      setRemoteProfiles(result.profiles || {});
       setRemoteModels(
         [...new Set([...known, ...(result.models || [])])].sort(),
       );
@@ -8243,7 +8885,18 @@ function Models({ info, onSaved, onError }) {
         await post("/api/settings", {
           action: "save_model",
           model: modelPayload(
-            { ...emptyModel(providerId), name: modelId, model: modelId },
+            {
+              ...emptyModel(providerId), name: modelId, model: modelId,
+              ...(remoteProfiles[modelId]?.profile ? {
+                contextWindow: remoteProfiles[modelId].profile.contextWindow || 128000,
+                capabilities: {
+                  image: remoteProfiles[modelId].profile.capabilities.includes('image-recognition'),
+                  audio: remoteProfiles[modelId].profile.capabilities.includes('audio-recognition'),
+                  video: remoteProfiles[modelId].profile.capabilities.includes('video-recognition'),
+                  thinking: remoteProfiles[modelId].profile.capabilities.includes('reasoning'),
+                },
+              } : {}),
+            },
             providerId,
           ),
           activate: false,
@@ -8272,6 +8925,7 @@ function Models({ info, onSaved, onError }) {
       const result = await post("/api/settings/test", {
         providerId,
         model: modelDraft.model,
+        reasoningSettings: modelDraft.reasoningSettings,
       });
       setModelTestStatus({
         tone: result.ok ? "success" : "error",
@@ -8674,6 +9328,7 @@ function Models({ info, onSaved, onError }) {
                 )}
               </div>
             </label>
+            <ReasoningSettings model={modelDraft} protocol={provider?.protocol} onChange={reasoningSettings => setModelDraft({ ...modelDraft, reasoningSettings })}/>
             <fieldset className="model-input-capabilities">
               <legend>原生输入能力</legend>
               {[
@@ -8909,6 +9564,8 @@ function Models({ info, onSaved, onError }) {
                     }
                   />
                   <span>{id}</span>
+                  {remoteProfiles[id]?.profile && <small title={remoteProfiles[id].profile.id}>{remoteProfiles[id].profile.vendor} · {remoteProfiles[id].profile.family || remoteProfiles[id].profile.id}</small>}
+                  {remoteProfiles[id]?.method === 'ambiguous' && <small>识别冲突</small>}
                   {knownRemote.has(id) && <small>已添加</small>}
                 </label>
               ))}
@@ -9778,19 +10435,18 @@ function PermissionsPage({ info, current, onDesktop, onMode, onError }) {
   const tools = info?.tools || [];
   return (
     <div className="page-content">
-      <SandboxSettings get={get} post={post} onError={onError} />
-      <section className="section-block">
+      <SandboxSettings get={get} post={post} onError={onError}>
         <div className="section-head">
           <div>
-            <h2>当前任务权限</h2>
+            <h2>权限与桌面会话</h2>
             <p>
               {current
                 ? `作用于“${current.title}”，也可在任务输入框中随时切换。`
-                : "打开一个任务后即可选择权限策略。"}
+                : "权限策略可在打开任务后切换；桌面会话开关对所有任务生效。"}
             </p>
           </div>
         </div>
-        <div className="policy-list">
+        <div className="policy-list" aria-label="权限策略">
           {Object.entries(MODE).map(([key, value]) => (
             <button
               className={`policy-row ${modeKey(current?.mode) === key ? "active" : ""}`}
@@ -9818,19 +10474,23 @@ function PermissionsPage({ info, current, onDesktop, onMode, onError }) {
             </button>
           ))}
         </div>
-        <label className="setting-toggle">
+        <div className="setting-toggle desktop-session-toggle">
           <span>
             <b>桌面会话</b>
-            <small>允许当前任务请求截图、鼠标和键盘操作。</small>
+            <small>允许所有任务请求截图、鼠标和键盘操作。</small>
           </span>
-          <input
-            type="checkbox"
-            checked={Boolean(current?.desktopEnabled)}
-            onChange={(e) => onDesktop(e.target.checked)}
-            disabled={!current}
-          />
-        </label>
-      </section>
+          <button
+            type="button"
+            className="desktop-session-switch"
+            role="switch"
+            aria-label="桌面会话"
+            aria-checked={Boolean(info?.uiPreferences?.desktopEnabled)}
+            onClick={() => onDesktop(!info?.uiPreferences?.desktopEnabled)}
+          >
+            <span />
+          </button>
+        </div>
+      </SandboxSettings>
       <section className="section-block">
         <div className="section-head">
           <div>
@@ -9844,13 +10504,15 @@ function PermissionsPage({ info, current, onDesktop, onMode, onError }) {
             添加规则
           </button>
         </div>
-        <div className="rules-help">
-          可用工具：
-          {tools.length
-            ? tools
-                .map((tool) => `${tool.name}（${tool.permission || "L0"}）`)
-                .join("、")
-            : "打开任务后加载工具列表"}
+        <div className="rules-help tool-catalog">
+          <span className="tool-catalog-label">可用工具</span>
+          <div className="tool-catalog-list">
+            {tools.length ? tools.map((tool) => (
+              <span className="tool-pill" key={tool.name}>
+                {tool.name}<small>{tool.permission || "L0"}</small>
+              </span>
+            )) : <span className="tool-catalog-empty">打开任务后加载工具列表</span>}
+          </div>
         </div>
         {rules.map((r, i) => (
           <div className="rule-row" key={i}>

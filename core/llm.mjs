@@ -6,6 +6,8 @@ import { PROTOCOLS, createId, defaultBaseUrl, keyHint, normalizeProtocol } from 
 import { appendApiLog, createApiLogId } from './api-logs.mjs';
 import { accountServerUrl, accountToken, listManagedModels, refreshAccount, settleApiUsage } from './account.mjs';
 import { nativeAttachment } from './attachment-types.mjs';
+import { modelProfiles } from './model-profiles.mjs';
+import { applyReasoning, normalizeReasoningSettings, reasoningOptions } from './reasoning.mjs';
 
 const MANAGED_PROVIDER_ID = 'mli-managed';
 let catalogRefreshedAt = 0;
@@ -52,13 +54,19 @@ function normalizePricing(value = {}) { return { inputPer1M: Math.max(0, Number(
 function validPricingTime(value) { return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || '')); }
 function isPricingPeak(now, pricing) { if (!pricing.peakEnabled || !validPricingTime(pricing.peakStartTime) || !validPricingTime(pricing.peakEndTime) || pricing.peakStartTime === pricing.peakEndTime) return false; if (pricing.peakWeekdaysOnly && (now.getDay() === 0 || now.getDay() === 6)) return false; const current = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`; return pricing.peakStartTime < pricing.peakEndTime ? current >= pricing.peakStartTime && current < pricing.peakEndTime : current >= pricing.peakStartTime || current < pricing.peakEndTime; }
 function effectivePricing(value, now = new Date()) { const pricing = normalizePricing(value); if (!isPricingPeak(now, pricing)) return pricing; return { ...pricing, inputPer1M: pricing.peakInputPer1M ?? pricing.inputPer1M, outputPer1M: pricing.peakOutputPer1M ?? pricing.outputPer1M, cacheCreationPer1M: pricing.peakCacheCreationPer1M ?? pricing.cacheCreationPer1M, cacheReadPer1M: pricing.peakCacheReadPer1M ?? pricing.cacheReadPer1M }; }
+function hasConfiguredPricing(value) {
+  const pricing = normalizePricing(value);
+  return [pricing.inputPer1M, pricing.outputPer1M, pricing.cacheCreationPer1M, pricing.cacheReadPer1M,
+    pricing.peakInputPer1M, pricing.peakOutputPer1M, pricing.peakCacheCreationPer1M, pricing.peakCacheReadPer1M]
+    .some(price => Number(price) > 0);
+}
 export function resolveModelSelection(modelId) {
   ensureCatalog();
   if (!config) return {};
   const model = config.models.find(item => item.id === (modelId || config.activeModelId));
   const provider = config.providers.find(item => item.id === model?.providerId);
   if (!model || !provider) throw new Error('模型或服务商不存在');
-  return structuredClone({ model, provider });
+  return structuredClone({ model: modelProfiles.enrich(model), provider });
 }
 
 function activePair() {
@@ -94,13 +102,19 @@ export function providerInfo() {
   return { type: provider.protocol, protocol: provider.protocol, providerId: provider.id, providerName: provider.name, modelId: model.id, model: model.model, baseUrl: provider.baseUrl, hasKey: !!resolvedKey(provider), apiKeyEnv: provider.apiKeyEnv || '', keyHint: provider.apiKey ? keyHint(provider.apiKey) : '', contextWindow: model.contextWindow, pricing: normalizePricing(model.pricing) };
 }
 export function providerPresets() { return PROTOCOLS; }
-export function publicSettings() { return { protocols: PROTOCOLS, providers: config.providers.map(publicProvider), models: config.models.map(publicModel), activeModelId: config.activeModelId, provider: providerInfo() }; }
+export function publicSettings() { return { modelProfiles: modelProfiles.status(), protocols: PROTOCOLS, providers: config.providers.map(publicProvider), models: config.models.map(model => { const enriched = modelProfiles.enrich(model); return { ...publicModel(enriched), canonicalModelId: enriched.canonicalModelId, family: enriched.family, vendor: enriched.vendor, reasoning: enriched.reasoning, maxOutputTokens: enriched.maxOutputTokens, reasoningSettings: enriched.reasoningSettings || { mode: 'default' }, reasoningOptions: reasoningOptions(enriched, config.providers.find(p => p.id === model.providerId)?.protocol) }; }), activeModelId: config.activeModelId, provider: providerInfo() }; }
 export async function refreshManagedCatalog({ force = false } = {}) {
   ensureCatalog();
   if (!force && Date.now() - catalogRefreshedAt < 30000) return false;
   const result = await listManagedModels();
   const hadManaged = config.models.some((model) => model.providerId === MANAGED_PROVIDER_ID);
   const previous = config.models.filter((model) => model.providerId !== MANAGED_PROVIDER_ID);
+  const previousManagedSettings = new Map([
+    ...Object.entries(config.managedReasoningSettings || {}),
+    ...config.models
+      .filter((model) => model.providerId === MANAGED_PROVIDER_ID && model.reasoningSettings)
+      .map((model) => [model.id, model.reasoningSettings]),
+  ]);
   const managed = result.models.map((model) => ({
     id: `managed-${model.id}`, providerId: MANAGED_PROVIDER_ID, name: model.name, model: model.id,
     contextWindow: model.contextWindow,
@@ -109,6 +123,7 @@ export async function refreshManagedCatalog({ force = false } = {}) {
     // 企业主体下服务端会返回该企业的模型；scopeType 用于界面区分官方与企业。
     scopeType: model.scopeType === 'enterprise' ? 'enterprise' : 'official',
     scopeId: model.scopeType === 'enterprise' ? (model.scopeId || null) : null,
+    ...(previousManagedSettings.has(`managed-${model.id}`) ? { reasoningSettings: previousManagedSettings.get(`managed-${model.id}`) } : {}),
     pricing: { inputPer1M: 0, outputPer1M: 0, cacheCreationPer1M: 0, cacheReadPer1M: 0, cacheCreationEnabled: false, cacheReadEnabled: false, priceDetails: model.priceDetails || '', currency: 'CNY' }
   }));
   config.models = [...managed, ...previous];
@@ -135,6 +150,7 @@ export function applyCatalogPatch(patch = {}) {
     return { provider: publicProvider(item), settings: publicSettings() };
   }
   if (patch.action === 'save_model') {
+    const reasoningSettings = Object.hasOwn(patch.model || {}, 'reasoningSettings') ? normalizeReasoningSettings(patch.model.reasoningSettings) : undefined;
     const providerId = patch.model?.providerId;
     if (providerId === MANAGED_PROVIDER_ID || String(patch.model?.id || '').startsWith('managed-')) throw new Error('官方模型不可修改');
     if (!config.providers.some((p) => p.id === providerId)) throw new Error('服务商不存在');
@@ -146,13 +162,23 @@ export function applyCatalogPatch(patch = {}) {
     item.name = String(patch.model?.name || item.model).trim() || item.model;
     item.contextWindow = Math.max(1000, Math.floor(Number(patch.model?.contextWindow) || 128000));
     item.pricing = normalizePricing(patch.model?.pricing);
+    if (reasoningSettings) item.reasoningSettings = reasoningSettings;
     if (patch.model?.capabilities) item.capabilities = { ...(item.capabilities || {}), ...Object.fromEntries(['image', 'file', 'pdf', 'audio', 'video', 'thinking', 'webSearch'].filter(key => Object.hasOwn(patch.model.capabilities, key)).map(key => [key, patch.model.capabilities[key] === true])) };
     if (patch.activate !== false || !config.activeModelId) config.activeModelId = item.id;
     syncLegacyProvider();
     return { model: publicModel(item), settings: publicSettings() };
   }
   if (patch.action === 'activate_model') {
-    if (!config.models.some((m) => m.id === patch.modelId)) throw new Error('模型不存在');
+    const item = config.models.find((m) => m.id === patch.modelId);
+    if (!item) throw new Error('模型不存在');
+    if (Object.hasOwn(patch, 'reasoningSettings')) {
+      item.reasoningSettings = normalizeReasoningSettings(patch.reasoningSettings);
+      if (item.providerId === MANAGED_PROVIDER_ID) {
+        const saved = new Map(Object.entries(config.managedReasoningSettings || {}));
+        saved.set(item.id, item.reasoningSettings);
+        config.managedReasoningSettings = Object.fromEntries(saved);
+      }
+    }
     config.activeModelId = patch.modelId;
     syncLegacyProvider();
     return { settings: publicSettings() };
@@ -206,16 +232,19 @@ export async function listRemoteModels({ providerId, baseUrl, apiKey: override, 
   if (!res.ok) throw new Error(`拉取模型失败 HTTP ${res.status}：${text.slice(0, 240)}`);
   let json; try { json = JSON.parse(text); } catch { throw new Error('模型列表不是 JSON'); }
   const rows = Array.isArray(json.data) ? json.data : (Array.isArray(json.models) ? json.models : []);
-  return { models: rows.map((m) => typeof m === 'string' ? m : (m.id ?? m.name ?? '')).filter(Boolean).sort() };
+  const models = rows.map((m) => typeof m === 'string' ? m : (m.id ?? m.name ?? '')).filter(Boolean).sort();
+  await modelProfiles.refresh().catch(() => {});
+  return { models, profiles: Object.fromEntries(models.map(id => [id, modelProfiles.match(id)])) };
 }
 
-export async function testProvider({ providerId, baseUrl, model, apiKey: override, protocol } = {}) {
+export async function testProvider({ providerId, baseUrl, model, apiKey: override, protocol, reasoningSettings } = {}) {
   const existing = config.providers.find((p) => p.id === providerId);
   const provider = { ...(existing || {}), protocol: normalizeProtocol(protocol || existing?.protocol), baseUrl: normalizeBaseUrl(baseUrl || existing?.baseUrl) };
   const key = resolvedKey(provider, override), modelId = String(model || '').trim();
   if (!provider.baseUrl || !modelId) throw new Error('请先填写 API 地址和模型 ID');
   if (!key && !provider.baseUrl.includes('127.0.0.1') && !provider.baseUrl.includes('localhost')) throw new Error('请先填写 API Key');
-  const request = buildRequest(provider, { model: modelId }, [{ role: 'user', content: 'ping' }], '', [], false);
+  const saved = config.models.find(m => m.providerId === providerId && m.model === modelId);
+  const request = buildRequest(provider, { ...(saved || {}), model: modelId, ...(reasoningSettings ? { reasoningSettings } : {}) }, [{ role: 'user', content: 'ping' }], '', [], false);
   const res = await fetch(request.url, { method: 'POST', headers: authHeaders(provider, key), body: JSON.stringify(request.body) });
   const text = await res.text();
   if (!res.ok) throw new Error(`连通失败 HTTP ${res.status}：${text.slice(0, 300)}`);
@@ -246,6 +275,7 @@ function responseParts(content) { return Array.isArray(content) ? content.map(p 
 function toResponses(messages) { const out = []; for (const m of messages) { if (m.role === 'assistant') { if (m.text) out.push({ role: 'assistant', content: m.text }); for (const c of m.toolCalls || []) out.push({ type: 'function_call', call_id: c.id, name: c.name, arguments: JSON.stringify(c.args || {}) }); } else if (m.role === 'tool') out.push({ type: 'function_call_output', call_id: m.toolCallId, output: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }); else out.push({ role: m.role, content: responseParts(m.content) }); } return out; }
 function toAnthropic(messages) { const out = []; for (const m of messages) { if (m.role === 'assistant') { const content = []; if (m.text) content.push({ type: 'text', text: m.text }); for (const c of m.toolCalls || []) content.push({ type: 'tool_use', id: c.id, name: c.name, input: c.args || {} }); out.push({ role: 'assistant', content }); } else if (m.role === 'tool') out.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: m.toolCallId, content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }] }); else out.push({ role: m.role === 'system' ? 'user' : m.role, content: anthropicParts(m.content) }); } return out; }
 export function buildRequest(provider, model, messages, system, tools, stream, maxOutputTokens, sessionId) {
+  model = modelProfiles.enrich(model);
   messages = prepareModelMessages(messages, model, provider.protocol);
   const sessionKey = sessionRoutingKey(sessionId);
   if (provider.protocol === 'openai-responses') { const body = { model: model.model, input: toResponses(messages), instructions: system || undefined, stream, store: false, ...(sessionKey ? { prompt_cache_key: sessionKey } : {}) }; if (tools.length) body.tools = responseTools(tools); applyOutputLimit(body, provider, model, maxOutputTokens); return { url: `${provider.baseUrl}/responses`, body }; }
@@ -253,9 +283,11 @@ export function buildRequest(provider, model, messages, system, tools, stream, m
   const body = { model: model.model, messages: toOpenAI(system ? [{ role: 'system', content: system }, ...messages] : messages), stream, ...(sessionKey ? { prompt_cache_key: sessionKey } : {}) }; if (tools.length) body.tools = openAITools(tools); if (stream) body.stream_options = { include_usage: true }; applyOutputLimit(body, provider, model, maxOutputTokens); return { url: `${provider.baseUrl}/chat/completions`, body };
 }
 function applyOutputLimit(body, provider, model, value) {
-  if (!Number.isFinite(Number(value)) || Number(value) <= 0) return;
-  const field = provider.protocol === 'openai-responses' ? 'max_output_tokens' : provider.protocol === 'openai-chat' && /^(gpt-[56]|o[134])/.test(model.model) ? 'max_completion_tokens' : 'max_tokens';
-  body[field] = Math.max(128, Math.min(65536, Math.floor(Number(value))));
+  if (Number.isFinite(Number(value)) && Number(value) > 0) {
+    const field = provider.protocol === 'openai-responses' ? 'max_output_tokens' : provider.protocol === 'openai-chat' && /^(gpt-[56]|o[134])/.test(model.canonicalModelId || model.model) ? 'max_completion_tokens' : 'max_tokens';
+    body[field] = Math.max(128, Math.min(65536, Math.floor(Number(value))));
+  }
+  applyReasoning(body, model, provider.protocol, value);
 }
 function extractNonStream(protocol, json) { if (protocol === 'openai-responses') return { text: json.output_text || (json.output || []).flatMap((i) => i.content || []).filter((c) => c.type === 'output_text').map((c) => c.text).join(''), usage: json.usage }; if (protocol === 'anthropic') return { text: (json.content || []).filter((c) => c.type === 'text').map((c) => c.text).join(''), usage: json.usage }; return { text: json.choices?.[0]?.message?.content || '', usage: json.usage }; }
 function estimateTokens(value) { return Math.max(0, Math.ceil(String(value ?? '').length / 4)); }
@@ -321,7 +353,7 @@ export async function* chat({ messages, system, tools = [], signal, sessionId, s
   const collect = (e) => { responseEvents.push(e); if ((e.type === 'text_delta' || e.type === 'thinking_delta') && firstOutputAt.value == null) firstOutputAt.value = performance.now(); if (e.type === 'text_delta') outputText += e.text || ''; if (e.type === 'thinking_delta') thinkingText += e.text || ''; if (e.type === 'usage') usage = e.usage; if (e.type === 'metadata') streamMetadata = { ...streamMetadata, ...e.metadata }; if (e.type === 'billing') billedFromStream = Number(e.magicValue ?? e.points); if (e.type === 'error') parsedError = e.message; };
   const finish = async (extra = {}) => {
     const totalMs = performance.now() - startedAt, counts = usageNumbers(usage, request.body, outputText + thinkingText), pricing = normalizePricing(model.pricing);
-    const row = { id: createApiLogId(), sessionId, step, kind: 'stream', provider: { id: provider.id, name: provider.name, protocol: provider.protocol, baseUrl: provider.baseUrl, model: model.model, modelName: model.name || model.model }, request: request.body, response: { text: outputText, thinking: thinkingText, events: responseEvents, usage, metadata: { ...responseMetadata(res), ...streamMetadata } }, metrics: { ...counts, totalTokens: counts.promptTokens + counts.completionTokens, estimatedTokens: !usage, firstTokenMs: firstOutputAt.value == null ? null : firstOutputAt.value - startedAt, totalMs, throughputTokensPerSecond: totalMs > 0 ? counts.completionTokens / (totalMs / 1000) : 0, cost: usageCost(counts, pricing), currency: pricing.currency, ...extra } };
+    const row = { id: createApiLogId(), sessionId, step, kind: 'stream', provider: { id: provider.id, name: provider.name, protocol: provider.protocol, baseUrl: provider.baseUrl, model: model.model, modelName: model.name || model.model }, request: request.body, response: { text: outputText, thinking: thinkingText, events: responseEvents, usage, metadata: { ...responseMetadata(res), ...streamMetadata } }, metrics: { ...counts, totalTokens: counts.promptTokens + counts.completionTokens, estimatedTokens: !usage, pricingConfigured: hasConfiguredPricing(model.pricing), firstTokenMs: firstOutputAt.value == null ? null : firstOutputAt.value - startedAt, totalMs, throughputTokensPerSecond: totalMs > 0 ? counts.completionTokens / (totalMs / 1000) : 0, cost: usageCost(counts, pricing), currency: pricing.currency, ...extra } };
     const headerMagicValue = res?.headers?.get('x-billed-magic-value') ?? res?.headers?.get('x-billed-points');
     const billed = headerMagicValue == null ? billedFromStream : Number(headerMagicValue);
     if (provider.id === MANAGED_PROVIDER_ID && Number.isFinite(billed)) row.metrics.cost = billed;
@@ -377,7 +409,7 @@ export async function completeOnce({ messages, signal, sessionId, maxOutputToken
   }
   const save = async (text, usage, extra = {}) => {
     const counts = usageNumbers(usage, request.body, text), totalMs = performance.now() - startedAt;
-    const row = { id: createApiLogId(), sessionId, kind: 'complete', provider: { id: provider.id, name: provider.name, protocol: provider.protocol, baseUrl: provider.baseUrl, model: model.model, modelName: model.name || model.model }, request: request.body, response: { text, usage, ...extra }, metrics: { ...counts, totalTokens: counts.promptTokens + counts.completionTokens, estimatedTokens: !usage, firstTokenMs: totalMs, totalMs, throughputTokensPerSecond: totalMs > 0 ? counts.completionTokens / (totalMs / 1000) : 0, cost: usageCost(counts, pricing), currency: pricing.currency, ...(extra.error ? { error: extra.error } : {}) } };
+    const row = { id: createApiLogId(), sessionId, kind: 'complete', provider: { id: provider.id, name: provider.name, protocol: provider.protocol, baseUrl: provider.baseUrl, model: model.model, modelName: model.name || model.model }, request: request.body, response: { text, usage, ...extra }, metrics: { ...counts, totalTokens: counts.promptTokens + counts.completionTokens, estimatedTokens: !usage, pricingConfigured: hasConfiguredPricing(model.pricing), firstTokenMs: totalMs, totalMs, throughputTokensPerSecond: totalMs > 0 ? counts.completionTokens / (totalMs / 1000) : 0, cost: usageCost(counts, pricing), currency: pricing.currency, ...(extra.error ? { error: extra.error } : {}) } };
     const billed = Number(res?.headers?.get('x-billed-magic-value') ?? res?.headers?.get('x-billed-points'));
     if (provider.id === MANAGED_PROVIDER_ID && Number.isFinite(billed)) row.metrics.cost = billed;
     row.billing = provider.id === MANAGED_PROVIDER_ID ? { status: row.metrics.error ? 'failed' : 'server_settled', magicValue: Number.isFinite(billed) ? billed : 0 } : row.metrics.error || row.metrics.estimatedTokens ? { status: 'not_billable', magicValue: 0, reason: row.metrics.error ? 'request_failed' : 'estimated_usage' } : await settleApiUsage(row);

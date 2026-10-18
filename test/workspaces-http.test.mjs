@@ -31,9 +31,14 @@ test('removing workspace entries switches the runtime and preserves files and se
   };
   const initial = (await request('/api/workspaces')).data.workspaces[0];
   const first = (await request('/api/workspaces', 'POST', { path: path.join(directory, 'first') })).data.workspace;
+  const firstSession = (await request('/api/session', 'POST', { title: 'First workspace conversation' })).data;
   const second = (await request('/api/workspaces', 'POST', { path: path.join(directory, 'second') })).data.workspace;
   const session = (await request('/api/session', 'POST', { title: 'Preserved conversation' })).data;
   fs.writeFileSync(path.join(second.path, 'keep.txt'), 'preserve me');
+
+  const grouped = (await request('/api/sessions')).data.workspaceSessions;
+  assert.deepEqual(grouped[first.id].map(item => item.id), [firstSession.id]);
+  assert.deepEqual(grouped[second.id].map(item => item.id), [session.id]);
 
   assert.equal((await request(`/api/workspaces/${first.id}`, 'DELETE')).status, 200);
   assert.equal((await request('/api/runtime')).data.workspace, second.path);

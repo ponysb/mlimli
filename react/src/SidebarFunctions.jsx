@@ -1,11 +1,11 @@
 import React from 'react';
-import { AlarmClock, BookOpen, ChevronDown, Library, MessageCircle, MoreHorizontal } from 'lucide-react';
+import { BookOpenText, ChevronDown, Clock3, LibraryBig, MessageCircle, MoreHorizontal } from 'lucide-react';
 
 const functions = [
-  { id: 'schedules', label: '定时任务', Icon: AlarmClock },
+  { id: 'schedules', label: '定时任务', Icon: Clock3 },
   { id: 'meetings', label: '会议记录', Icon: MessageCircle },
-  { id: 'experts', label: '专家库', Icon: BookOpen },
-  { id: 'library', label: '资源库', Icon: Library },
+  { id: 'experts', label: '专家库', Icon: BookOpenText },
+  { id: 'library', label: '资源库', Icon: LibraryBig },
 ];
 
 export default function SidebarFunctions({ view, onView }) {
@@ -16,7 +16,7 @@ export default function SidebarFunctions({ view, onView }) {
       {functions.map(({ id, label, Icon }) => <button key={id} className={view === id ? 'active' : ''} aria-current={view === id ? 'page' : undefined} onClick={event => {
         event.currentTarget.closest('details').open = false;
         onView(id);
-      }}><Icon size={16}/><span>{label}</span></button>)}
+      }}><Icon size={15}/><span>{label}</span></button>)}
     </nav>
   </details>;
 }

@@ -7,8 +7,11 @@ import crypto from 'node:crypto';
 import { ROOT, stageTerminalClient, installNodeRuntime } from './terminal-package.mjs';
 import { bundleCompatibility } from './package-win.mjs';
 import { buildTui } from './build-tui.mjs';
+import { verifyInstalledBuildDependencies, verifyRuntimeDependencies } from './runtime-dependencies.mjs';
+import { createSandboxRepairBundle } from './sandbox-repair-bundle.mjs';
 
 export async function packageLinux(args = process.argv.slice(2)) {
+  verifyInstalledBuildDependencies(ROOT);
   let arch = 'x64', directoryOnly = false;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--arch') arch = args[++i];
@@ -23,6 +26,8 @@ export async function packageLinux(args = process.argv.slice(2)) {
   const working = fs.mkdtempSync(path.join(cache, 'build-'));
   const stage = stageTerminalClient({ output: path.join(working, name), arch, platform: 'linux' });
   await bundleCompatibility({ appDirectory: stage.client, runtimeDirectory: stage.client });
+  verifyRuntimeDependencies(stage.client);
+  createSandboxRepairBundle(stage.client, ROOT);
   await buildTui({ platform: 'linux', arch, output: path.join(stage.client, 'cli', 'bin') });
   await installNodeRuntime(path.join(stage.destination, 'runtime'), { platform: 'linux', arch });
   if (directoryOnly) { console.log(stage.destination); return stage.destination; }

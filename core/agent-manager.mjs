@@ -253,11 +253,12 @@ export class AgentManager {
       if (task && !TERMINAL.has(task.status)) { task.status = status; this.save(group); }
     }
   }
-  recordUsage(context, metrics) {
+  recordUsage(context, usage) {
     if (!context?.taskId) return;
     const group = this.groups.get(this.key(context.sessionStorageRoot, context.rootSessionId));
     const task = group?.tasks[context.taskId];
     if (!task) return;
+    const metrics = usage?.metrics || usage || {};
     task.usage.totalTokens += Number(metrics.totalTokens) || 0;
     const currency = metrics.currency || 'USD'; task.usage.costs[currency] = (task.usage.costs[currency] || 0) + (Number(metrics.cost) || 0);
     this.save(group);

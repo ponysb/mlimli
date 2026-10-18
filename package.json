@@ -1,6 +1,6 @@
 {
   "name": "mli-agent",
-  "version": "0.4.0",
+  "version": "0.4.4",
   "description": "魔力工作台：本地 Agent 运行时、React 工作台、Electron 桌面入口与可扩展插件系统",
   "type": "module",
   "main": "electron/main.cjs",
@@ -62,6 +62,7 @@
     "dotenv": "17.2.2",
     "electron-updater": "6.8.9",
     "lucide-react": "latest",
+    "node-pty": "^1.1.0",
     "pdfjs-dist": "4.8.69",
     "qrcode.react": "^4.2.0",
     "react": "latest",

@@ -36,6 +36,7 @@ export default function VoiceInput({ workspace, onText, onSummary, onOpenSetting
   const hold = useRef({ pressed: false, long: false });
   const warmRequest = useRef(null);
   const historyRequest = useRef(0);
+  const finishAction = useRef(null);
   const [openingMeeting, setOpeningMeeting] = useState(false);
   const alive = useRef(true), callbacks = useRef({ onText, onSummary }); callbacks.current = { onText, onSummary };
   const microphone = useRef(null);
@@ -52,6 +53,7 @@ export default function VoiceInput({ workspace, onText, onSummary, onOpenSetting
       alive.current = false; observer.disconnect(); clearTimeout(hold.current.timer);
       hold.current.decide?.(false);
       window.removeEventListener('speech-settings-changed', settingsChanged);
+      window.desktop?.setMeetingRecordingState?.({ active: false, phase: 'idle' });
       const current = state.current;
       current.cancelled = true;
       microphone.current.clearIdle();
@@ -99,6 +101,13 @@ export default function VoiceInput({ workspace, onText, onSummary, onOpenSetting
     update();
     const timer = setInterval(update, 500); return () => clearInterval(timer);
   }, [phase]);
+  useEffect(() => window.desktop?.onMeetingRecordingFinishRequested?.(() => finishAction.current?.()), []);
+  useEffect(() => {
+    if (!window.desktop?.setMeetingRecordingState) return;
+    const active = kind === 'meeting' && ['starting', 'recording', 'stopping', 'save-error'].includes(phase);
+    const lastSegment = meeting?.segments?.at(-1)?.text || '';
+    window.desktop.setMeetingRecordingState({ active, phase, elapsed, transcript: partial || lastSegment, speaking });
+  }, [kind, phase, elapsed, partial, speaking, meeting?.segments]);
   useEffect(() => {
     if (!open) return;
     const previous = document.activeElement;
@@ -262,6 +271,7 @@ export default function VoiceInput({ workspace, onText, onSummary, onOpenSetting
       else { if (current.autoSummary && meta.segments.length) await summarize(meta); }
     } catch (e) { phaseTo('save-error'); if (current.kind === 'meeting' && !meetingPage) setOpen(true); setError(`保存未完成：${e.message}。请重试保存，当前录制分片仍保留。`); }
   }
+  finishAction.current = finish;
   function down(event) {
     if (event.button !== 0 || !['idle', 'finished'].includes(state.current.phase)) return;
     if (!status?.ready) { event.preventDefault(); hold.current.pointerClick = true; openSpeechSettings(); return; }
@@ -380,5 +390,5 @@ export default function VoiceInput({ workspace, onText, onSummary, onOpenSetting
       </footer>
     </section>
   </div>;
-  return <>{slot && createPortal(<>{standby}{live}{failure}{voiceControl}</>, slot)}{open && createPortal(meetingDialog, document.body)}{sourcePicker && createPortal(<CaptureSourcePicker mode={mode} onCancel={() => { setSourcePicker(false); setOpen(true); }} onSelect={capture => { setSourcePicker(false); setOpen(true); start('meeting', undefined, capture); }}/>, document.body)}{meetingPage && meeting && createPortal(<MeetingWorkspace meeting={meeting} phase={phase} mode={mode} previewStream={previewStream} status={status} elapsed={elapsed} partial={partial} speaking={speaking} speaker={speaker} error={error} notice={notice} summarizing={summarizing} speakers={speakers} onFinish={finish} onClose={closeMeeting} onChangeParticipant={changeParticipant} onRememberSpeaker={rememberSpeaker} onDownloadTranscript={() => downloadTranscript().catch(e => setError(e.message))} onSummarize={async () => { await state.current.participantChain; await summarize(meeting); }} onRegenerate={async () => { await state.current.participantChain; await summarize(meeting, true); }}/>, document.body)}</>;
+  return <>{slot && createPortal(<>{standby}{live}{failure}{voiceControl}</>, slot)}{open && createPortal(meetingDialog, document.body)}{sourcePicker && createPortal(<CaptureSourcePicker mode={mode} onCancel={() => { setSourcePicker(false); setOpen(true); }} onSelect={capture => { setSourcePicker(false); setOpen(true); start('meeting', undefined, capture); }}/>, document.body)}{meetingPage && meeting && createPortal(<MeetingWorkspace meeting={meeting} phase={phase} mode={mode} previewStream={previewStream} status={status} elapsed={elapsed} partial={partial} speaking={speaking} speaker={speaker} error={error} notice={notice} summarizing={summarizing} speakers={speakers} onFinish={finish} onClose={closeMeeting} onMinimize={() => window.desktop?.windowControl?.('minimize')} onChangeParticipant={changeParticipant} onRememberSpeaker={rememberSpeaker} onDownloadTranscript={() => downloadTranscript().catch(e => setError(e.message))} onSummarize={async () => { await state.current.participantChain; await summarize(meeting); }} onRegenerate={async () => { await state.current.participantChain; await summarize(meeting, true); }}/>, document.body)}</>;
 }

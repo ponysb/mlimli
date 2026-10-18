@@ -1,0 +1,37 @@
+:root { color-scheme: light; font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif; }
+* { box-sizing: border-box; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
+button { border: 0; font: inherit; cursor: pointer; }
+.mini-shell { width: 100%; height: 100%; color: #74797c; background: #fff; border: 1px solid #e4e7e8; border-radius: 18px; box-shadow: 0 12px 32px rgba(26, 38, 45, .22); -webkit-app-region: drag; }
+.compact-view { display: grid; grid-template-columns: 54px minmax(0, 1fr) 48px 1px 40px; align-items: center; gap: 8px; height: 100%; padding: 8px 8px 8px 18px; }
+.compact-view[hidden] { display: none; }
+.timer { font-variant-numeric: tabular-nums; font-size: 17px; letter-spacing: 0; white-space: nowrap; }
+.levels { display: block; height: 20px; background: repeating-linear-gradient(90deg, #929699 0 3px, transparent 3px 7px); mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent); opacity: .9; animation: levels 1s ease-in-out infinite alternate; }
+.levels.idle { opacity: .42; animation-play-state: paused; }
+.stop-button, .expand-button, .restore-button, .collapse-button { -webkit-app-region: no-drag; display: grid; place-items: center; padding: 0; color: #17191a; background: #f5f6f6; }
+.stop-button { width: 44px; height: 44px; border-radius: 50%; }
+.stop-button i { width: 15px; height: 15px; border-radius: 3px; background: #050607; }
+.stop-button:disabled { cursor: wait; opacity: .5; }
+.stop-button.saving { color: #2c8d5e; }
+.stop-button.saving i { width: 14px; height: 14px; border: 2px solid #2c8d5e; border-right-color: transparent; border-radius: 50%; background: transparent; animation: spin .7s linear infinite; }
+.divider { width: 1px; height: 22px; background: #d9dcdd; }
+.expand-button { width: 34px; height: 34px; border-radius: 50%; background: transparent; }
+.chevron { display: block; width: 10px; height: 10px; border-right: 2px solid #17191a; border-bottom: 2px solid #17191a; transform: translateY(-2px) rotate(45deg); }
+.chevron.up { transform: translateY(2px) rotate(225deg); }
+.restore-icon { display: block; width: 17px; height: 17px; fill: none; stroke: #17191a; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.expanded-view { display: flex; flex-direction: column; height: 100%; min-height: 0; padding: 16px 22px 24px; }
+.expanded-view[hidden] { display: none; }
+.expanded-view header { display: flex; align-items: center; justify-content: space-between; }
+.expanded-view header > div { display: flex; gap: 8px; }
+.status { font-size: 19px; }
+.restore-button, .collapse-button { width: 40px; height: 40px; border-radius: 10px; font-size: 21px; box-shadow: 0 5px 18px rgba(32, 44, 50, .08); }
+.transcript { flex: 1; min-height: 0; margin: 18px 0 12px; overflow: hidden; color: #353a3d; font-size: 16px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
+.transcript.empty { color: #9aa0a3; }
+.wide-levels { height: 12px; margin-bottom: 24px; }
+.expanded-view footer { display: flex; align-items: center; justify-content: space-between; padding: 0 12px; }
+.expanded-view footer .stop-button { width: 78px; height: 44px; border-radius: 24px; }
+button:hover { background: #eceeef; }
+button:focus-visible { outline: 2px solid #4b846c; outline-offset: 2px; }
+@keyframes levels { from { transform: scaleY(.5); opacity: .55; } to { transform: scaleY(1); opacity: .95; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .levels { animation: none; } }

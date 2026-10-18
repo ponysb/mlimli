@@ -26,6 +26,7 @@ export function setLoopConfig(c) { loopConfig = c; }
 
 const aborts = new Map();
 const activeSteps = new Map();
+const activeModelRequests = new Map();
 export function runningStep(sessionId) { return activeSteps.get(sessionId) || null; }
 
 function clip(value, max = 12000) {
@@ -37,6 +38,14 @@ export function abortRun(sessionId) {
   const ac = aborts.get(sessionId);
   if (ac) { ac.abort(); return true; }
   return false;
+}
+
+export function interruptRunForAdjustment(sessionId) {
+  const request = activeModelRequests.get(sessionId);
+  if (!request || request.controller.signal.aborted) return false;
+  request.adjustmentRequested = true;
+  request.controller.abort();
+  return true;
 }
 
 export function isRunning(sessionId) { return aborts.has(sessionId); }
@@ -62,6 +71,44 @@ function summaryTitle(reason) {
   return '任务已结束';
 }
 
+function taskBilling(records = [], previous) {
+  const summary = {
+    promptTokens: Math.max(0, Number(previous?.promptTokens) || 0),
+    completionTokens: Math.max(0, Number(previous?.completionTokens) || 0),
+    cacheCreationTokens: Math.max(0, Number(previous?.cacheCreationTokens) || 0),
+    cacheReadTokens: Math.max(0, Number(previous?.cacheReadTokens) || 0),
+    estimatedTokens: previous?.estimatedTokens === true,
+    official: previous?.official === true,
+    magicValue: Math.max(0, Number(previous?.magicValue) || 0),
+    pricingConfigured: previous?.pricingConfigured === true,
+    costs: { ...(previous?.costs || {}) },
+    requestCount: Math.max(0, Number(previous?.requestCount) || 0),
+  };
+  let officialRows = summary.requestCount > 0 && summary.official ? summary.requestCount : 0;
+  for (const row of records) {
+    const metrics = row?.metrics || {};
+    summary.promptTokens += Math.max(0, Number(metrics.promptTokens) || 0);
+    summary.completionTokens += Math.max(0, Number(metrics.completionTokens) || 0);
+    summary.cacheCreationTokens += Math.max(0, Number(metrics.cacheCreationTokens) || 0);
+    summary.cacheReadTokens += Math.max(0, Number(metrics.cacheReadTokens) || 0);
+    summary.estimatedTokens ||= metrics.estimatedTokens === true;
+    summary.requestCount += 1;
+    if (row?.provider?.id === 'mli-managed') {
+      officialRows += 1;
+      summary.magicValue += Math.max(0, Number(row.billing?.magicValue) || 0);
+    } else if (metrics.pricingConfigured) {
+      summary.pricingConfigured = true;
+      const currency = String(metrics.currency || 'USD').slice(0, 12);
+      summary.costs[currency] = (Number(summary.costs[currency]) || 0) + Math.max(0, Number(metrics.cost) || 0);
+    }
+  }
+  if (!summary.requestCount) return undefined;
+  summary.official = officialRows === summary.requestCount;
+  summary.totalTokens = summary.promptTokens + summary.completionTokens;
+  summary.cacheTokens = summary.cacheCreationTokens + summary.cacheReadTokens;
+  return summary;
+}
+
 function emitAssistantText(session, text) {
   session.append({ type: 'message', role: 'assistant', text, toolCalls: [] });
   session.touchIndex();
@@ -79,7 +126,11 @@ export async function runTurn(session, userText, attachments = [], { clientMessa
   catch (error) { emit('memory_warning', { sessionId: session.id, message: error.message }); }
   try { teamMemorySnapshot = await createTeamMemorySnapshot(userText); }
   catch (error) { emit('memory_warning', { sessionId: session.id, message: `团队记忆加载失败：${error.message}` }); }
-  return withRunContext(Object.freeze({ ...parent, memorySnapshot, teamMemorySnapshot }), () => runBoundTurn(session, userText, attachments, { clientMessageId, queuedId, savedAttachments: queuedAttachments, resumeCheckpointId }));
+  const usageRecords = [];
+  const recordUsage = parent?.recordUsage;
+  const context = Object.freeze({ ...parent, memorySnapshot, teamMemorySnapshot, usageRecords,
+    recordUsage: row => { usageRecords.push(row); recordUsage?.(row); } });
+  return withRunContext(context, () => runBoundTurn(session, userText, attachments, { clientMessageId, queuedId, savedAttachments: queuedAttachments, resumeCheckpointId }));
 }
 
 async function runBoundTurn(session, userText, attachments = [], { clientMessageId, queuedId, savedAttachments: queuedAttachments, resumeCheckpointId } = {}) {
@@ -129,8 +180,9 @@ async function runBoundTurn(session, userText, attachments = [], { clientMessage
   const cancelDeadline = runDeadline(() => { expired = true; ac.abort(); }, remainingDuration === null ? null : Math.max(1, remainingDuration));
   if (recovery?.usage) control.usage(recovery.usage);
   let phase = recovery ? 'reconciling' : 'working';
+  const billing = () => taskBilling(context?.usageRecords, recovery?.billing);
   const checkpoint = extra => saveTaskCheckpoint(session, { turnId, phase, stepCount, toolCount,
-    activeDurationMs: Date.now() - turnStartedAt, qualityProgress: qualityProgress.snapshot(), usage: control.counts, executionEnvironment: context?.executionEnvironment, ...extra });
+    activeDurationMs: Date.now() - turnStartedAt, qualityProgress: qualityProgress.snapshot(), usage: control.counts, billing: billing(), executionEnvironment: context?.executionEnvironment, ...extra });
   const finish = (reason) => {
     if (ended) return;
     ended = true;
@@ -153,22 +205,25 @@ async function runBoundTurn(session, userText, attachments = [], { clientMessage
     const artifacts = discoverArtifacts(afterFiles, lastAssistantText, files);
     const primaryArtifact = reason === 'done' ? primaryTaskArtifact({ files, artifacts, summaryText: lastAssistantText, promptText }) : null;
     const durationMs = finishedAt - turnStartedAt;
+    const taskUsage = billing();
     checkpoint({ phase: reason === 'done' ? 'completed' : 'blocked', reason });
     session.append({
       type: 'turn_end', turnId, reason, startedAt: turnStartedAt, finishedAt,
       durationMs, stepCount, toolCount, error: turnError || undefined,
+      billing: taskUsage,
       errorDetails: turnErrorDetails || undefined,
     });
     const summary = session.append({
       type: 'task_summary', turnId, reason, files, artifacts, primaryArtifact, primaryArtifactSource: 'inferred', promptText, title: summaryTitle(reason),
       durationMs, stepCount, toolCount, error: turnError || undefined,
       errorDetails: turnErrorDetails || undefined,
+      billing: taskUsage,
       summaryText: lastAssistantText.trim(), quality: taskQuality,
       runtimeControl: { ...control.counts, limits: { maxSteps: stepLimit, maxDurationMs: durationLimit }, notices: control.notices, executionEnvironment: context?.executionEnvironment },
     });
     session.touchIndex();
     emit('task_summary', { sessionId, summary });
-    emit('turn_end', { sessionId, turnId, reason, summary, durationMs, stepCount, toolCount, error: turnError || undefined, errorDetails: turnErrorDetails || undefined });
+    emit('turn_end', { sessionId, turnId, reason, summary, durationMs, stepCount, toolCount, billing: taskUsage, error: turnError || undefined, errorDetails: turnErrorDetails || undefined });
   };
 
   if (recovery) {
@@ -219,7 +274,7 @@ async function runBoundTurn(session, userText, attachments = [], { clientMessage
       }
       if (runState && responseWarning) runState.warning = [runState.warning, responseWarning].filter(Boolean).join('\n');
       let system = buildSystemPrompt({
-        tools, skills: getSkills(), mode: session.mode, desktopEnabled: session.desktopEnabled, expertPrompt: session.expertPrompt, taskPrompt: promptText, runState,
+        tools, skills: getSkills(), mode: session.mode, desktopEnabled: session.desktopEnabled, expertPrompt: session.expertPrompt, taskPrompt: promptText, runState, goal: session.goal,
       });
       if (recovery) system += '\n\n' + recoveryPrompt(recovery, context?.executionRoot || '.');
       // Notify the UI with the exact message window selected for the next model request.
@@ -237,19 +292,48 @@ async function runBoundTurn(session, userText, attachments = [], { clientMessage
       let thinking = '';
       let modelUsage = null;
       const events = [];
-      for await (const e of chat({ messages, system, tools, signal, sessionId, step })) {
-        events.push(e);
-        if (e.type === 'text_delta') { text += e.text; activeStep.text = text; emit('text_delta', { sessionId, turnId, step, text: e.text }); }
-        else if (e.type === 'thinking_delta') { thinking += e.text; activeStep.thinking = thinking; emit('thinking_delta', { sessionId, turnId, step, text: e.text }); }
-        else if (e.type === 'retry') emit('model_retry', { sessionId, turnId, step, attempt: e.attempt, maxAttempts: e.maxAttempts, delayMs: e.delayMs, message: e.message, details: e.details });
-        else if (e.type === 'error') { const error = new Error(e.message); error.details = e.details; throw error; }
-        // Providers may emit cumulative usage more than once for this response.
-        else if (e.type === 'usage') modelUsage = e.usage;
-        if (signal.aborted) break;
+      const modelController = new AbortController();
+      const modelRequest = { controller: modelController, adjustmentRequested: false };
+      const abortModel = () => modelController.abort();
+      if (signal.aborted) abortModel();
+      else signal.addEventListener('abort', abortModel, { once: true });
+      activeModelRequests.set(sessionId, modelRequest);
+      if (session.queued().some(item => item.mode === 'adjust')) {
+        modelRequest.adjustmentRequested = true;
+        modelController.abort();
       }
+      let adjusted = false;
+      try {
+        for await (const e of chat({ messages, system, tools, signal: modelController.signal, sessionId, step })) {
+          events.push(e);
+          if (e.type === 'text_delta') { text += e.text; activeStep.text = text; emit('text_delta', { sessionId, turnId, step, text: e.text }); }
+          else if (e.type === 'thinking_delta') { thinking += e.text; activeStep.thinking = thinking; emit('thinking_delta', { sessionId, turnId, step, text: e.text }); }
+          else if (e.type === 'retry') emit('model_retry', { sessionId, turnId, step, attempt: e.attempt, maxAttempts: e.maxAttempts, delayMs: e.delayMs, message: e.message, details: e.details });
+          else if (e.type === 'error') { const error = new Error(e.message); error.details = e.details; throw error; }
+          // Providers may emit cumulative usage more than once for this response.
+          else if (e.type === 'usage') modelUsage = e.usage;
+          if (modelController.signal.aborted) break;
+        }
+      } catch (error) {
+        adjusted = modelRequest.adjustmentRequested && !signal.aborted;
+        if (!adjusted) throw error;
+      } finally {
+        signal.removeEventListener('abort', abortModel);
+        if (activeModelRequests.get(sessionId) === modelRequest) activeModelRequests.delete(sessionId);
+      }
+      adjusted ||= modelRequest.adjustmentRequested && !signal.aborted;
       if (modelUsage) control.usage(usageNumbers(modelUsage, {}, ''));
       checkpoint({});
       if (signal.aborted) break;
+      if (adjusted) {
+        const finishedAt = Date.now();
+        session.append({ type: 'step_end', turnId, step, text, thinking, status: 'adjusted', startedAt: stepStartedAt, finishedAt, durationMs: finishedAt - stepStartedAt });
+        activeStep = null;
+        activeSteps.delete(sessionId);
+        emit('step_adjusted', { sessionId, turnId, step });
+        injectAdjustments();
+        continue;
+      }
 
       const toolCalls = assembleToolCalls(events);
       const outputIncomplete = events.some(e => e.type === 'done' && ['length', 'max_tokens', 'incomplete'].includes(e.reason));
@@ -317,8 +401,20 @@ async function runBoundTurn(session, userText, attachments = [], { clientMessage
         return;
       }
 
-      for (const call of toolCalls) {
+      let adjustedAfterTool = false;
+      for (const [callIndex, call] of toolCalls.entries()) {
         if (signal.aborted) break;
+        if (session.queued().some(item => item.mode === 'adjust')) {
+          adjustedAfterTool = true;
+          const finishedAt = Date.now();
+          for (const skipped of toolCalls.slice(callIndex)) {
+            const content = '[因用户立即调整，工具未执行]';
+            session.append({ type: 'message', role: 'tool', toolCallId: skipped.id, content, status: 'adjusted', turnId, step });
+            session.append({ type: 'tool_end', turnId, step, callId: skipped.id, name: skipped.name, status: 'adjusted', content, finishedAt, durationMs: 0 });
+            emit('tool_result', { sessionId, turnId, step, callId: skipped.id, name: skipped.name, status: 'adjusted', content, finishedAt, durationMs: 0 });
+          }
+          break;
+        }
         toolCount += 1;
         const toolStartedAt = Date.now();
         session.append({
@@ -371,7 +467,8 @@ async function runBoundTurn(session, userText, attachments = [], { clientMessage
             try { result = (await h({ session, tool, args: call.args, result, signal })) ?? result; } catch { /* 钩子异常不影响结果 */ }
           }
         } catch (err) {
-          result = { content: `[工具异常] ${err.message}`, status: 'error', errorDetails: { stage: 'tool_execution', name: err.name || 'Error', message: err.message, code: err.code || err.cause?.code || '', cause: err.cause?.message || '', tool: call.name, args: call.args } };
+          const code = err.code || err.cause?.code || '';
+          result = { content: `[工具异常] ${err.message}`, status: 'error', ...(call.name === 'bash' && ['SANDBOX_UNAVAILABLE', 'SANDBOX_BUSY'].includes(code) ? { canRetryWithoutSandbox: true } : {}), errorDetails: { stage: 'tool_execution', name: err.name || 'Error', message: err.message, code, cause: err.cause?.message || '', tool: call.name, args: call.args } };
         }
 
         const mediaSources = normalizeMedia(result);
@@ -391,7 +488,7 @@ async function runBoundTurn(session, userText, attachments = [], { clientMessage
           status, decision: perm.decision, content: modelPayload, output: prepared.output, toolState: prepared.state, errorDetails: result.errorDetails, ui: result.ui, media,
           ...(tool.plugin === 'core' && ['set_task_plan','verify_artifact','verify_browser','verify_document','verify_media','bash'].includes(tool.name) ? {taskContract:result.taskContract,verification:result.verification} : {}),
           ...(tool.plugin === 'ffmpeg' && tool.name === 'ffmpeg_probe' ? {verification:result.verification} : {}),
-          ...(tool.plugin === 'core' && tool.name === 'bash' ? {exitCode:result.exitCode,command:result.command,testEvidence:result.testEvidence} : {}),
+          ...(tool.plugin === 'core' && tool.name === 'bash' ? {exitCode:result.exitCode,command:result.command,testEvidence:result.testEvidence,canRetryWithoutSandbox:result.canRetryWithoutSandbox === true,sandbox:result.sandbox} : {}),
           startedAt: toolStartedAt, finishedAt, durationMs: finishedAt - toolStartedAt,
         });
         const notice = control.observe(tool, call.args, result);
@@ -410,17 +507,21 @@ async function runBoundTurn(session, userText, attachments = [], { clientMessage
         emit('tool_result', {
           sessionId, turnId, step, callId: call.id, name: call.name,
           status, decision: perm.decision, content: prepareToolOutput(null, result, { maxChars: 4000 }).content, output: prepared.output, toolState: prepared.state,
-          image: result.image, video: result.video, media, ui: result.ui, errorDetails: result.errorDetails,
+          image: result.image, video: result.video, media, ui: result.ui, errorDetails: result.errorDetails, canRetryWithoutSandbox: result.canRetryWithoutSandbox === true, sandbox: result.sandbox,
           finishedAt, durationMs: finishedAt - toolStartedAt,
         });
       }
       session.append({
         type: 'step_end', turnId, step, text, thinking,
         startedAt: stepStartedAt, finishedAt: Date.now(), durationMs: Date.now() - stepStartedAt,
-        status: signal.aborted ? 'aborted' : 'ok',
+        status: signal.aborted ? 'aborted' : adjustedAfterTool ? 'adjusted' : 'ok',
       });
       activeStep = null;
       activeSteps.delete(sessionId);
+      if (adjustedAfterTool) {
+        emit('step_adjusted', { sessionId, turnId, step });
+        injectAdjustments();
+      }
     }
     finish(expired ? 'budget_exceeded' : 'aborted');
   } catch (err) {
@@ -435,6 +536,7 @@ async function runBoundTurn(session, userText, attachments = [], { clientMessage
     cancelDeadline();
     if (!context?.taskId && session.entries().findLast(entry => entry.type === 'turn_end')?.reason !== 'done') agentManager.stop(sessionId, context?.sessionStorageRoot);
     aborts.delete(sessionId);
+    activeModelRequests.delete(sessionId);
     activeSteps.delete(sessionId);
     if (!ended) finish(signal.aborted ? (expired ? 'budget_exceeded' : 'aborted') : 'done');
   }

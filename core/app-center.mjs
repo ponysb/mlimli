@@ -89,7 +89,11 @@ export class AppCenter {
   clearLogin(id) {
     const app = this.get(id); app.loginState = 'required'; app.status = 'needs-login'; app.authorizedAt = null; this.cancelApp(id); this.save(); return { ...app };
   }
-  remove(id) { this.revoke(id); this.apps.delete(id); this.save(); }
+  remove(id) {
+    const app = this.get(id);
+    if (app.source === 'platform') throw new Error('平台应用不能删除');
+    this.cancelApp(id); this.apps.delete(id); this.save();
+  }
   authorize(id, currentUrl) {
     const app = this.get(id), url = policy.appUrl(currentUrl || app.lastUrl || app.url);
 
@@ -110,7 +114,7 @@ export class AppCenter {
     if (this.connected() && this.bridge.id !== clientId) throw new Error('应用台已由另一个桌面实例连接');
     this.bridge = { id: clientId, touched: this.now() };
     const jobs = [];
-    for (const job of this.jobs.values()) if (!job.dispatched) { job.dispatched = true; job.clientId = clientId; jobs.push({ id: job.id, app: { ...this.get(job.appId) }, action: job.action, args: job.args }); }
+    for (const job of this.jobs.values()) if (!job.dispatched) { job.dispatched = true; job.clientId = clientId; jobs.push({ id: job.id, app: job.app ? { ...job.app } : { ...this.get(job.appId) }, action: job.action, args: job.args }); }
     return { jobs, activeJobIds: [...this.jobs.keys()] };
   }
   complete(clientId, id, result, error) {
@@ -119,6 +123,9 @@ export class AppCenter {
   }
   command(appId, action, args = {}, { signal, timeoutMs = 30000 } = {}) {
     this.get(appId);
+    return this.commandTarget({ appId, action, args, signal, timeoutMs });
+  }
+  commandTarget({ appId, app, action, args = {}, signal, timeoutMs = 30000 }) {
     if (!this.connected()) throw new Error('请打开桌面端应用台；网页端和 CLI 无法独立启动内置浏览器');
     if (signal?.aborted) throw new Error('任务已停止');
     return new Promise((resolve, reject) => {
@@ -126,8 +133,15 @@ export class AppCenter {
       const finish = (error, result) => { clearTimeout(timer); signal?.removeEventListener('abort', abort); this.jobs.delete(id); error ? reject(error) : resolve(result); };
       const abort = () => finish(new Error('任务已停止'));
       const timer = setTimeout(() => finish(new Error('应用台操作超时')), timeoutMs);
-      this.jobs.set(id, { id, appId, action, args, finish }); signal?.addEventListener('abort', abort, { once: true });
+      this.jobs.set(id, { id, appId, app, action, args, finish }); signal?.addEventListener('abort', abort, { once: true });
     });
+  }
+  openUrl(url, { sessionId, rootSessionId, signal, timeoutMs = 30000 } = {}) {
+    const target = policy.publicPageUrl(policy.appUrl(url).href), parsed = new URL(target);
+    const browserId = 'browser-' + crypto.randomUUID();
+    const app = { id: browserId, name: parsed.hostname, url: target, origins: [parsed.origin], transient: true, status: 'authorized', agentAllowed: true };
+    this.event('browser_open_required', { browserId, url: target, sessionId, rootSessionId });
+    return this.commandTarget({ appId: browserId, app, action: 'open_url', args: { url: target }, signal, timeoutMs });
   }
   waitLogin(appId, { sessionId, rootSessionId, signal, timeoutMs = 600000 } = {}) {
     if (signal?.aborted) throw new Error('任务已停止');

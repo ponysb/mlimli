@@ -5,13 +5,20 @@ import path from 'node:path';
 import os from 'node:os';
 import http from 'node:http';
 import { withRunContext } from '../core/run-context.mjs';
-import { assessTaskQuality, sourceEvidence, isVerificationCommand } from '../core/task-quality.mjs';
+import { assessTaskQuality, sourceEvidence, isVerificationCommand, qualityPolicy } from '../core/task-quality.mjs';
 import { verifyArtifact, verifyWeb, verificationTools } from '../core/verification.mjs';
 import { mediaProbeChecks } from '../plugins/ffmpeg/plugin.mjs';
 import { verifyBrowser, browserTarget } from '../core/browser-verifier.mjs';
 import { xlsxWrite } from '../plugins/office/lib/ooxml.mjs';
 
 function fixture(t){const root=fs.mkdtempSync(path.join(os.tmpdir(),'mli-quality-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true,maxRetries:10,retryDelay:100}));return {root,run:fn=>withRunContext({executionRoot:root,sessionStorageRoot:root,sandboxPolicy:{mode:'off'}},fn)};}
+
+test('质量续跑仅在配置显式开启时生效', () => {
+  assert.equal(qualityPolicy({ agent: {} }).enabled, false);
+  assert.equal(qualityPolicy({ agent: { quality: {} } }).enabled, false);
+  assert.equal(qualityPolicy({ agent: { quality: { enabled: false } } }).enabled, false);
+  assert.equal(qualityPolicy({ agent: { quality: { enabled: true } } }).enabled, true);
+});
 const result=(id,name,extra={})=>({id,type:'tool_end',turnId:'turn',name,status:'ok',...extra});
 
 test('任务结束不等于验收通过，代码最后修改后须有实际测试',t=>{

@@ -45,6 +45,7 @@ test('reference tags roundtrip escaped paths without changing the ordinary draft
   assert.equal(splitComposerReferences('@folder("输出") @folder("输出")').references.length, 1);
   assert.equal(splitComposerReferences('普通消息 @unknown("test")').text, '普通消息 @unknown("test")');
   assert.equal(insertCapability('压缩 /压缩 后继续', composerTrigger('压缩 /压缩 后继续', 6), { kind: 'compact' }).text, '压缩  后继续');
+  assert.equal(insertCapability('@goal 后继续', composerTrigger('@goal 后继续', 5), { kind: 'goal' }).text, ' 后继续');
 });
 
 test('explicit references resolve registered skills and tools without inlining files or skill content', () => {

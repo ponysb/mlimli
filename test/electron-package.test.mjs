@@ -112,6 +112,10 @@ test('Windows staging only contains public runtime files and no private services
   assert.equal(manifest.dependencies, undefined);
   assert.equal(manifest.devDependencies, undefined);
   const config = windowsBuildConfig(stage);
+  assert.deepEqual(config.extraResources.slice(0, 2), [
+    { from: stage.runtimeDirectory, to: 'client', filter: ['**/*', '!node_modules{,/**/*}'] },
+    { from: path.join(stage.runtimeDirectory, 'node_modules'), to: 'client/node_modules', filter: ['**/*'] },
+  ]);
   assert.equal(fs.readFileSync(path.join(stage.runtimeDirectory, 'client-defaults.env'), 'utf8'), 'MLI_ACCOUNT_SERVER_URL=https://public.example.com\nMLI_ACCOUNT_ENABLED=true\nMLI_AGENT_PORT=3000\n');
   assert.ok(!fs.existsSync(path.join(stage.runtimeDirectory, '.env')));
   assert.equal(config.productName, '魔力工作台');
@@ -125,6 +129,7 @@ test('Windows staging only contains public runtime files and no private services
   assert.throws(() => stageWindowsClient({ root: source, output: stage.destination }), /必须为空/);
   fs.cpSync(path.join(source, 'dist'), path.join(source, 'dist-legacy'), { recursive: true });
   const legacyStage = stageWindowsClient({ root: source, output: path.join(directory, 'legacy-package'), legacy: true });
+  assert.ok(fs.existsSync(path.join(legacyStage.runtimeDirectory, 'sandbox-runtime-repair.gz')));
   const legacyConfig = windowsBuildConfig(legacyStage);
   assert.equal(fs.readFileSync(path.join(legacyStage.runtimeDirectory, 'client-defaults.env'), 'utf8'), fs.readFileSync(path.join(stage.runtimeDirectory, 'client-defaults.env'), 'utf8'));
   assert.equal(legacyConfig.productName, '魔力工作台（兼容版）');

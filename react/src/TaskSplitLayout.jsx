@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-export default function TaskSplitLayout({ preview, panel, splitPanel, children }) {
+export default function TaskSplitLayout({ preview, panel, children }) {
   const layout = useRef(null),
     dragging = useRef(null);
   const [width, setWidth] = useState(() => {
@@ -18,7 +18,7 @@ export default function TaskSplitLayout({ preview, panel, splitPanel, children }
   });
   const [size, setSize] = useState(0);
   const [resizing, setResizing] = useState(false);
-  const secondary = preview || splitPanel;
+  const secondary = preview;
   useEffect(() => {
     if (!secondary) {
       dragging.current = null;
@@ -58,7 +58,7 @@ export default function TaskSplitLayout({ preview, panel, splitPanel, children }
   return (
     <div
       ref={layout}
-      className={`task-layout ${secondary ? "has-preview" : ""} ${splitPanel ? "has-context-split" : ""} ${panel ? "has-context-panel" : ""} ${resizing ? "is-resizing" : ""}`}
+      className={`task-layout ${secondary ? "has-preview" : ""} ${panel ? "has-context-panel" : ""} ${resizing ? "is-resizing" : ""}`}
       style={secondary && size ? { "--preview-width": `${pixels}px` } : undefined}
     >
       {preview && (
@@ -111,50 +111,6 @@ export default function TaskSplitLayout({ preview, panel, splitPanel, children }
         {children}
         {panel}
       </div>
-      {splitPanel && (
-        <>
-          <div
-            className="task-resize-handle"
-            role="separator"
-            aria-label="调整分屏与会话宽度"
-            aria-orientation="vertical"
-            aria-valuemin={Math.round(minimum)}
-            aria-valuemax={Math.round(maximum)}
-            aria-valuenow={Math.round(pixels)}
-            tabIndex={0}
-            title="拖动调整分屏与会话宽度"
-            onPointerDown={(event) => {
-              if (event.button !== 0) return;
-              dragging.current = event.pointerId;
-              setResizing(true);
-              event.currentTarget.setPointerCapture(event.pointerId);
-              event.preventDefault();
-            }}
-            onPointerMove={pointerMove}
-            onPointerUp={(event) => {
-              if (dragging.current === event.pointerId) {
-                finishDrag();
-                event.currentTarget.releasePointerCapture(event.pointerId);
-              }
-            }}
-            onLostPointerCapture={finishDrag}
-            onKeyDown={(event) => {
-              if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
-                event.preventDefault();
-                update(
-                  event.key === "Home"
-                    ? minimum
-                    : event.key === "End"
-                      ? maximum
-                      : pixels + (event.key === "ArrowLeft" ? -24 : 24),
-                );
-              }
-            }}
-            onDoubleClick={() => update(available * 0.61)}
-          />
-          <section className="task-preview context-split">{splitPanel}</section>
-        </>
-      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { copyTerminalDependencies } from '../scripts/terminal-package.mjs';
+import { runtimeDependencyPackages, verifyInstalledBuildDependencies, verifyRuntimeDependencies } from '../scripts/runtime-dependencies.mjs';
 import { bunExecutable } from '../scripts/build-tui.mjs';
 
 function fixture(context) {
@@ -11,11 +12,16 @@ function fixture(context) {
   context.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const modules = path.join(root, 'node_modules');
   fs.mkdirSync(modules);
-  for (const name of ['terminal-kit', '@larksuiteoapi/node-sdk', 'dingtalk-stream', 'pdfjs-dist', '@anthropic-ai/sandbox-runtime', '@agentclientprotocol/sdk', 'zod']) {
+  const runtimePackages = ['terminal-kit', '@larksuiteoapi/node-sdk', 'dingtalk-stream', 'pdfjs-dist', '@anthropic-ai/sandbox-runtime', '@agentclientprotocol/sdk', 'dotenv'];
+  for (const name of [...runtimePackages, 'zod']) {
     const directory = path.join(modules, name);
     fs.mkdirSync(directory, { recursive: true });
-    fs.writeFileSync(path.join(directory, 'package.json'), JSON.stringify({ name, version: '1.0.0', main: 'index.js', dependencies: name === 'terminal-kit' ? { 'linked-package': '1.0.0' } : {} }));
+    fs.writeFileSync(path.join(directory, 'package.json'), JSON.stringify({ name, version: '1.0.0', main: 'index.js', dependencies: name === 'terminal-kit' ? { 'linked-package': '1.0.0' } : {}, peerDependencies: name === '@agentclientprotocol/sdk' ? { zod: '^3.0.0' } : {} }));
     fs.writeFileSync(path.join(directory, 'index.js'), 'module.exports = {};');
+    if (name === 'pdfjs-dist') {
+      fs.mkdirSync(path.join(directory, 'legacy', 'build'), { recursive: true });
+      fs.writeFileSync(path.join(directory, 'legacy', 'build', 'pdf.mjs'), 'export default {};');
+    }
     if (name === '@anthropic-ai/sandbox-runtime') {
       fs.mkdirSync(path.join(directory, 'vendor', 'srt-win', 'x64'), { recursive: true });
       fs.writeFileSync(path.join(directory, 'vendor', 'srt-win', 'x64', 'srt-win.exe'), 'native-helper-fixture');
@@ -26,6 +32,18 @@ function fixture(context) {
   fs.writeFileSync(path.join(dependency, 'package.json'), JSON.stringify({ name: 'linked-package', version: '1.0.0', exports: {} }));
   fs.writeFileSync(path.join(dependency, 'data.json'), '{"value":1}');
   fs.symlinkSync(dependency, path.join(modules, 'linked-package'), process.platform === 'win32' ? 'junction' : 'dir');
+  fs.mkdirSync(path.join(root, 'core'));
+  fs.mkdirSync(path.join(root, 'cli'));
+  fs.mkdirSync(path.join(root, 'plugins'));
+  fs.writeFileSync(path.join(root, 'server.mjs'), [
+    "import '@agentclientprotocol/sdk';",
+    "import '@anthropic-ai/sandbox-runtime';",
+    "import '@larksuiteoapi/node-sdk';",
+    "import 'dingtalk-stream';",
+    "import 'dotenv';",
+    "import 'pdfjs-dist/legacy/build/pdf.mjs';",
+    "import 'terminal-kit';",
+  ].join('\n'));
   return { root, dependency, output: path.join(root, 'stage') };
 }
 
@@ -34,10 +52,41 @@ test('staging resolves package-manager directory links for packages without a ma
   const copied = copyTerminalDependencies(output, root);
   assert.equal(copied['linked-package'], '1.0.0');
   assert.equal(copied['@agentclientprotocol/sdk'], '1.0.0');
+  assert.equal(copied.dotenv, '1.0.0');
   assert.equal(copied.zod, '1.0.0');
   assert.equal(fs.readFileSync(path.join(output, 'node_modules', 'linked-package', 'data.json'), 'utf8'), '{"value":1}');
   assert.equal(fs.lstatSync(path.join(output, 'node_modules', 'linked-package')).isSymbolicLink(), false);
   assert.equal(fs.readFileSync(path.join(output, 'node_modules', '@anthropic-ai/sandbox-runtime', 'vendor', 'srt-win', 'x64', 'srt-win.exe'), 'utf8'), 'native-helper-fixture');
+});
+
+test('runtime dependency inventory is derived from shipped source imports', context => {
+  const { root, output } = fixture(context);
+  assert.deepEqual(runtimeDependencyPackages(root), ['@agentclientprotocol/sdk', '@anthropic-ai/sandbox-runtime', '@larksuiteoapi/node-sdk', 'dingtalk-stream', 'dotenv', 'pdfjs-dist', 'terminal-kit']);
+  copyTerminalDependencies(output, root);
+  fs.copyFileSync(path.join(root, 'server.mjs'), path.join(output, 'server.mjs'));
+  const audit = verifyRuntimeDependencies(output);
+  assert.equal(audit.checked, 7);
+  fs.rmSync(path.join(output, 'node_modules', 'dotenv'), { recursive: true });
+  assert.throws(() => verifyRuntimeDependencies(output), /dotenv.*server\.mjs/s);
+});
+
+test('build dependency preflight rejects partial installs and lock drift', context => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mli-build-dependencies-'));
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ dependencies: { present: '1.0.0', missing: '2.0.0' }, devDependencies: { builder: '3.0.0' } }));
+  fs.writeFileSync(path.join(root, 'package-lock.json'), JSON.stringify({ packages: { '': { dependencies: { present: '1.0.0', missing: '2.0.0' }, devDependencies: { builder: '3.0.0' } }, 'node_modules/present': { version: '1.0.0' }, 'node_modules/missing': { version: '2.0.0' }, 'node_modules/builder': { version: '3.0.0' } } }));
+  fs.mkdirSync(path.join(root, 'node_modules', 'present'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'node_modules', 'present', 'package.json'), JSON.stringify({ name: 'present', version: '1.0.0' }));
+  assert.throws(() => verifyInstalledBuildDependencies(root), /missing.*builder/s);
+  for (const [name, version] of [['missing', '2.0.0'], ['builder', '3.0.0']]) {
+    fs.mkdirSync(path.join(root, 'node_modules', name), { recursive: true });
+    fs.writeFileSync(path.join(root, 'node_modules', name, 'package.json'), JSON.stringify({ name, version }));
+  }
+  assert.deepEqual(verifyInstalledBuildDependencies(root), { checked: 3 });
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json')));
+  manifest.dependencies.present = '1.1.0';
+  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify(manifest));
+  assert.throws(() => verifyInstalledBuildDependencies(root), /package\.json.*package-lock\.json/s);
 });
 
 test('staging continues to reject links inside a dependency package', context => {

@@ -22,7 +22,7 @@ export function referenceToken(item) {
 }
 
 export function insertCapability(text, trigger, item) {
-  const insertion = ['expert', 'browse', 'upload', 'board', 'compact'].includes(item.kind) ? '' : referenceToken(item) + ' ';
+  const insertion = ['expert', 'browse', 'upload', 'board', 'compact', 'goal'].includes(item.kind) ? '' : referenceToken(item) + ' ';
   return { text: text.slice(0, trigger.start) + insertion + text.slice(trigger.end), caret: trigger.start + insertion.length };
 }
 

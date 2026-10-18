@@ -52,8 +52,8 @@ export default function AcpSettings({ get, post }) {
   }
   return <div className="page-content" role="tabpanel" aria-label="外部 Agent">
     <section className="section-block acp-settings">
-      <div className="section-head"><div><h2>外部 Agent · ACP</h2><p>让 MLI 调度你信任的外部 Agent，复用任务队列、审批与结果汇总。</p></div><div className="form-actions"><button type="button" disabled={loading || busy || discovering} onClick={discover}><RefreshCw size={16}/>{discovering ? '检测中…' : '检测本机 ACP'}</button><button type="button" disabled={loading || busy} onClick={() => { setDraft(fresh()); setEditing(false); setError(''); setNotice(''); setConfirmDelete(false); }}><Plus size={16}/>添加 Agent</button></div></div>
-      <div className="acp-warning"><strong>外部程序不受 MLI 沙箱保护</strong><p>仅添加可信程序。每次启动仍需审批；保存不会安装、启动或登录 Agent。运行任务期间不能修改配置。</p></div>
+      <div className="section-head"><div><h2>外部 Agent · ACP</h2><p>连接并调度本机的外部 Agent。</p></div><div className="form-actions"><button type="button" disabled={loading || busy || discovering} onClick={discover}><RefreshCw size={16}/>{discovering ? '检测中…' : '检测本机 ACP'}</button><button type="button" disabled={loading || busy} onClick={() => { setDraft(fresh()); setEditing(false); setError(''); setNotice(''); setConfirmDelete(false); }}><Plus size={16}/>添加 Agent</button></div></div>
+      <div className="acp-warning"><strong>外部程序不受 MLI 沙箱保护</strong><span>仅添加可信程序。每次启动仍需审批；保存不会安装、启动或登录 Agent。运行任务期间不能修改配置。</span></div>
       {error && <p className="acp-error" role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
       {discovered.length > 0 && <div className="acp-discovery" aria-label="本机 ACP 检测结果"><strong>本机 ACP 检测</strong>{discovered.map(agent => <p key={agent.id}><b>{agent.name}</b>：{agent.status === 'available' ? `可连接（${agent.kind === 'adapter' ? '适配器' : '原生 ACP'}，${agent.command} ${agent.args.join(' ')}）` : agent.status === 'unsupported' ? `暂不支持：${agent.reason}` : agent.status === 'not_found' ? '未找到已知 ACP 入口' : `不是可用的 ACP 客户端${agent.error ? `：${agent.error}` : ''}`}</p>)}</div>}
       {loading ? <p role="status">正在加载配置…</p> : <div className="acp-layout">
@@ -67,7 +67,7 @@ export default function AcpSettings({ get, post }) {
           <details><summary>环境变量（高级）</summary><p>已有变量：{draft.envKeys?.join('、') || '无'}。值不回显；留空保留已有值，填写对象会替换全部变量。</p><label>环境变量（JSON 对象）<textarea rows={3} value={draft.envText} disabled={draft.clearEnv} onChange={event => change('envText', event.target.value)} spellCheck={false} autoComplete="off" placeholder={'{"EXAMPLE_KEY": "value"}'}/></label><label className="acp-checkbox"><input type="checkbox" checked={draft.clearEnv} onChange={event => change('clearEnv', event.target.checked)}/>清空已有环境变量</label></details>
           <div className="form-actions"><button type="submit" className="primary-action"><Save size={16}/>{busy ? '保存中…' : '保存配置'}</button>{editing && <button type="button" onClick={() => setConfirmDelete(true)}><Trash2 size={16}/>删除</button>}</div>
           {confirmDelete && <div className="acp-delete" role="alert"><p>确认删除“{draft.name || draft.id}”？后续任务将无法选择此 Agent。</p><button type="button" onClick={remove}>确认删除</button><button type="button" onClick={() => setConfirmDelete(false)}>取消</button></div>}
-        </fieldset></form> : <div className="acp-empty">选择 Agent 编辑配置，或点击“添加 Agent”。<p>添加后可对 MLI 说：“用已配置的 OpenCode 完成这个任务”。</p></div>}
+        </fieldset></form> : <div className="acp-empty"><strong>{agents.length ? '选择一个 Agent 编辑配置' : '还没有外部 Agent'}</strong><p>{agents.length ? '也可以添加新的本机 Agent。' : '添加后即可在聊天中指定它执行任务。'}</p></div>}
       </div>}
     </section>
   </div>;

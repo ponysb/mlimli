@@ -15,6 +15,7 @@ export function applyTerminalEvent(terminal, event) {
 }
 
 export function createTerminalSession(previous, result, events = []) {
-  const terminal = { ...result, status: 'starting', lines: [...(previous?.lines || []), { stream: 'command', command: result.command, text: `${terminalPrompt(result.cwd)}${result.command}\r\n` }] };
+  const initialLines = result.interactive ? [] : [{ stream: 'command', command: result.command, text: `${terminalPrompt(result.cwd)}${result.command}\r\n` }];
+  const terminal = { ...result, status: 'starting', lines: [...(previous?.lines || []), ...initialLines] };
   return events.reduce(applyTerminalEvent, terminal);
 }

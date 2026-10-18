@@ -2,13 +2,14 @@
 // entry 类型：
 //   meta        首行 {id, title, created}
 //   message     {role:'user'|'assistant'|'tool', text?, content?, toolCalls?, toolCallId?}
-//   state       {mode?, desktopEnabled?, expertId?, expertPrompt?}   会话级开关（也是追加，不回改）
+//   state       {mode?, desktopEnabled?, expertId?, expertPrompt?}   会话状态（桌面开关由全局 UI 偏好统一控制）
 //   compaction  {summary}                  压缩摘要：重建消息时"截断"其前的历史
 //   event       {event:{type:'turn_end'}}  运行边界（重放时用于恢复 UI 状态）
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { sessionsDir } from './paths.mjs';
+import { uiPreferences, updateUiPreferences } from './ui-preferences.mjs';
 import { ATTACHMENT_LIMITS, attachmentKind, attachmentMime } from './attachment-types.mjs';
 import { attachmentText, workingAttachmentPath } from './attachment-content.mjs';
 import { discoverLegacySessions, readLegacyTranscript, summarizeLegacyTranscript, legacySessionId, legacyTitle } from './session-import.mjs';
@@ -67,9 +68,9 @@ function writeIndex(idx, directory) {
   fs.writeFileSync(indexFile(directory), JSON.stringify(idx, null, 2));
 }
 
-function importLegacySessions() {
-  const idx = readIndex();
-  const root = path.dirname(path.dirname(sessionsDir()));
+function importLegacySessions(directory = sessionsDir()) {
+  const idx = readIndex(directory);
+  const root = path.dirname(path.dirname(directory));
   let changed = false;
   for (const source of discoverLegacySessions(root)) {
     const id = legacySessionId(source.path);
@@ -79,14 +80,15 @@ function importLegacySessions() {
     const transcript = readLegacyTranscript(source.path, source.format);
     if (!transcript.messages.length) continue;
     const title = legacyTitle(transcript.messages, source.path, source.format);
-    const target = path.join(sessionsDir(), `${id}.jsonl`);
+    const target = path.join(directory, `${id}.jsonl`);
     const meta = { id: 0, parent: null, ts: Date.now(), type: 'meta', title, created: Date.now(), source: 'legacy-import', sourceFormat: source.format, legacySource: relative };
     const compacted = { id: 1, parent: 0, ts: Date.now(), type: 'compaction', source: 'legacy-import', sourceFormat: source.format, used: transcript.messages.length, summary: summarizeLegacyTranscript(transcript.messages, { format: source.format, source: relative }) };
+    fs.mkdirSync(directory, { recursive: true });
     fs.writeFileSync(target, `${JSON.stringify(meta)}\n${JSON.stringify(compacted)}\n`, 'utf8');
     idx[id] = { id, title, created: meta.created, updated: meta.created, source: 'legacy-import', sourceFormat: source.format, legacySource: relative, legacyFingerprint: transcript.fingerprint };
     changed = true;
   }
-  if (changed) writeIndex(idx);
+  if (changed) writeIndex(idx, directory);
 }
 
 export class Session {
@@ -147,9 +149,9 @@ export class Session {
     return s;
   }
 
-  static list({ includeChildren = false } = {}) {
-    importLegacySessions();
-    const idx = readIndex();
+  static list({ includeChildren = false, directory = sessionsDir() } = {}) {
+    importLegacySessions(directory);
+    const idx = readIndex(directory);
     return Object.values(idx).filter(item => includeChildren || !item.parentSessionId).sort((a, b) => b.updated - a.updated);
   }
 
@@ -452,6 +454,7 @@ export class Session {
   setDesktopEnabled(on) {
     this.append({ type: 'state', desktopEnabled: !!on });
     this.touchIndex();
+    updateUiPreferences({ desktopEnabled: !!on });
     return !!on;
   }
 
@@ -459,6 +462,16 @@ export class Session {
     this.append({ type: 'state', expertId: String(expertId || ''), expertPrompt: String(expertPrompt || '').slice(0, 12000) });
     this.touchIndex();
     return { expertId: String(expertId || ''), expertPrompt: String(expertPrompt || '').slice(0, 12000) };
+  }
+
+  setGoal(text, status = 'active') {
+    const value = String(text || '').trim().slice(0, 2000);
+    const nextStatus = ['active', 'paused', 'completed'].includes(status) ? status : 'active';
+    if (!value && nextStatus === 'active') throw new Error('目标内容不能为空');
+    const goal = { text: value, status: nextStatus, createdAt: this.goal?.createdAt || Date.now(), updatedAt: Date.now() };
+    this.append({ type: 'state', goal });
+    this.touchIndex({ goal });
+    return goal;
   }
 
   /** 沿链回溯取最新状态值 */
@@ -473,9 +486,13 @@ export class Session {
 
   get title() { return this._lastState('title', readIndex(this.directory)[this.id]?.title ?? '新会话'); }
   get mode() { const value = this._lastState('mode', 'default'); return value === 'auto-all' ? 'auto-all' : 'default'; }
-  get desktopEnabled() { return this._lastState('desktopEnabled', false); }
+  get desktopEnabled() { return uiPreferences().desktopEnabled; }
   get expertId() { return this._lastState('expertId', ''); }
   get expertPrompt() { return this._lastState('expertPrompt', ''); }
+  get goal() {
+    const value = this._lastState('goal', null);
+    return value && typeof value === 'object' ? { text: String(value.text || ''), status: ['active', 'paused', 'completed'].includes(value.status) ? value.status : 'active', createdAt: value.createdAt, updatedAt: value.updatedAt } : null;
+  }
 
   contextEntries() {
     const chain = this.chain(), checkpoint = chain.findLast(entry => entry.type === 'compaction');
@@ -557,6 +574,7 @@ export class Session {
       desktopEnabled: this.desktopEnabled,
       expertId: this.expertId,
       expertPrompt: this.expertPrompt,
+      goal: this.goal,
       meetingId: this._lastState('meetingId', null),
       entries: paged ? recent : this.chain(),
       recovery: (() => { const { baseline, qualityProgress, ...state } = taskRecoveryState(this); return state; })(),

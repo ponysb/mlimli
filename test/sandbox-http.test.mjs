@@ -6,7 +6,21 @@ import path from 'node:path';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import runtime from '../electron/runtime.cjs';
-import {waitFor} from '../scripts/verify-win.mjs';
+import {assertPackagedSandboxStatus, waitFor} from '../scripts/verify-win.mjs';
+
+test('Windows package verification preserves the disabled-by-default sandbox policy', () => {
+  const status = {
+    policy: { enabled: false, mode: 'workspace-write', backend: 'auto' }, backend: 'none',
+    enforced: false, hostFallback: true, failClosed: false,
+    fallbacks: ['host-auto', 'host-confirmed'], runtime: { packagePresent: true },
+  };
+  assert.doesNotThrow(() => assertPackagedSandboxStatus(status));
+  assert.throws(() => assertPackagedSandboxStatus({ ...status, policy: { ...status.policy, enabled: true } }), /默认关闭/);
+  assert.throws(() => assertPackagedSandboxStatus({ ...status, backend: 'windows-native' }), /不得启动/);
+  assert.throws(() => assertPackagedSandboxStatus({ ...status, enforced: true }), /不得声称/);
+  assert.throws(() => assertPackagedSandboxStatus({ ...status, failClosed: true }), /宿主执行策略一致/);
+  assert.throws(() => assertPackagedSandboxStatus({ ...status, runtime: { packagePresent: false } }), /沙箱运行库/);
+});
 
 test('sandbox API persists validated host settings across restarts and workspace changes', { timeout: 30000 }, async context => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -23,7 +37,9 @@ test('sandbox API persists validated host settings across restarts and workspace
     return { status: response.status, data: await response.json() };
   }
   const initial = await request('/api/sandbox');
-  assert.equal(initial.status, 200); assert.equal(initial.data.policy.mode, 'workspace-write'); assert.equal(initial.data.failClosed, true);
+  assert.equal(initial.status, 200); assert.equal(initial.data.policy.mode, 'workspace-write'); assert.equal(initial.data.policy.enabled, false);
+  // `auto` is opportunistic: an unusable backend falls back to the host shell.
+  assert.equal(initial.data.failClosed, false); assert.equal(initial.data.hostFallback, true);
   assert.equal((await request('/api/sandbox/install-preflight','POST')).status,200,'readiness check never installs');
   assert.equal((await request('/api/sandbox/install','POST')).status,404,'system installation is not exposed as a web API');
   const terminal=await request('/api/terminal/run','POST',{command:'node -e "setTimeout(()=>{},30000)"'});
@@ -35,8 +51,11 @@ test('sandbox API persists validated host settings across restarts and workspace
   assert.equal((await request('/api/sandbox/install-preflight','POST')).status,200,'setup permitted once terminal has exited');
   assert.equal((await request('/api/sandbox', 'POST', { mode: 'silently-disable' })).status, 400);
   assert.equal((await request('/api/sandbox', 'POST', { networkAccess: 'true' })).status, 400);
-  assert.equal((await request('/api/sandbox', 'POST', { allowedDomains: ['*'] })).status, 400);
-  assert.equal((await request('/api/sandbox')).data.policy.networkAccess, false);
+  assert.equal((await request('/api/sandbox', 'POST', { allowedDomains: ['*'] })).status, 200);
+  assert.equal((await request('/api/sandbox')).data.policy.networkAccess, true);
+  assert.deepEqual((await request('/api/sandbox')).data.policy.allowedDomains, ['*']);
+  assert.equal((await request('/api/sandbox', 'POST', { enabled: false })).status, 200);
+  assert.equal((await request('/api/sandbox')).data.policy.enabled, false);
   assert.equal((await request('/api/sandbox', 'POST', { mode: 'read-only', allowedDomains: ['registry.npmjs.org:443'] })).status, 200);
   await request('/api/workspaces', 'POST', { path: path.join(dataRoot, 'other-project') });
   assert.equal((await request('/api/sandbox')).data.policy.mode, 'read-only');

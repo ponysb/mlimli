@@ -38,10 +38,12 @@ export function addSessionRule(sessionId, tool, pattern = '') {
   sessionRules.get(key).add(ruleKey(tool, pattern));
 }
 
-export function addPersistentRule(tool, pattern = '') {
+// Rules saved from an approval ("永久允许") match that exact call only.
+export function addPersistentRule(tool, pattern = '', { exact = false } = {}) {
   const rules = loadRules();
   if (!Array.isArray(rules.allow)) rules.allow = [];
-  rules.allow.push({ tool, pattern, ts: Date.now() });
+  if (rules.allow.some(rule => rule.tool === tool && rule.pattern === pattern && Boolean(rule.exact) === exact)) return;
+  rules.allow.push({ tool, pattern, ...(exact ? { exact: true } : {}), ts: Date.now() });
   saveRules(rules);
 }
 
@@ -50,7 +52,7 @@ export function listPersistentRules() {
 }
 
 export function replacePersistentRules(allow = []) {
-  const cleaned = Array.isArray(allow) ? allow.filter((r) => r && typeof r.tool === 'string').map((r) => ({ tool: r.tool, pattern: String(r.pattern ?? ''), ts: r.ts ?? Date.now() })) : [];
+  const cleaned = Array.isArray(allow) ? allow.filter((r) => r && typeof r.tool === 'string').map((r) => ({ tool: r.tool, pattern: String(r.pattern ?? ''), ...(r.exact === true ? { exact: true } : {}), ts: r.ts ?? Date.now() })) : [];
   saveRules({ allow: cleaned });
   return cleaned;
 }
@@ -65,11 +67,20 @@ function globToRegExp(pattern) {
   try { return new RegExp('^' + esc); } catch { return null; }
 }
 
+// Shell control syntax lets one approved prefix carry arbitrary extra
+// commands (`npm test & del ...`), so such commands only match exactly.
+const SHELL_CHAINING = /[\r\n;&|<>`]|\$\(/;
+
 function ruleMatch(rule, tool, argsStr) {
   if (rule.tool !== tool) return false;
+  if (rule.exact) return rule.pattern === argsStr;
   if (!rule.pattern) return true;
+  if (rule.pattern === argsStr) return true;
+  if (tool === 'bash' && SHELL_CHAINING.test(argsStr)) return false;
   const re = globToRegExp(rule.pattern);
   if (!re) return false;
+  // A bash glob covers the whole command, not just its beginning.
+  if (tool === 'bash') return new RegExp(`(?:${re.source})$`, re.flags).test(argsStr);
   return re.test(argsStr);
 }
 
@@ -85,7 +96,11 @@ function checkRules(session, tool, args, argsStr) {
       if (ruleMatch({ tool: t, pattern: p }, tool, argsStr)) return true;
     }
   }
+  // Approval-saved rules store rememberPattern(), e.g. `path:src/a.js` for
+  // file writes, which never equals the JSON argument summary.
+  const remembered = rememberPattern({ name: tool }, args);
   for (const rule of loadRules().allow ?? []) {
+    if (rule.tool === tool && rule.pattern === remembered && rule.pattern) return true;
     if (ruleMatch(rule, tool, argsStr)) return true;
   }
   return false;
@@ -190,9 +205,13 @@ export async function authorize({ session, tool, args, timeoutMs, allowRemember 
     return { ok: true, decision };
   }
   if (decision === 'allow_always') {
-    addPersistentRule(tool.name, pattern);
+    addPersistentRule(tool.name, pattern, { exact: true });
     return { ok: true, decision };
   }
+  // Only an explicit refusal is the user's; tell the model the difference so
+  // it neither gives up on a task nobody refused nor retries a refusal.
+  if (decision === 'timeout') return { ok: false, reason: `审批请求在 ${Math.round((timeoutMs ?? 120000) / 1000)} 秒内无人处理，本次 ${tool.name} 调用未执行（不是用户拒绝；需要时请稍后重新发起）`, decision };
+  if (decision === 'cancelled') return { ok: false, reason: `审批请求已随任务停止而取消，本次 ${tool.name} 调用未执行`, decision };
   return { ok: false, reason: `用户拒绝了本次 ${tool.name} 调用（decision=${decision}）`, decision };
 }
 

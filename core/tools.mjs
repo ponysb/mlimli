@@ -39,18 +39,41 @@ function decodeOutput(buf) {
 }
 
 // —— bash 硬 denylist（Windows/Unix 常见毁灭性命令）——
+// Recursive deletes aimed at a drive root, the system or the user profile.
+// Project cleanup such as `rd /s /q build` or `Remove-Item dist -Recurse`
+// stays subject to approval and the sandbox instead of being refused outright.
+const SYSTEM_TARGET = String.raw`"?(?:[a-z]:\\?(?:\*(?:\.\*)?)?|[a-z]:\\(?:windows|users|program files[^"\\]*|programdata)\\?|%(?:systemroot|windir|systemdrive|userprofile|programfiles|programdata|homedrive|homepath)%\\?|\$env:(?:systemroot|windir|systemdrive|userprofile|programfiles|programdata|homedrive)\\?|~[\\/]?)"?(?=\s|$)`;
+const recursive = (names, flag) => new RegExp(String.raw`\b(?:${names})\b(?=[^&|;\r\n]*${flag})[^&|;\r\n]*\s${SYSTEM_TARGET}`, 'i');
 export const DENY_PATTERNS = [
-  /rm\s+(-[a-z]*\s+)*-[a-z]*r[a-z]*f?[a-z]*\s+\/(\s|$)/i,
+  /rm\s+(-[a-z]*\s+)*-[a-z]*r[a-z]*f?[a-z]*\s+(\/|~\/?|\$HOME\/?)(\s|$)/i,
   /\bformat\s+[a-z]:/i,
   /\bshutdown\b/i, /\bdiskpart\b/i, /\bbcdedit\b/i,
-  /del\s+\/[sq]\s+.*[a-z]:\\/i,
-  /rd\s+\/s/i,
-  /rmdir\s+\/s/i,
-  /remove-item\s+.*-recurse/i,
+  recursive('del|erase', String.raw`\/s\b`),
+  recursive('rd|rmdir', String.raw`\/s\b`),
+  recursive('remove-item|ri|rm|del', '-recurse'),
   /reg\s+delete\s+hkey/i,
   /cipher\s+\/w/i,
   /:\(\)\{.*\};:/, // fork bomb
 ];
+
+// A failed command inside the sandbox whose output looks like a policy
+// denial gets an explanation (for the user and the model) instead of a bare
+// "Access is denied"; the user may then confirm a one-off host retry.
+const PERMISSION_DENIAL = /access is denied|拒绝访问|permission denied|operation not permitted|\bEACCES\b|\bEPERM\b|read-only file system|只读文件系统/i;
+const NETWORK_DENIAL = /CRYPT_E_REVOCATION_OFFLINE|could not resolve host|getaddrinfo|\bENOTFOUND\b|\bEAI_AGAIN\b|403 Forbidden.*proxy|proxy.*(?:denied|blocked)|Failed to connect|Connection refused|network is unreachable/i;
+export function sandboxDenialHint(sandbox, output) {
+  if (!sandbox || ['none', 'host-fallback'].includes(sandbox.backend) || sandbox.mode === 'off') return null;
+  const text = String(output || '');
+  if (PERMISSION_DENIAL.test(text)) {
+    const git = /\.git[\\/]|index\.lock|\bgit\b/i.test(text) ? '.git 在沙箱中只读，git add/commit 等写操作请在宿主终端执行；' : '';
+    return `[沙箱提示] 命令在沙箱中被拒绝访问。沙箱只允许${sandbox.mode === 'read-only' ? '读取' : '读写'}当前工作区；${git}.git/.agents 只读，.env、私钥、config.json 等敏感文件不可见，工作区外的用户目录不可访问。若确需宿主权限，可点击“不使用沙箱重试”。`;
+  }
+  if (!sandbox.networkAccess && NETWORK_DENIAL.test(text)) return '[沙箱提示] 沙箱默认禁止命令联网。如需联网，请在 设置 → 权限配置 → 运行沙箱 中开启联网并添加域名白名单（如 registry.npmjs.org:443），或点击“不使用沙箱重试”。';
+  if (sandbox.networkAccess && NETWORK_DENIAL.test(text)) return sandbox.backend === 'host-network'
+    ? '[沙箱提示] 当前使用不限制联网的宿主 shell，网络错误来自宿主代理或系统网络。'
+    : `[沙箱提示] 网络请求可能被域名白名单拦截（当前允许：${(sandbox.allowedDomains || []).join(', ') || '无'}）。请在设置中补充所需域名，或点击“不使用沙箱重试”。`;
+  return null;
+}
 
 export const coreTools = [
   ...outputTools,
@@ -222,7 +245,7 @@ export const coreTools = [
     name: 'bash',
     get description() {
       const backend = selectedBackend();
-      return backend === 'docker' || backend === 'bubblewrap'
+      return backend === 'docker'
         ? '在隔离的 Linux /bin/sh 中执行命令，工作目录为 /workspace，对应当前工作区。请使用相对路径，不使用宿主 Windows 命令或盘符。'
         : IS_WIN ? '在 Windows cmd 中执行命令，工作区为当前目录。' : '在系统 shell 中执行命令，工作区为当前目录。';
     },
@@ -262,7 +285,7 @@ export const coreTools = [
         ctx.signal?.addEventListener('abort', onAbort, { once: true });
         if (ctx.signal?.aborted) onAbort();
         child.on('error', error => { if (!settled) { settled = true; clearTimeout(timer); ctx.signal?.removeEventListener('abort', onAbort); resolve({ content: error.message, status: 'error' }); } });
-        child.on('close', (code) => {
+        child.on('close', (code, exitSignal) => {
           ctx.signal?.removeEventListener('abort', onAbort);
           if (settled) return;
           settled = true;
@@ -271,11 +294,24 @@ export const coreTools = [
           const stdout = captured(out, outTail, outSize), stderr = captured(err, errTail, errSize);
           let content = timedOut ? `[超时 ${timeout}ms，已终止]\n${stdout}` : ctx.signal?.aborted ? `[任务已停止]\n${stdout}` : `exit=${code}\n${stdout}`;
           if (stderr.trim()) content += `\n[stderr]\n${stderr}`;
+          if (exitSignal) content += `\n[进程终止信号] ${exitSignal}`;
           const afterSource = testSource ? sourceEvidence() : null;
           const testEvidence = afterSource ? {...afterSource,complete:afterSource.complete && testSource.complete && afterSource.sha256===testSource.sha256} : undefined;
           const passed = !timedOut && !ctx.signal?.aborted && code === 0 && testEvidence?.complete;
           const verification = testEvidence ? { kind: 'command', environment: testEvidence.environment, sourceVersion: testEvidence, artifacts: [], assertions: criteria.length, checks: [...new Set(criteria)].map(criterion => ({ name: `实际测试命令：${command.slice(0,180)}`, criterion, passed: !!passed })), scope: '实际退出码和源码版本；需求关联由 Agent 声明，不证明测试内容完整覆盖需求' } : undefined;
-          resolve({ content: content.trim() || '(无输出)', status: timedOut || ctx.signal?.aborted || code !== 0 ? 'error' : 'ok', sandbox: child.sandbox, exitCode: code, structuredContent: { exit_code: code, truncated: outSize > 1024 * 1024 || errSize > 1024 * 1024 }, command, testEvidence, verification });
+          const sandboxFailure = child.sandboxFailure;
+          const denial = !sandboxFailure && !timedOut && !ctx.signal?.aborted && code !== 0 ? sandboxDenialHint(child.sandbox, stdout + '\n' + stderr) : null;
+          if (denial) content += `\n${denial}`;
+          resolve({
+            content: content.trim() || '(无输出)',
+            status: timedOut || ctx.signal?.aborted || code !== 0 ? 'error' : 'ok',
+            sandbox: child.sandbox,
+            ...(code === null ? { errorDetails: { stage: 'command_execution', name: 'ProcessTerminated', code: exitSignal || 'PROCESS_NO_EXIT_CODE', message: `命令进程未正常退出，signal=${exitSignal || 'unknown'}，backend=${child.sandbox?.backend || 'unknown'}` } } : {}),
+            ...(sandboxFailure ? { canRetryWithoutSandbox: true, errorDetails: { stage: 'sandbox_launch', name: 'SandboxError', code: 'SANDBOX_UNAVAILABLE', nativeCode: sandboxFailure.code, message: sandboxFailure.message } } : {}),
+            ...(denial ? { canRetryWithoutSandbox: true, errorDetails: { stage: 'sandbox_policy', name: 'SandboxError', code: 'SANDBOX_DENIED', message: denial } } : {}),
+            exitCode: code,
+            structuredContent: { exit_code: code, signal: exitSignal || null, truncated: outSize > 1024 * 1024 || errSize > 1024 * 1024 }, command, testEvidence, verification,
+          });
         });
       }); } finally { await child.cleanupSandbox(); }
     },

@@ -9,6 +9,8 @@ import { planClientExport } from './export-client.mjs';
 import clientEnvironment from '../core/client-env.cjs';
 import { copyTerminalDependencies, installNodeRuntime } from './terminal-package.mjs';
 import { buildTui } from './build-tui.mjs';
+import { createSandboxRepairBundle } from './sandbox-repair-bundle.mjs';
+import { verifyInstalledBuildDependencies, verifyRuntimeDependencies } from './runtime-dependencies.mjs';
 const { updateFeedUrl } = createRequire(import.meta.url)('../electron/updater.cjs');
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -83,7 +85,12 @@ export function stageWindowsClient({ root = ROOT, output, legacy = false } = {})
   const appManifest = { name: legacy ? `${manifest.name}-legacy` : manifest.name, version: manifest.version, description: manifest.description, main: 'electron/main.cjs', license: manifest.license, private: true };
   write(appDirectory, 'package.json', JSON.stringify(appManifest, null, 2));
   write(runtimeDirectory, 'package.json', JSON.stringify({ name: 'mli-agent-runtime', version: manifest.version, private: true, type: 'module' }, null, 2));
-  const terminalDependencies = copyTerminalDependencies(runtimeDirectory);
+  const terminalDependencies = copyTerminalDependencies(runtimeDirectory, ROOT);
+  createSandboxRepairBundle(runtimeDirectory, ROOT);
+  for (const relative of ['core/sandbox-retry.mjs', 'core/windows-sandbox.mjs', 'core/sandbox-broker.mjs', 'core/sandbox-broker-worker.mjs']) {
+    if (!fs.existsSync(path.join(runtimeDirectory, relative))) throw new Error(`Windows 发布包缺少关键沙箱文件：${relative}`);
+  }
+  verifyRuntimeDependencies(runtimeDirectory);
   for (const dependency of ['core-js', 'undici', '@fastify/busboy', 'dotenv']) {
     write(runtimeDirectory, `licenses/${dependency.replace('/', '-')}.txt`, fs.readFileSync(path.join(ROOT, 'node_modules', dependency, 'LICENSE')));
   }
@@ -143,7 +150,13 @@ export function windowsBuildConfig(stage, electronDist = path.join(ROOT, 'node_m
     executableName: legacy ? 'MoliCreationLegacy' : 'MoliCreation',
     directories: { app: stage.appDirectory, output: path.join(stage.destination, 'artifacts') },
     files: ['package.json', 'electron/**/*', 'core/**/*'],
-    extraResources: [{ from: stage.runtimeDirectory, to: 'client', filter: ['**/*'] }, ...(fs.existsSync(path.join(stage.destination, 'stage', 'node')) ? [{ from: path.join(stage.destination, 'stage', 'node'), to: 'node', filter: ['**/*'] }] : [])],
+    extraResources: [
+      { from: stage.runtimeDirectory, to: 'client', filter: ['**/*', '!node_modules{,/**/*}'] },
+      // electron-builder excludes nested node_modules by default. Copying its
+      // contents as a dedicated resource keeps runtime packages in the app.
+      { from: path.join(stage.runtimeDirectory, 'node_modules'), to: 'client/node_modules', filter: ['**/*'] },
+      ...(fs.existsSync(path.join(stage.destination, 'stage', 'node')) ? [{ from: path.join(stage.destination, 'stage', 'node'), to: 'node', filter: ['**/*'] }] : []),
+    ],
     extraFiles: [{ from: path.join(stage.runtimeDirectory, 'cli', 'launchers', 'mli.cmd'), to: 'mli.cmd' }],
     asar: true,
     npmRebuild: false,
@@ -172,6 +185,7 @@ export function windowsBuildConfig(stage, electronDist = path.join(ROOT, 'node_m
 
 async function main() {
   if (process.platform !== 'win32') throw new Error('此打包命令需要在 Windows 上运行');
+  verifyInstalledBuildDependencies(ROOT);
   const args = process.argv.slice(2);
   if (args.some(argument => !['--dir', '--legacy', '--modern', '--all', '--portable'].includes(argument))) throw new Error('用法：node scripts/package-win.mjs [--modern | --legacy | --all] [--portable] [--dir]');
   if (['--modern', '--legacy', '--all'].filter(argument => args.includes(argument)).length > 1) throw new Error('版本参数不能同时使用');
@@ -221,5 +235,5 @@ async function main() {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch(error => { console.error(error); process.exitCode = 1; });
+  main().catch(error => { console.error(error); process.exit(1); });
 }

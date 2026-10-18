@@ -22,7 +22,7 @@ export function taskRecoveryState(session) {
   return { available: true, checkpointId: checkpoint.id, turnId: start.turnId, goal: start.prompt,
     phase: checkpoint.phase, reason: ending && ending.id > checkpoint.id ? ending.reason : 'interrupted', stepCount: turn.filter(entry => entry.type === 'step_start').reduce((count, entry) => Math.max(count, entry.step + 1), checkpoint.stepCount || 0),
     toolCount: Math.max(checkpoint.toolCount || 0, turn.filter(entry => entry.type === 'tool_start').length), activeDurationMs: checkpoint.activeDurationMs || 0,
-    executionRoot: checkpoint.executionRoot, executionEnvironment: checkpoint.executionEnvironment, baseline: baseline?.baseline, baselineRoot: baseline?.executionRoot, qualityProgress: checkpoint.qualityProgress, usage: checkpoint.usage,
+    executionRoot: checkpoint.executionRoot, executionEnvironment: checkpoint.executionEnvironment, baseline: baseline?.baseline, baselineRoot: baseline?.executionRoot, qualityProgress: checkpoint.qualityProgress, usage: checkpoint.usage, billing: checkpoint.billing,
     unknownActions: unknown, externalHandles: turn.filter(entry => entry.type === 'task_checkpoint' && entry.externalHandle).map(entry => entry.externalHandle).slice(-20) };
 }
 

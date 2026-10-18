@@ -41,6 +41,24 @@ function mediaParts(entry) {
   );
 }
 
+function operationMediaParts(entry) {
+  const found = [];
+  const visit = (value, depth = 0) => {
+    if (depth > 6 || value == null) return;
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, depth + 1);
+      return;
+    }
+    if (typeof value !== "object") return;
+    if ((value.url || value.dataUrl) && (value.type === "image" || value.type === "video" || String(value.mime || "").startsWith("image/") || String(value.mime || "").startsWith("video/"))) {
+      found.push(value);
+    }
+    for (const item of Object.values(value)) visit(item, depth + 1);
+  };
+  visit(entry);
+  return found;
+}
+
 export function collectSessionContext(entries = [], live = null) {
   const source = Array.isArray(entries) ? entries : [];
   const deleted = new Set();
@@ -53,11 +71,13 @@ export function collectSessionContext(entries = [], live = null) {
   const outputs = [],
     files = [],
     sources = [],
-    media = [];
+    media = [],
+    operationPreviews = [];
   const seenOutput = new Set(),
     seenFile = new Set(),
     seenSource = new Set(),
-    seenMedia = new Set();
+    seenMedia = new Set(),
+    seenOperation = new Set();
   const ordered = [
     ...source,
     ...(live ? [{ ...live, type: "live" }] : []),
@@ -65,6 +85,21 @@ export function collectSessionContext(entries = [], live = null) {
 
   for (const entry of ordered) {
     const parts = mediaParts(entry);
+    const operationTool = String(entry?.name || entry?.tool || entry?.call?.name || JSON.stringify(entry) || "").match(/browser|computer|desktop|screenshot|screen|网页|桌面|截图/i);
+    if (operationTool) {
+      for (const item of operationMediaParts(entry)) {
+        const key = item.attachmentId || item.workspacePath || item.url || item.dataUrl;
+        if (!key || seenOperation.has(key)) continue;
+        seenOperation.add(key);
+        operationPreviews.push({
+          ...item,
+          type: item.type || (String(item.mime || "").startsWith("video/") ? "video" : "image"),
+          name: item.name || `${operationTool[0]} 操作画面`,
+          tool: operationTool[0],
+          title: entry?.name || entry?.title || `${operationTool[0]} 操作`,
+        });
+      }
+    }
     for (const item of parts) {
       const key =
         item.attachmentId || item.workspacePath || item.url || item.dataUrl;
@@ -162,5 +197,6 @@ export function collectSessionContext(entries = [], live = null) {
     files,
     sources,
     media,
+    operationPreviews,
   };
 }

@@ -1,7 +1,8 @@
-.acp-warning { padding: 14px 16px; margin-bottom: 20px; border: 1px solid #e7d4b4; border-radius: 10px; background: #fffaf1; color: #78552a; }
+.acp-warning { display: flex; align-items: baseline; gap: 14px; padding: 10px 12px; margin: 14px 0 18px; border: 1px solid #e7d4b4; border-radius: 7px; background: #fffaf1; color: #78552a; }
+.acp-warning strong { flex: 0 0 auto; }
+.acp-warning span { min-width: 0; color: #7a756d; font-size: 11px; line-height: 1.6; }
 .acp-discovery { padding: 12px 14px; margin-bottom: 20px; border: 1px solid #c9ddd1; border-radius: 8px; background: #f5faf6; color: #365847; }
 .acp-discovery p { margin: 6px 0 0; color: #526a5b; font-size: 13px; }
-.acp-warning p { margin: 6px 0 0; font-size: 13px; line-height: 1.6; }
 .acp-layout { display: grid; grid-template-columns: minmax(160px, 220px) minmax(0, 1fr); gap: 24px; }
 .acp-list { display: flex; flex-direction: column; gap: 8px; }
 .acp-list button { text-align: left; display: flex; flex-direction: column; gap: 5px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; overflow-wrap: anywhere; }
@@ -13,9 +14,11 @@
 .acp-form textarea { resize: vertical; font-family: monospace; }
 .acp-form summary { cursor: pointer; font-size: 13px; }
 .acp-form details p, .acp-empty, .acp-list p { color: #737b84; font-size: 13px; line-height: 1.7; }
+.acp-empty { display: grid; place-content: center; min-height: 150px; text-align: center; }
+.acp-empty strong { color: var(--ink); font-size: 13px; }
 .acp-form .acp-checkbox { display: flex; align-items: center; margin-top: 10px; }
 .acp-error, .acp-delete { color: #a23a31; }
 .acp-delete { padding: 12px; border: 1px solid #ebceca; border-radius: 8px; }
 .acp-delete button { margin-right: 8px; }
 .acp-settings button:focus-visible, .acp-form input:focus-visible, .acp-form textarea:focus-visible, .acp-form summary:focus-visible { outline: 2px solid #47775f; outline-offset: 3px; }
-@media (max-width: 720px) { .acp-layout { grid-template-columns: 1fr; } .acp-list { flex-direction: row; flex-wrap: wrap; } .acp-list button { flex: 1 1 140px; } }
+@media (max-width: 720px) { .acp-warning { align-items: flex-start; flex-direction: column; gap: 4px; } .acp-layout { grid-template-columns: 1fr; } .acp-list { flex-direction: row; flex-wrap: wrap; } .acp-list button { flex: 1 1 140px; } }
