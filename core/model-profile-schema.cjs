@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const list = value => Array.isArray(value) ? [...new Set(value.map(String).map(x => x.trim()).filter(Boolean))].slice(0, 100) : [];
 function normalizeId(value) { return String(value || '').trim().toLowerCase().replace(/[_\s]+/g, '-').replace(/(\d)\.(?=\d)/g, '$1-'); }
+function fuzzyId(value) { return normalizeId(value).replace(/[^a-z0-9]+/g, ''); }
 function validateProfiles(value) {
   if (!Array.isArray(value) || value.length > 20000) throw new Error('模型档案必须是数组，最多 20000 项');
   const ids = new Set();
@@ -23,11 +24,18 @@ function validateProfiles(value) {
 }
 function matchProfile(apiId, profiles) {
   const key = normalizeId(apiId);
-  for (const method of ['exact', 'alias', 'decorated']) {
+  for (const method of ['exact', 'alias', 'fuzzy', 'decorated']) {
     const matches = profiles.filter(row => {
       const names = [row.id, ...(row.aliases || [])].map(normalizeId);
       if (method === 'exact') return normalizeId(row.id) === key;
       if (method === 'alias') return names.slice(1).includes(key);
+      if (method === 'fuzzy') {
+        const candidate = fuzzyId(key);
+        return candidate.length >= 5 && names.some(name => {
+          const normalized = fuzzyId(name);
+          return normalized === candidate || (normalized.length >= 8 && candidate.endsWith(normalized));
+        });
+      }
       let candidate = key;
       for (const prefix of row.prefixes || []) if (candidate.startsWith(normalizeId(prefix))) { candidate = candidate.slice(normalizeId(prefix).length); break; }
       for (const suffix of row.suffixes || []) if (candidate.endsWith(normalizeId(suffix))) { candidate = candidate.slice(0, -normalizeId(suffix).length); break; }
@@ -38,4 +46,4 @@ function matchProfile(apiId, profiles) {
   return { apiId, method: 'unknown' };
 }
 function hashProfiles(profiles) { return crypto.createHash('sha256').update(JSON.stringify(profiles)).digest('hex'); }
-module.exports = { validateProfiles, matchProfile, hashProfiles, normalizeId };
+module.exports = { validateProfiles, matchProfile, hashProfiles, normalizeId, fuzzyId };

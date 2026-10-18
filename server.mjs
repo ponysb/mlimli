@@ -54,7 +54,7 @@ const cfg = await initializeRuntime();
 appCenter();
 recordClientLaunch().catch(() => {});
 
-const PORT = Number(process.env.MLI_AGENT_PORT || cfg.server?.port || 3000);
+const PORT = Number(process.env.MLI_AGENT_PORT || cfg.server?.port || 10860);
 const HOST = process.env.MLI_AGENT_HOST || cfg.server?.host || '127.0.0.1';
 const terminalRuns = new Map();
 const interactiveTerminals = new Map();
@@ -219,7 +219,7 @@ function stopInteractiveTerminal(id) {
 
 // ---------- SSE 总线 ----------
 const sseClients = new Set();
-const refreshModelProfiles = () => modelProfiles.refresh().then(changed => { if (changed) emit('catalog_updated', { ok: true }); }).catch(() => {});
+const refreshModelProfiles = () => modelProfiles.refresh({ force: true }).then(changed => { if (changed) emit('catalog_updated', { ok: true }); }).catch(() => {});
 setInterval(refreshModelProfiles, 60000).unref();
 void refreshModelProfiles();
 onEvent((evt) => {

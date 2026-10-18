@@ -7150,8 +7150,8 @@ function formatDuration(value = 0) {
 }
 
 function modelReasoningChoices(model = {}) {
-  const choices = reasoningChoices(model);
-  if (choices.length) return choices;
+  const profileChoices = reasoningChoices(model);
+  if (profileChoices.length) return profileChoices;
   if (!model.capabilities?.thinking) return [];
   return (model.reasoningOptions?.efforts || []).map((value) => ({
     value,
@@ -7161,7 +7161,7 @@ function modelReasoningChoices(model = {}) {
 
 function reasoningChoiceLabel(choice) {
   const value = choice.label || String(choice.value);
-  return ({ low: "低", medium: "中", high: "高", xhigh: "超高", ultra: "极高", minimal: "最低", none: "关闭", auto: "自动" })[value.toLowerCase()] || value;
+  return ({ low: "低", medium: "中", high: "高", max: "最高", xhigh: "超高", ultra: "极高", minimal: "最低", none: "关闭", auto: "自动" })[value.toLowerCase()] || value;
 }
 
 function modelReasoningLabel(model = {}) {
@@ -7261,6 +7261,14 @@ function ComposerBase({
     setModelOpen(false);
     setExpandedModelId("");
     setReasoningPosition(null);
+  }
+  async function openModelPicker() {
+    try {
+      await onModelsChanged();
+      setModelOpen(true);
+    } catch (error) {
+      onError(error);
+    }
   }
   useOutsideClose(modeRef, modeOpen, () => setModeOpen(false));
   useOutsideClose(modelRef, modelOpen, closeModelPicker, [reasoningRef]);
@@ -7624,7 +7632,7 @@ function ComposerBase({
             <div className="model-picker" ref={modelRef}>
               <button
                 className="model-chip"
-                onClick={() => modelOpen ? closeModelPicker() : setModelOpen(true)}
+                onClick={() => modelOpen ? closeModelPicker() : openModelPicker()}
                 disabled={running}
               >
                 <Bot size={13} />

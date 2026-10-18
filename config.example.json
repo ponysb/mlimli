@@ -1,6 +1,6 @@
 {
   "server": {
-    "port": 3000,
+    "port": 10860,
     "host": "127.0.0.1"
   },
   "providers": [

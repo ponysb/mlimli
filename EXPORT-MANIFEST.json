@@ -4,8 +4,8 @@
   "files": [
     {
       "path": ".env.example",
-      "bytes": 91,
-      "sha256": "76af7b1ad2147ceb031049365847ea43c8a5baed566c05e2264b430bc937178b"
+      "bytes": 92,
+      "sha256": "8d493d2c1d01c1170bdf2b2b6628678cf60ee59a9f763a90f7bdf04c4d793905"
     },
     {
       "path": ".gitattributes",
@@ -119,8 +119,8 @@
     },
     {
       "path": "config.example.json",
-      "bytes": 1701,
-      "sha256": "2701763f317e84126993647bb34f754fcbe56665baa720578c9c08ecfdcf9643"
+      "bytes": 1702,
+      "sha256": "d36ddde042584a24898e76747183b8d9312e80debe931924b2f190d6aa517dd3"
     },
     {
       "path": "core/account.mjs",
@@ -344,13 +344,13 @@
     },
     {
       "path": "core/model-profile-schema.cjs",
-      "bytes": 3058,
-      "sha256": "b444314646da9065604c8448aaf42e822689f60c3045619b7f51077471923d7f"
+      "bytes": 3460,
+      "sha256": "ad99ef3c62cf09eee4aef532c6d847b33b5794dadb27e1d100a3d3424708e842"
     },
     {
       "path": "core/model-profiles.mjs",
-      "bytes": 3865,
-      "sha256": "77fdec5c67ebfc53be43730387d350cfb7d6a973350b044e0ca51fb4b1b53e66"
+      "bytes": 4246,
+      "sha256": "7be88c533e36d3ec18a0e9aa39cc77e9ffe1b10dc2df53e8d4b6770530f7f62c"
     },
     {
       "path": "core/paths.mjs",
@@ -654,8 +654,8 @@
     },
     {
       "path": "docs/WINDOWS-PACKAGING.md",
-      "bytes": 14642,
-      "sha256": "0ec3ac354946fe6ab296ce42b6f036eef7d0d7ea21f49c62faa7885a71a07ba4"
+      "bytes": 14644,
+      "sha256": "a0bf8bf12b71c288dfb0773c387f962c80065bdcab3fa10c5e01c7adfad0a3ff"
     },
     {
       "path": "electron/app-center.cjs",
@@ -780,12 +780,12 @@
     {
       "path": "package-lock.json",
       "bytes": 467530,
-      "sha256": "372165f1f30caee404e4b06e67bf00528a03ff008085ed7bc613c7b665a94220"
+      "sha256": "8fd14e3f3a86f9bebe7bc57cbe490ae0df8fa158752a10b6e26684bf7b81aaf8"
     },
     {
       "path": "package.json",
       "bytes": 2956,
-      "sha256": "642379d39a3e60ce99952ad6e8db0de8b5db751a9a182a1dc53c10c226aab37f"
+      "sha256": "f9d61522effb3dbe9996a64fae62b1b73e50fe2cc5b3fbd09dd80b736f7ae02f"
     },
     {
       "path": "PLUGIN-COMPATIBILITY.md",
@@ -4934,8 +4934,8 @@
     },
     {
       "path": "react/src/main.jsx",
-      "bytes": 355668,
-      "sha256": "00c464216ba92d3e2c63b03b9fb8d943bf8931fe8aee26aa5308cd8665348781"
+      "bytes": 355861,
+      "sha256": "d6646b7e81ef7599b89d92cdf9b972a593495584f36c3c584fb523bfed34ae50"
     },
     {
       "path": "react/src/marketing.css",
@@ -5014,8 +5014,8 @@
     },
     {
       "path": "react/src/style.css",
-      "bytes": 209034,
-      "sha256": "460a9680d3e9daf16f89dc8cdfbabe1aa928a253bf0ecfc0bbc7acd38ff10876"
+      "bytes": 209354,
+      "sha256": "eb4ffce699d4df946063f364720408e40e1f7d1a28d64092043d07c667c060ac"
     },
     {
       "path": "react/src/SubagentPanel.jsx",
@@ -5084,13 +5084,13 @@
     },
     {
       "path": "README.en.md",
-      "bytes": 11105,
-      "sha256": "4a30327c5c510437572d9ee4bdcc314b8c4d6ddbb5d435c5a26330e1525b41d0"
+      "bytes": 11106,
+      "sha256": "507da7403feaada7c1fde6f5d90b543a77dde316f6d703e1b0fbe4fd3f582b2a"
     },
     {
       "path": "README.md",
-      "bytes": 10713,
-      "sha256": "8639076e15cf1aa9f967ec4f3662950199f7dcabd77eb1ed5726f6aadfcfa683"
+      "bytes": 10714,
+      "sha256": "6094e3bc020b78e21e4a11f560d626898f3419bf2f3af2b3df984b6013e06e30"
     },
     {
       "path": "scripts/build-sandbox-image.mjs",
@@ -5179,8 +5179,8 @@
     },
     {
       "path": "server.mjs",
-      "bytes": 72906,
-      "sha256": "2c6b2aeb8f15d43f2cf882430eb0541cbbc039cfd5d5bfb2edbeadc3ccd50b42"
+      "bytes": 72922,
+      "sha256": "8abaf51f2ebee1eb287b5f4905aa4cd813df7564f256476cadd8b2daed05069c"
     },
     {
       "path": "test/account.test.mjs",

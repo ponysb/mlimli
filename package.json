@@ -1,6 +1,6 @@
 {
   "name": "mli-agent",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "魔力工作台：本地 Agent 运行时、React 工作台、Electron 桌面入口与可扩展插件系统",
   "type": "module",
   "main": "electron/main.cjs",

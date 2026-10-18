@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v0.4.4-245b43" alt="v0.4.4" />
+  <img src="https://img.shields.io/badge/version-v0.4.5-245b43" alt="v0.4.5" />
   <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="Apache-2.0" />
   <img src="https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-64748b" alt="Windows / macOS / Linux" />
 </p>
@@ -181,7 +181,7 @@ npm run build:web
 npm run electron
 ```
 
-Windows PowerShell 可用 `Copy-Item config.example.json config.json` 代替 `cp`。浏览器模式运行 `npm start` 后访问 `http://127.0.0.1:3000`。构建安装包和参与贡献的说明见 [Windows 打包](docs/WINDOWS-PACKAGING.md)、[终端版说明](docs/TERMINAL.md) 与仓库中的开发文档。
+Windows PowerShell 可用 `Copy-Item config.example.json config.json` 代替 `cp`。浏览器模式运行 `npm start` 后访问 `http://127.0.0.1:10860`。构建安装包和参与贡献的说明见 [Windows 打包](docs/WINDOWS-PACKAGING.md)、[终端版说明](docs/TERMINAL.md) 与仓库中的开发文档。
 
 ## 交流与支持
 
