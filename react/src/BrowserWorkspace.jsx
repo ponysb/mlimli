@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AppWindow, ArrowLeft, ArrowRight, Camera, ChevronRight, Download, Eraser, ExternalLink, File, Globe, History, KeyRound, LoaderCircle, Minus, MoreHorizontal, MousePointer2, Plus, Printer, Puzzle, RefreshCw, Search, Settings2, Smartphone, SquareTerminal, Trash2, Wrench, X } from 'lucide-react';
+import { AppWindow, ArrowLeft, ArrowRight, Camera, ChevronRight, Download, Eraser, ExternalLink, File, Film, Globe, History, KeyRound, LoaderCircle, Minus, MoreHorizontal, MousePointer2, Plus, Printer, Puzzle, RefreshCw, Search, Settings2, Smartphone, SquareTerminal, Trash2, Wrench, X } from 'lucide-react';
 import './browser-workspace.css';
 
 function normalizeAddress(value) {
@@ -10,12 +10,12 @@ function normalizeAddress(value) {
 
 const EDGE_EXTENSION_STORE = 'https://microsoftedge.microsoft.com/addons/Microsoft-Edge-Extensions-Home';
 
-export default function BrowserWorkspace({ browserId, initialUrl = '', active, onFiles, onTerminal, onOpenApp, onState, onError }) {
+export default function BrowserWorkspace({ browserId, initialUrl = '', active, onFiles, onTerminal, onFilmCanvas, onOpenApp, onState, onError }) {
   const [address, setAddress] = useState(initialUrl), [page, setPage] = useState(null), [apps, setApps] = useState([]), [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState(null), [extensions, setExtensions] = useState([]), [zoom, setZoom] = useState(1), [findOpen, setFindOpen] = useState(false), [findText, setFindText] = useState('');
   const [history, setHistory] = useState([]), [downloads, setDownloads] = useState([]), [menuNotice, setMenuNotice] = useState('');
   const [pickerActive, setPickerActive] = useState(false);
-  const surface = useRef(null), mounted = useRef(true);
+  const surface = useRef(null), mounted = useRef(true), menuHandler = useRef(null), zoomRef = useRef(1);
   const desktop = window.desktop, supported = Boolean(desktop?.openUrl);
   const fail = error => { if (mounted.current) onError?.(error); };
 
@@ -35,16 +35,7 @@ export default function BrowserWorkspace({ browserId, initialUrl = '', active, o
       window.setTimeout(() => setMenuNotice(current => current === (value.message || '元素信息已复制') ? '' : current), 1800);
     });
     const unsubscribeMenu = desktop?.onAppBrowserMenuAction?.(value => {
-      if (!mounted.current || value?.browserId !== browserId) return;
-      const action = value.action;
-      if (action === 'find') { setFindOpen(true); setMenu(null); return; }
-      if (action === 'load-extension') { addExtension(); return; }
-      if (action === 'extension-store') { open(EDGE_EXTENSION_STORE); return; }
-      if (action === 'zoom') { changeZoom(Number(value.value) || 0); return; }
-      if (action === 'zoom-reset') { desktop.browserPageAction({ browserId, action: 'zoom', factor: 1 }).then(() => setZoom(1)).catch(fail); return; }
-      if (action === 'settings') { showExtensions(); return; }
-      if (action === 'downloads' || action === 'history') { openPanel(action); return; }
-      pageAction(action);
+      if (mounted.current && value?.browserId === browserId) menuHandler.current?.(value);
     });
     return () => { mounted.current = false; unsubscribe?.(); unsubscribeCopied?.(); unsubscribeMenu?.(); };
   }, [browserId]);
@@ -62,7 +53,7 @@ export default function BrowserWorkspace({ browserId, initialUrl = '', active, o
   }, [active, supported, browserId]);
 
   useEffect(() => {
-    if (!active || !supported || !surface.current || !page?.url || findOpen) {
+    if (!active || !supported || !surface.current || !page?.url) {
       desktop?.setAppBrowserBounds?.(null).catch(() => {});
       return undefined;
     }
@@ -70,10 +61,10 @@ export default function BrowserWorkspace({ browserId, initialUrl = '', active, o
     const update = () => {
       const rect = surface.current?.getBoundingClientRect();
       if (rect && !ended) {
-        // The native page view must never be resized when a toolbar menu opens.
-        // Menus are rendered above the page, so changing this width causes a
-        // visible re-layout and can make Chromium report ERR_NETWORK_CHANGED.
-        desktop.setAppBrowserBounds({ x: rect.x, y: rect.y, width: Math.max(1, rect.width), height: rect.height }).catch(fail);
+        // Native views sit above renderer DOM, regardless of CSS z-index.
+        const panel = surface.current.closest('.browser-workspace')?.querySelector('.browser-menu');
+        const top = Math.min(rect.bottom, Math.max(rect.y, panel?.getBoundingClientRect().bottom || rect.y));
+        desktop.setAppBrowserBounds({ x: rect.x, y: top, width: Math.max(1, rect.width), height: Math.max(0, rect.bottom - top) }).catch(fail);
       }
     };
     const observer = new ResizeObserver(update); observer.observe(surface.current); window.addEventListener('resize', update);
@@ -121,12 +112,13 @@ export default function BrowserWorkspace({ browserId, initialUrl = '', active, o
     catch (error) { fail(error); }
   }
   async function changeZoom(delta) {
-    const factor = Math.max(.5, Math.min(2, Math.round((zoom + delta) * 10) / 10));
-    try { await desktop.browserPageAction({ browserId, action: 'zoom', factor }); setZoom(factor); }
+    const factor = Math.max(.5, Math.min(2, Math.round((zoomRef.current + delta) * 10) / 10));
+    try { const result = await desktop.browserPageAction({ browserId, action: 'zoom', factor }); zoomRef.current = result.zoomFactor; setZoom(result.zoomFactor); }
     catch (error) { fail(error); }
   }
   async function find(event) {
     event.preventDefault();
+    if (!findText.trim()) return;
     try { await desktop.browserPageAction({ browserId, action: 'find', text: findText }); }
     catch (error) { fail(error); }
   }
@@ -152,6 +144,7 @@ export default function BrowserWorkspace({ browserId, initialUrl = '', active, o
 
   function openMenu(name) {
     if (menu === name) { setMenu(null); return; }
+    if (name === 'settings') { setMenu('settings'); return; }
     const button = name === 'extensions' ? document.querySelector('.browser-extension-trigger') : document.querySelector('.browser-toolbar-menu button[aria-label="更多"]');
     const rect = button?.getBoundingClientRect();
     desktop.browserPageAction({ browserId, action: 'menu-overlay', kind: name === 'extensions' ? 'extensions' : 'more', x: rect?.left || 0, y: rect?.bottom || 0 }).catch(fail);
@@ -166,6 +159,19 @@ export default function BrowserWorkspace({ browserId, initialUrl = '', active, o
     const result = await pageAction('clear-data');
     if (result) { setHistory([]); setMenuNotice('浏览数据已清除'); }
   }
+
+  menuHandler.current = value => {
+    const action = value.action;
+    if (action === 'find') { setFindOpen(true); setMenu(null); return; }
+    if (action === 'load-extension') return addExtension();
+    if (action === 'extension-store') return open(EDGE_EXTENSION_STORE);
+    if (action === 'zoom') return changeZoom(Number(value.value) || 0);
+    if (action === 'zoom-reset') return changeZoom(1 - zoomRef.current);
+    if (action === 'settings') return openMenu('settings');
+    if (action === 'clear-data') return clearBrowsingData();
+    if (action === 'downloads' || action === 'history') return openPanel(action);
+    return pageAction(action);
+  };
 
   async function togglePicker() {
     const next = !pickerActive;
@@ -235,6 +241,7 @@ export default function BrowserWorkspace({ browserId, initialUrl = '', active, o
       <div className="browser-start-tools">
         <button onClick={onFiles}><File size={20}/><span>文件</span></button>
         <button onClick={onTerminal}><SquareTerminal size={20}/><span>终端</span></button>
+        <button onClick={onFilmCanvas}><Film size={20}/><span>AI 画布</span></button>
       </div>
       <h2>应用</h2>
       <div className="browser-start-apps">

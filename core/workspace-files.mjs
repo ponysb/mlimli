@@ -100,7 +100,7 @@ export function readWorkspaceFile(relativePath) {
     return { ...info, kind: 'office-text', officeType: 'PowerPoint', content: pptxExtractText(buffer), slides: pptxRenderSlides(buffer) };
   }
   if (ext === '.xlsx') {
-    const sheets = xlsxRead(fs.readFileSync(abs)).map((sheet) => ({ name: sheet.name, rows: sheet.rows.slice(0, 500).map((row) => row.slice(0, 100)) }));
+    const sheets = xlsxRead(fs.readFileSync(abs), { maxRows:500, maxColumns:100 });
     return { ...info, kind: 'spreadsheet', officeType: 'Excel', sheets };
   }
   if (ext === '.doc' || ext === '.xls' || ext === '.ppt') {

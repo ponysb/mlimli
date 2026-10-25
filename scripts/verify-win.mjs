@@ -6,8 +6,11 @@ import { promisify } from 'node:util';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import clientEnvironment from '../core/client-env.cjs';
 import { runtimeDependencySpecifiers, verifyRuntimeDependencies } from './runtime-dependencies.mjs';
+
+const { assertGenOfficePackage } = createRequire(import.meta.url)('../electron/genoffice-package.cjs');
 
 export async function waitFor(check, timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs;
@@ -115,6 +118,12 @@ async function main() {
       assert.ok(fs.existsSync(path.join(client, relative)), `安装包缺少关键沙箱文件：${relative}`);
     }
     const dependencyAudit = verifyRuntimeDependencies(client);
+    const resources = path.join(path.dirname(path.resolve(executable)), 'resources');
+    if (!path.basename(executable).includes('Legacy')) {
+      const office = assertGenOfficePackage(path.join(resources, 'genoffice'), { platform: 'win32', arch: 'x64' });
+      assert.deepEqual(office.status, { docs: true, sheets: true, slides: true, pdf: true });
+      result.genOffice = 'passed';
+    }
     assert.ok(fs.existsSync(path.join(client, 'sandbox-runtime-repair.gz')), '安装包必须包含沙箱离线修复组件');
     assert.ok(fs.existsSync(path.join(client, 'core', 'sandbox-repair-manifest.json')), '安装包必须包含沙箱修复清单');
     const bundledNode = path.join(path.dirname(path.resolve(executable)), 'resources', 'node', 'node.exe');
@@ -126,7 +135,8 @@ async function main() {
       const dependencyProbe = [
         "const fs=require('node:fs');const path=require('node:path');",
         '(async()=>{',
-        `for(const name of ${JSON.stringify([...runtimeDependencySpecifiers(client).keys()])}) await import(name);`,
+        `for(const name of ${JSON.stringify([...runtimeDependencySpecifiers(client).keys()].filter(name => !name.endsWith('/package.json')))}) await import(name);`,
+        `for(const name of ${JSON.stringify([...runtimeDependencySpecifiers(client).keys()].filter(name => name.endsWith('/package.json')))}) require.resolve(name);`,
         "const runtime=await import('@anthropic-ai/sandbox-runtime');",
         "if(typeof runtime.installWindowsSandboxAsync!=='function')throw new Error('sandbox install export missing');",
         "const nativeArch=process.arch==='ia32'&&/^(AMD64|ARM64)$/i.test(process.env.PROCESSOR_ARCHITEW6432||'')?(process.env.PROCESSOR_ARCHITEW6432.toUpperCase()==='AMD64'?'x64':'arm64'):process.arch;",

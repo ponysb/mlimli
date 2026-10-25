@@ -14,7 +14,7 @@ import { queryApiLogs } from '../core/api-logs.mjs';
 import { onEvent } from '../core/events.mjs';
 import { initializeAgentRuntime, runSequence, contextForSession, stopSession } from '../core/runtime.mjs';
 import { reduceEvent, emptySession } from '../cli/modern/state.mjs';
-import { agentProfiles } from '../core/agent-profiles.mjs';
+import { resolveTaskAgent } from '../core/agent-profiles.mjs';
 
 const config = () => JSON.parse(fs.readFileSync(new URL('../config.example.json', import.meta.url), 'utf8'));
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -126,8 +126,9 @@ test('子 Agent 可回读自己长输出且仍受父工具白名单限制', asyn
 });
 
 test('子 Agent 默认无固定预算，显式长任务配置不再被 80 轮/30 分钟夹断', () => {
-  assert.ok(agentProfiles().every(p => p.maxSteps === null && p.maxDurationMs === null));
-  const worker = agentProfiles({ agent: { subagents: { profiles: { worker: { maxSteps: 4000, maxDurationMs: 172800000 } } } } }).find(p => p.id === 'worker');
+  assert.equal(resolveTaskAgent().maxSteps, null);
+  assert.equal(resolveTaskAgent().maxDurationMs, null);
+  const worker = resolveTaskAgent({ role: '验证账单', capabilities: ['read', 'write', 'command'] }, { agent: { subagents: { maxSteps: 4000, maxDurationMs: 172800000 } } });
   assert.equal(worker.maxSteps, 4000); assert.equal(worker.maxDurationMs, 172800000);
 });
 
@@ -163,7 +164,7 @@ test('真实循环收敛两个 mock 子 Agent，主上下文只接收结果，�
   assert.equal(contextForSession(stopped), context);
   stopSession(stopped.id); await rootRun;
   assert.ok(agentManager.view(stopped).tasks.every(task => task.status === 'cancelled'));
-  assert.equal(spawned.length, 3); assert.ok(fs.existsSync(path.join(root, '.agent', 'task-groups', `${stopped.id}.jsonl`)));
+  assert.equal(spawned.length, 3); assert.ok(fs.existsSync(path.join(root, '.agent', 'task-groups', `${stopped.id}.json`)));
 });
 
 test('终端保留并发子 Agent 的审批来源和队列', () => {
@@ -173,6 +174,43 @@ test('终端保留并发子 Agent 的审批来源和队列', () => {
   assert.equal(state.permission.sessionId, 'child-a');
   state = reduceEvent(state, { type: 'permission_resolved', sessionId: 'child-a', rootSessionId: 'root', seq: 3, reqId: 'a' });
   assert.equal(state.permission.sessionId, 'child-b');
+});
+
+test('快分支交接后主任务继续推理，不等待慢分支结束', { timeout: 8000 }, async t => {
+  const { session } = fixture(t);
+  await loadAll(); initializeAgentRuntime();
+  const context = contextForSession(session);
+  let releaseFast, releaseSlow, rootWaiting, rootResumed;
+  const waiting = new Promise(resolve => { rootWaiting = resolve; });
+  const resumed = new Promise(resolve => { rootResumed = resolve; });
+  const fast = new Promise(resolve => { releaseFast = resolve; });
+  const slow = new Promise(resolve => { releaseSlow = resolve; });
+  t.after(() => { releaseFast(); releaseSlow(); initializeAgentRuntime(); });
+  agentManager.configure({ config: () => context.config, stop() {}, run: async (child, instruction) => {
+    await (instruction.includes('FAST_BRANCH') ? fast : slow);
+    child.append({ type: 'task_summary', reason: 'done', summaryText: instruction.includes('FAST_BRANCH') ? 'FAST_EVIDENCE' : 'SLOW_EVIDENCE' });
+  } });
+  let stepStarts = 0;
+  const off = onEvent(event => {
+    if (event.sessionId !== session.id) return;
+    if (event.type === 'status' && event.text.includes('等待子 Agent')) rootWaiting();
+    if (event.type === 'message_start' && ++stepStarts === 2) rootResumed();
+  });
+  t.after(off);
+  const tasks = await withRunContext(context, () => agentManager.spawn(session, { tasks: [{ instruction: 'FAST_BRANCH' }, { instruction: 'SLOW_BRANCH' }] }));
+  const run = runSequence(session, '[主任务协作汇总]\n核对资料', [], { context });
+  try {
+    await waiting;
+    releaseFast();
+    await resumed;
+    assert.equal(tasks[0].status, 'completed');
+    assert.equal(tasks[1].status, 'running');
+    assert.ok(session.entries().some(entry => entry.source === 'agent' && entry.content.includes('FAST_EVIDENCE')));
+  } finally {
+    releaseFast(); releaseSlow();
+    await run;
+  }
+  assert.equal(session.entries().findLast(entry => entry.type === 'turn_end').reason, 'done');
 });
 
 test('写入租约阻止子 worker 与主工具重叠，失败依赖不会启动', async t => {

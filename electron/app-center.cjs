@@ -192,16 +192,17 @@ function createAppBrowser({ electron, getWindow, serverUrl, dataRoot, testAllowL
       item.view.setBounds(surface); attachedSurface = { ...surface };
     }
   }
-  function dispatchMenuAction(action, value) {
+  function dispatchMenuAction(browserId, action, value) {
     const win = getWindow();
     if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
-    win.webContents.send('app-browser-menu-action', { browserId: activeId, action, value });
+    win.webContents.send('app-browser-menu-action', { browserId, action, value });
   }
   function popupMenu(kind, position = {}) {
     const win = getWindow();
     if (!win || win.isDestroyed() || !Menu) return false;
-    const item = views.get(activeId);
-    const send = (action, value) => () => dispatchMenuAction(action, value);
+    const browserId = position.browserId || activeId;
+    const item = views.get(browserId);
+    const send = (action, value) => () => dispatchMenuAction(browserId, action, value);
     const extensionItems = (item ? extensionPaths().map(extensionPath => {
       try { const info = extensionInfo(extensionPath); return { label: `${info.name}${info.version ? `  ${info.version}` : ''}`, enabled: false }; }
       catch { return { label: path.basename(extensionPath), enabled: false }; }
@@ -427,6 +428,7 @@ function createAppBrowser({ electron, getWindow, serverUrl, dataRoot, testAllowL
       return this.listExtensions();
     },
     async pageAction(data = {}) {
+      if (data.action === 'menu-overlay') return { ok: popupMenu(data.kind === 'extensions' ? 'extensions' : 'more', data) };
       const item = views.get(data.browserId || activeId); if (!item) throw new Error('请先打开网页');
       if (data.action === 'zoom') {
         const factor = Math.max(0.5, Math.min(2, Number(data.factor) || 1)); item.contents.setZoomFactor(factor); return { zoomFactor: factor };
@@ -455,7 +457,6 @@ function createAppBrowser({ electron, getWindow, serverUrl, dataRoot, testAllowL
       if (data.action === 'preview') {
         return { dataUrl: (await item.contents.capturePage()).toDataURL() };
       }
-      if (data.action === 'menu-overlay') return { ok: popupMenu(data.kind === 'extensions' ? 'extensions' : 'more', data) };
       if (data.action === 'copy-text') {
         const value = String(data.text || '').slice(0, 10000);
         if (!value) return { ok: false };

@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v0.4.5-245b43" alt="v0.4.5" />
+  <img src="https://img.shields.io/badge/version-v0.5.0-245b43" alt="v0.5.0" />
   <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="Apache-2.0" />
   <img src="https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-64748b" alt="Windows / macOS / Linux" />
 </p>
@@ -169,6 +169,8 @@ For details, see [Runtime Sandbox](docs/SANDBOX.md), [App Center](docs/APP-CENTE
 
 ## Run from source
 
+This repository contains the client: the desktop UI, local Agent runtime, CLI / TUI, and client plugins. `server.mjs` runs locally as part of the client. Account services, administration backends, enterprise backends, and the public website are outside the open-source scope.
+
 Source builds require **Node.js 22.12 or later** and npm:
 
 ```sh
@@ -177,10 +179,12 @@ cd mlimli
 npm ci
 cp config.example.json config.json
 npm run build:web
-npm run electron
+npm start
 ```
 
 On Windows PowerShell, use `Copy-Item config.example.json config.json` instead of `cp`. For browser mode, run `npm start` and open `http://127.0.0.1:10860`. Packaging and contribution details live in the [Windows packaging guide](docs/WINDOWS-PACKAGING.md), the [terminal guide](docs/TERMINAL.md), and the repository's development documentation.
+
+For desktop development, prepare the third-party editor sources as described in the [GenOffice build guide](docs/GENOFFICE.md), run `npm run build:office` and `npm run verify:office`, then run `npm run electron`. Editor sources and generated binaries are excluded from this repository; release installers include the required components.
 
 ## Community and support
 

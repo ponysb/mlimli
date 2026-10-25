@@ -63,6 +63,34 @@ confirmation showing the stored pattern. Plugin questions use the dialog input m
 `/help` opens the command menu. Local commands: `/new`, `/resume`, `/model`,
 `/config`, `/mode`, `/expert`, `/skills`, `/login`, `/logout`, `/compact`, `/stop`, `/exit`.
 Other plugin slash commands run through the Agent. Credentials are masked in input forms.
+Both terminal interfaces expose these additional commands:
+
+| Commands | Workflow |
+| --- | --- |
+| `/continue`, `/goal`, `/plan`, `/result` | Checkpoint recovery, task goals, plan and verification |
+| `/attach PATH`, `/attachments` | Add local files, remove pending attachments; Enter sends attachments even without text |
+| `/reference QUERY`, `/files PATH` | Insert file/folder references or inspect project files |
+| `/reasoning` | Select declared model reasoning values or restore defaults |
+| `/older`, `/entry ID` | Load earlier history or inspect a complete entry |
+| `/rename`, `/fork`, `/delete` | Manage the current conversation |
+| `/spawn`, `/agents`, `/queue` | Dispatch and inspect child Agents; manage queued messages |
+| `/workspace [PATH]`, `/context` | Switch projects or inspect context |
+| `/channels`, `/memories`, `/schedules` | Manage messaging channels, memories and scheduled tasks |
+| `/acp`, `/sandbox`, `/rules` | Configure external Agents, inspect/toggle sandbox and remove approval rules |
+| `/plugins`, `/logs` | Inspect installed capabilities and recent API usage |
+
+Paths after commands may contain spaces; enter paths directly without shell quotes.
+Pending attachments stay isolated per conversation and in memory only. They are not saved
+to terminal draft files. Attachment count, MIME detection and size limits match the core.
+Modern TUI initially loads 120 history entries. `/older` loads the preceding page;
+`/entry ID` opens text truncated by the history preview.
+`/resume` opens a saved conversation; `/continue` explicitly resumes an interrupted task
+after showing its goal and operations whose outcomes are unknown.
+Terminal interfaces do not render Office/media previews, record audio, edit whiteboards,
+or host the desktop application browser. Platform-specific installation remains in desktop UI.
+`/agents` lists child Agent status and results, and supports steering, follow-up and stopping
+individual children. `/queue` lists pending messages and supports removing them or applying
+them to the current task. Both commands remain available while a task is running.
 Keys can use `MLI_API_KEY` instead of storage.
 
 Legacy Terminal Kit keeps its original keys: Ctrl+C cancels, Ctrl+D exits,

@@ -8,6 +8,7 @@ import { withRunContext } from '../core/run-context.mjs';
 import { memoryLocations, saveMemory, listMemories, getMemory, deleteMemory, approveMemory, restoreMemory, createMemorySnapshot, recordMemoryRecall, searchMemories } from '../core/memory.mjs';
 import { updateMemorySettings } from '../core/memory-policy.mjs';
 import { MemoryLearner } from '../core/memory-learning.mjs';
+import { listUserProfiles } from '../core/user-profiles.mjs';
 import { searchHistory } from '../core/memory-history.mjs';
 import { buildSystemPrompt } from '../core/prompts.mjs';
 import { executeTool, getTools, loadAll } from '../core/plugins.mjs';
@@ -108,6 +109,34 @@ test('去重、凭据脱敏和正文预算；同轮冻结，下轮更新', t => 
   });
 });
 
+test('召回优先匹配稀有主题，并用确认与使用反馈打破相关性平局', t => {
+  const { run } = fixture(t);
+  run(() => {
+    const exact = saveMemory({ title: '支付回调验签', content: 'webhook 请求必须校验签名和时间戳', confidence: 'observed' });
+    const generic = saveMemory({ title: '支付排错', content: '检查支付状态和服务日志', confidence: 'observed' });
+    const first = searchMemories('支付回调验签 webhook');
+    assert.equal(first[0].id, exact.id);
+    saveMemory({ id: generic.id, content: '检查支付状态和服务日志', expectedRevision: generic.revision, confidence: 'user_confirmed' });
+    for (let i = 0; i < 4; i++) recordMemoryRecall({ ids: [{ id: generic.id, scope: 'project' }] });
+    const tieBreak = searchMemories('支付');
+    assert.equal(tieBreak[0].id, generic.id);
+  });
+});
+
+test('无关查询不返回正文；检索过滤停用和待审核条目且限制返回数量', t => {
+  const { run } = fixture(t);
+  run(() => {
+    for (let index = 0; index < 35; index++) saveMemory({ title: `webhook ${index}`, content: `webhook 验签步骤 ${index}` });
+    saveMemory({ content: 'webhook 已停用', status: 'archived' });
+    saveMemory({ content: 'webhook 待审核', status: 'pending' });
+    assert.equal(searchMemories('nonexistent-unique-topic').length, 0);
+    assert.equal(createMemorySnapshot('nonexistent-unique-topic').ids.length, 0);
+    assert.equal(searchMemories('webhook', { limit: 999 }).length, 30);
+    assert.equal(searchMemories('webhook', { limit: -2 }).length, 1);
+    assert.ok(searchMemories('webhook').every(item => item.status === 'active'));
+  });
+});
+
 test('关闭后隐藏记忆工具、拒绝直接执行、取消提示注入，仍可手动管理', async t => {
   const { run } = fixture(t); await loadAll();
   await run(async () => {
@@ -167,6 +196,34 @@ test('自动沉淀真正调用提炼器，校验证据、去除猜测和内部�
   run(() => { const items = listMemories({ scope: 'all' }); assert.equal(items.length, 1); assert.equal(items[0].source, 'auto'); assert.notEqual(items[0].id, 'overwrite'); assert.equal(items[0].pinned, false); assert.equal(items[0].origin.entryIds[0], user.id); });
   assert.equal(learner.status(context.sessionStorageRoot)[0].status, 'completed');
   assert.equal(run(() => learner.enqueue(session, summary, context)), undefined);
+});
+
+test('回顾自动补充档案，只接受用户原话证据并拒绝工具和伪造引用', async t => {
+  const { context, run } = fixture(t); const { session, user, tool, summary } = learningSession(context.sessionStorageRoot);
+  const learner = new MemoryLearner({ complete: async () => JSON.stringify({ memories: [], profileUpdates: [
+    { field: 'preferences', value: '始终使用中文回答', entryId: user.id, quote: '始终使用中文回答' },
+    { field: 'role', value: '负责人', entryId: user.id, quote: '我是负责人' },
+    { field: 'expertise', value: '18 passed', entryId: tool.id, quote: '18 passed' }
+  ] }) }); t.after(() => learner.dispose());
+  run(() => learner.enqueue(session, summary, context)); await settled(learner);
+  run(() => { const profile = listUserProfiles().active; assert.equal(profile.preferences, '始终使用中文回答'); assert.equal(profile.role, ''); assert.equal(profile.expertise, ''); });
+});
+
+test('短自述正常学习，畸形候选隔离，首次建卡后的偏好落入新档案空间', async t => {
+  const { context, run } = fixture(t);
+  const session = Session.create('短自述', { directory: path.join(context.sessionStorageRoot, '.agent', 'sessions') });
+  const user = session.append({ type: 'message', role: 'user', turnId: 't', content: '我喜欢用中文回答' });
+  const summary = session.append({ type: 'task_summary', turnId: 't', reason: 'done' });
+  const learner = new MemoryLearner({ complete: async () => JSON.stringify({
+    memories: [null, { scope: 'global', kind: 'preference', title: '无效证据', content: '无效信息', evidence: [null] }, { scope: 'global', kind: 'preference', title: '语言', content: '使用中文回答', evidence: [{ entryId: user.id, quote: '喜欢用中文回答' }] }],
+    profileUpdates: [null, { field: 'preferences', value: '喜欢用中文回答', quote: '喜欢用中文回答', entryId: user.id }]
+  }) }); t.after(() => learner.dispose());
+  run(() => assert.ok(learner.enqueue(session, summary, context))); await settled(learner);
+  run(() => {
+    assert.equal(listUserProfiles().active.preferences, '喜欢用中文回答');
+    assert.equal(listMemories({ scope: 'global' })[0].content, '使用中文回答');
+  });
+  assert.equal(learner.status(context.sessionStorageRoot)[0].status, 'completed');
 });
 
 test('后台纠正总是待审核；开关或手动编辑使在途结果失效', async t => {

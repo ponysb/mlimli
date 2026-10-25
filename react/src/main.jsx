@@ -46,6 +46,7 @@ import {
   FileImage,
   FilePlus2,
   FileText,
+  Film,
   Folder,
   FolderOpen,
   FolderPlus,
@@ -106,6 +107,7 @@ import PermissionModePopover, {
 import VoiceProfilesSettings from "./VoiceProfilesSettings.jsx";
 import SpeechModelSettings from "./SpeechModelSettings.jsx";
 import TerminalWorkspace from "./TerminalWorkspace.jsx";
+const FilmCanvas = React.lazy(() => import("./FilmCanvas.jsx"));
 import {
   applyTerminalEvent,
   createTerminalSession,
@@ -126,6 +128,12 @@ import ReasoningSettings from "./ReasoningSettings.jsx";
 import MemorySettings from "./MemorySettings.jsx";
 import AcpSettings from "./AcpSettings.jsx";
 import TaskSplitLayout from "./TaskSplitLayout.jsx";
+import PreviewAnnotations, { AnnotationSurface } from "./PreviewAnnotations.jsx";
+import AnnotatedHtml from './AnnotatedHtml.jsx';
+const GenOfficeEditor = React.lazy(() => import('./GenOfficeEditor.jsx'));
+const ImagePreview = React.lazy(() => import('./ImagePreview.jsx'));
+import './genoffice.css';
+const AnnotatedPdf = React.lazy(() => import('./AnnotatedPdf.jsx'));
 import SessionContextPanel from "./SessionContextPanel.jsx";
 import DesktopTitlebar from "./DesktopTitlebar.jsx";
 import SubagentPanel, { AgentStatusButton } from "./SubagentPanel.jsx";
@@ -218,6 +226,7 @@ function App() {
     }
   });
   const [appTabOpen, setAppTabOpen] = useState(false);
+  const [terminalTabOpen, setTerminalTabOpen] = useState(false);
   const [browserTabs, setBrowserTabs] = useState([]);
   const [workspaceTabs, setWorkspaceTabs] = useState([]);
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState('conversation');
@@ -271,7 +280,7 @@ function App() {
       status: "connecting",
       attempt: 0,
     }),
-    [sidebarOpen, setSidebarOpen] = useState(() => window.desktop?.isElectron ? window.innerWidth > 800 : true),
+    [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 800),
     [error, setError] = useState(null),
     [selectedFile, setSelectedFile] = useState(null),
     [previewOpen, setPreviewOpen] = useState(false),
@@ -397,7 +406,7 @@ function App() {
       });
       setRunning(Boolean(listed?.running));
     }
-    setView("task");
+    if (!preserveScroll) setView("task");
     if (window.innerWidth <= 800) setSidebarOpen(false);
     try {
       const data = await api(
@@ -559,11 +568,16 @@ function App() {
   }
   function setSessionRunning(sessionId, value) {
     if (!sessionId) return;
-    setSessions((items) =>
+    const updateRunning = (items) =>
       items.map((item) =>
         item.id === sessionId && item.running !== value
           ? { ...item, running: value }
           : item,
+      );
+    setSessions(updateRunning);
+    setWorkspaceSessions((groups) =>
+      Object.fromEntries(
+        Object.entries(groups).map(([id, items]) => [id, updateRunning(items)]),
       ),
     );
   }
@@ -1100,13 +1114,14 @@ function App() {
       setError(toUiError(e, "session_delete"));
     }
   }
-  async function send(override = null) {
-    if (attachmentLoading || compactLock.current) return;
+  async function send(override = null, extraAttachments = []) {
+    if (attachmentLoading || compactLock.current) return false;
     const direct = typeof override === "string";
+    const keepFilmCanvasOpen = direct && (view === "film-canvas" || view === "file");
     const value = (direct ? override : draft).trim();
-    if ((!value && !attachments.length) || !activeWorkspace) return;
-    const pending = direct ? [] : attachments,
-      clientMessageId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const pending = direct ? extraAttachments : [...attachments, ...extraAttachments];
+    if ((!value && !pending.length) || !activeWorkspace) return false;
+    const clientMessageId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     if (!direct) {
       setDraft("");
       setAttachments([]);
@@ -1122,10 +1137,11 @@ function App() {
           })),
         });
         setCurrent((x) => (x ? { ...x, queue: result.queue } : x));
+        return true;
       } catch (e) {
-        setDraft(value);
-        setAttachments(pending);
+        if (!direct) { setDraft(value); setAttachments(pending); }
         setError(toUiError(e, "queue_send"));
+        return false;
       }
       return;
     }
@@ -1150,7 +1166,7 @@ function App() {
           });
         target = await get(`/api/session/${created.id}`);
         setPendingExpert(null);
-        setView("task");
+        setView(keepFilmCanvasOpen ? view : "task");
         await loadSessions();
       }
       const optimistic = {
@@ -1186,6 +1202,7 @@ function App() {
           mime,
         })),
       });
+      return true;
     } catch (e) {
       setRunning(false);
       setCurrent((x) =>
@@ -1198,11 +1215,11 @@ function App() {
             }
           : x,
       );
-      setAttachments(pending);
-      setDraft(value);
+      if (!direct) { setAttachments(pending); setDraft(value); }
       if (e.code === "ACCOUNT_REQUIRED" || e.details?.status === 401)
         setAccountOpen(true);
       setError(toUiError(e, "message_send"));
+      return false;
     }
   }
   async function showCapabilityGuide() {
@@ -1412,6 +1429,7 @@ function App() {
   }
   function openTerminal() {
     if (view !== 'terminal') terminalReturnView.current = { view, activeWorkspaceTab };
+    setTerminalTabOpen(true);
     setView("terminal");
     if (window.innerWidth <= 800) setSidebarOpen(false);
   }
@@ -1505,6 +1523,7 @@ function App() {
     setTerminalPanes(panes => panes.length <= 1 ? panes : panes.filter(item => item.id !== paneId));
   }
   function closeTerminal() {
+    setTerminalTabOpen(false);
     for (const pane of terminalPanes) {
       if (pane.launching && !pane.terminal?.terminalId) terminalCloseRequested.current.add(pane.id);
       if (pane.terminal?.terminalId) post(`/api/terminal/${pane.terminal.terminalId}/stop`).catch(() => {});
@@ -2015,20 +2034,22 @@ function App() {
         />
       )}{" "}
       <main className={`workspace-main ${taskSession ? "has-task-session" : ""}`}>
-        {["task", "workbench", "file", "browser", "app-center"].includes(view) ? (
+        {["task", "workbench", "file", "browser", "app-center", "terminal", "film-canvas"].includes(view) ? (
           <div className="tabbed-workspace">
             <header className="workspace-tabbar">
+              <button className="workspace-sidebar-toggle" aria-label={sidebarOpen ? '收起项目侧栏' : '展开项目侧栏'} title={sidebarOpen ? '收起项目侧栏' : '展开项目侧栏'} onClick={() => setSidebarOpen(value => !value)}><Menu size={17}/></button>
               <div className="workspace-tabs" role="tablist" aria-label="工作区标签页">
                 <button role="tab" title={current?.title || '会话'} aria-selected={["task", "workbench"].includes(view)} onClick={() => { setActiveWorkspaceTab('conversation'); setView(current ? 'task' : 'workbench'); }}><MessageSquare size={14}/><span>{current?.title || '会话'}</span></button>
                 {appTabOpen && <div className={`workspace-file-tab ${view === 'app-center' ? 'active' : ''}`}><button role="tab" aria-selected={view === 'app-center'} onClick={() => setView('app-center')}><Globe size={14}/>应用台</button><button className="workspace-tab-close" aria-label="关闭应用台标签页" title="关闭标签页" onClick={() => { setAppTabOpen(false); if (view === 'app-center') setView(current ? 'task' : 'workbench'); }}><X size={12}/></button></div>}
-                {browserTabs.map(tab => <div className={`workspace-file-tab ${view === 'browser' && activeWorkspaceTab === tab.id ? 'active' : ''}`} key={tab.id}>
-                  <button role="tab" aria-selected={view === 'browser' && activeWorkspaceTab === tab.id} title={tab.url || tab.title} onClick={() => { setActiveWorkspaceTab(tab.id); setView('browser'); }}><Globe size={14}/><span>{tab.title || '新标签页'}</span></button>
+                {browserTabs.map(tab => <div className={`workspace-file-tab ${(tab.kind === 'film-canvas' ? view === 'film-canvas' : view === 'browser') && activeWorkspaceTab === tab.id ? 'active' : ''}`} key={tab.id}>
+                  <button role="tab" aria-selected={(tab.kind === 'film-canvas' ? view === 'film-canvas' : view === 'browser') && activeWorkspaceTab === tab.id} title={tab.title} onClick={() => { setActiveWorkspaceTab(tab.id); setView(tab.kind === 'film-canvas' ? 'film-canvas' : 'browser'); }}>{tab.kind === 'film-canvas' ? <Film size={14}/> : <Globe size={14}/>}<span>{tab.title || '新标签页'}</span></button>
                   <button className="workspace-tab-close" aria-label={`关闭 ${tab.title || '网页标签页'}`} title="关闭标签页" onClick={() => closeBrowserTab(tab.id)}><X size={12}/></button>
                 </div>)}
                 {workspaceTabs.map(tab => <div className={`workspace-file-tab ${view === 'file' && activeWorkspaceTab === tab.id ? 'active' : ''}`} key={tab.id}>
                   <button role="tab" aria-selected={view === 'file' && activeWorkspaceTab === tab.id} title={tab.file?.path || tab.media?.name} onClick={() => { setActiveWorkspaceTab(tab.id); setSelectedFile(tab.file || null); setView('file'); }}><File size={14}/><span>{tab.file?.name || tab.media?.name || '预览'}{tab.dirty ? ' *' : ''}</span></button>
                   <button className="workspace-tab-close" aria-label={`关闭 ${tab.file?.name || tab.media?.name || '预览'}`} title="关闭标签页" onClick={() => closeWorkspaceTab(tab.id)}><X size={12}/></button>
                 </div>)}
+                {terminalTabOpen && <div className={`workspace-file-tab ${view === 'terminal' ? 'active' : ''}`}><button role="tab" aria-selected={view === 'terminal'} onClick={openTerminal}><SquareTerminal size={14}/><span>终端</span></button><button className="workspace-tab-close" aria-label="关闭终端标签页" onClick={closeTerminal}><X size={12}/></button></div>}
                 <button className="workspace-new-tab" title="新建网页标签页" aria-label="新建网页标签页" onClick={newBrowserTab}><Plus size={17}/></button>
               </div>
               {taskSession && ['task', 'workbench'].includes(view) ? <TaskTopbar actionsOnly contextOpen={contextPopupOpen} contextMode={contextPopupMode} onShowContext={() => { if (contextPopupOpen && contextPopupMode === 'context') { toggleContextPopup(); return; } setContextPopupMode('context'); if (!contextPopupOpen) setContextPopupOpen(true); }} onShowAvailable={() => { if (contextPopupOpen && contextPopupMode === 'available') { toggleContextPopup(); return; } setContextPopupMode('available'); if (!contextPopupOpen) setContextPopupOpen(true); }} contextSplitOpen={rightPanel === 'context'} onToggleContext={toggleContextPopup} onToggleContextSplit={() => updateRightPanel('context')} filesOpen={rightPanel === 'files'} onToggleFiles={() => updateRightPanel('files')}/> : <button className={`workspace-files-toggle ${rightPanel === 'files' ? 'active' : ''}`} title={rightPanel === 'files' ? '关闭文件目录' : '打开文件目录'} aria-label={rightPanel === 'files' ? '关闭文件目录' : '打开文件目录'} aria-pressed={rightPanel === 'files'} onClick={() => updateRightPanel('files')}><FolderOpen size={17}/></button>}
@@ -2051,12 +2072,18 @@ function App() {
                 <div className="workspace-tab-pane" hidden={view !== 'app-center'}>
                   {appTabOpen && <AppCenter get={get} post={post} request={appRequest} onFiles={() => openRightPanel('files')} onTerminal={openTerminal} overlayVisible={Boolean(view !== 'app-center' || error || accountOpen || (uiRequest && uiRequest.presentation !== 'inline'))} onResume={id => { setAppRequest(null); loadSession(id); }} onError={value => setError(toUiError(value, 'app_center'))} onToggle={toggleSidebar}/>}
                 </div>
-                {browserTabs.map(tab => <div className="workspace-tab-pane" key={tab.id} hidden={view !== 'browser' || activeWorkspaceTab !== tab.id}>
-                  <BrowserWorkspace browserId={tab.id} initialUrl={tab.url} active={view === 'browser' && activeWorkspaceTab === tab.id} onFiles={() => openRightPanel('files')} onTerminal={openTerminal} onOpenApp={openSavedApp} onState={state => updateBrowserTab(tab.id, state)} onError={value => setError(toUiError(value, 'browser'))}/>
+                {browserTabs.filter(tab => tab.kind !== 'film-canvas').map(tab => <div className="workspace-tab-pane" key={tab.id} hidden={view !== 'browser' || activeWorkspaceTab !== tab.id}>
+                  <BrowserWorkspace browserId={tab.id} initialUrl={tab.url} active={view === 'browser' && activeWorkspaceTab === tab.id} onFiles={() => openRightPanel('files')} onTerminal={openTerminal} onFilmCanvas={() => { setBrowserTabs(tabs => tabs.map(item => item.id === tab.id ? { ...item, kind: 'film-canvas', title: 'AI 画布', url: '' } : item)); setActiveWorkspaceTab(tab.id); setView('film-canvas'); }} onOpenApp={openSavedApp} onState={state => updateBrowserTab(tab.id, state)} onError={value => setError(toUiError(value, 'browser'))}/>
                 </div>)}
                 {workspaceTabs.map(tab => <div className="workspace-tab-pane" key={tab.id} hidden={view !== 'file' || activeWorkspaceTab !== tab.id}>
-                  <PreviewWorkspace active={view === 'file' && activeWorkspaceTab === tab.id} file={tab.file} media={tab.media} workspace={tab.workspace} onDirtyChange={dirty => setWorkspaceTabs(tabs => tabs.map(item => item.id === tab.id && item.dirty !== dirty ? { ...item, dirty } : item))} onClose={() => closeWorkspaceTab(tab.id)} onSaved={() => setFileRevision(x => x + 1)} onError={value => setError(toUiError(value, 'preview'))}/>
+                  <PreviewWorkspace active={view === 'file' && activeWorkspaceTab === tab.id} file={tab.file} media={tab.media} workspace={tab.workspace} annotationSession={current?.id || 'new'} onCollaborate={tab.workspace?.path === activeWorkspace?.path ? send : undefined} onDirtyChange={dirty => setWorkspaceTabs(tabs => tabs.map(item => item.id === tab.id && item.dirty !== dirty ? { ...item, dirty } : item))} onClose={() => closeWorkspaceTab(tab.id)} onSaved={() => setFileRevision(x => x + 1)} onError={value => setError(toUiError(value, 'preview'))}/>
                 </div>)}
+                <div className="workspace-tab-pane" hidden={view !== 'film-canvas'}><React.Suspense fallback={<div className="film-canvas-loading"><LoaderCircle className="spin" size={20}/></div>}><FilmCanvas workspace={activeWorkspace} current={current} running={running} entries={entries} onSend={send} onStop={stop} active={view === 'film-canvas'} info={info} onCompact={compactContext} onGoal={manageGoal} canCompact={Boolean(current)} compacting={compacting} onExpert={expert => current ? applyExpert(expert) : setPendingExpert(expert)} sessionControls={<>{uiRequest?.presentation === "inline" && <InlineUiRequest request={uiRequest} onResolve={resolveUiRequest} onError={value => setError(toUiError(value, "canvas"))}/ >}{permission && current && <PermissionBar request={permission} sessionId={current.id} onResolved={() => { setPermission(null); loadSession(current.id, { preserveScroll: true }); }}/>}</>} conversation={entries.length || live ? <Conversation entries={entries.map(entry => {
+                  if (entry.role !== 'user') return entry;
+                  const clean = text => typeof text === 'string' ? text.split('\n\n[AI 影视画布上下文]')[0] : text;
+                  return { ...entry, text: clean(entry.text), content: Array.isArray(entry.content) ? entry.content.map(part => part.type === 'text' ? { ...part, text: clean(part.text) } : part) : clean(entry.content) };
+                })} live={live} running={running} sessionId={current?.id} onOpenMedia={openMediaPreview} onOpenFile={openFile}/> : null}/></React.Suspense></div>
+                <div className="workspace-tab-pane" hidden={view !== 'terminal'}><TerminalWorkspace panes={terminalPanes} workspace={activeWorkspace} onStart={startInteractiveTerminal} onInput={writeInteractiveTerminal} onResize={resizeInteractiveTerminal} onRun={runTerminal} onStop={stopTerminal} onClear={clearTerminal} onAddPane={addTerminalPane} onClosePane={closeTerminalPane} onClose={closeTerminal} onToggle={toggleSidebar}/></div>
               </div>
               <aside className={`workspace-right-panel ${visibleRightPanel ? 'is-open' : ''} ${rightPanelContent === 'files' ? 'is-files' : ''} ${rightPanelResizing ? 'is-resizing' : ''}`} aria-label={rightPanelContent === 'context' ? '任务上下文' : '文件目录'} aria-hidden={!visibleRightPanel} inert={!visibleRightPanel}>
                 {visibleRightPanel === 'files' && <div className="workspace-right-panel-resize" role="separator" aria-label="调整文件目录宽度" aria-orientation="vertical" onPointerDown={startRightPanelResize}/>} 
@@ -2524,8 +2551,8 @@ function Sidebar({
                           <span className="session-title">
                             {s.title || "未命名会话"}
                           </span>
-                            <span className="session-status" aria-label={s.running ? "运行中" : unreadSessionIds?.has(s.id) ? "有未查看更新" : undefined}>
-                              {s.running ? <LoaderCircle className="session-status-icon" size={14} /> : unreadSessionIds?.has(s.id) ? <i className="session-unread" /> : null}
+                            <span className="session-status" role="status" title={s.running ? "运行中" : unreadSessionIds?.has(s.id) ? "已完成，未查看" : undefined} aria-label={s.running ? "运行中" : unreadSessionIds?.has(s.id) ? "已完成，未查看" : undefined}>
+                              {s.running ? <LoaderCircle className="session-status-icon" size={14} /> : unreadSessionIds?.has(s.id) ? <Check className="session-completed-icon" size={14} /> : null}
                             </span>
                         </button>
                         <button
@@ -6520,6 +6547,8 @@ function FileIcon({ name }) {
 
 function PreviewWorkspace({
   active = true,
+  onCollaborate,
+  annotationSession,
   onDirtyChange,
   file,
   media,
@@ -6528,6 +6557,7 @@ function PreviewWorkspace({
   onSaved,
   onError,
 }) {
+  const annotationScope = useRef(annotationSession);
   if (media) {
     const source = media.dataUrl || media.url;
     const content =
@@ -6562,6 +6592,8 @@ function PreviewWorkspace({
   }
   return (
     <FileWorkspace
+      onCollaborate={onCollaborate}
+      annotationSession={annotationScope.current}
       active={active}
       onDirtyChange={onDirtyChange}
       file={file}
@@ -6576,6 +6608,8 @@ function PreviewWorkspace({
 
 function FileWorkspace({
   active = true,
+  onCollaborate,
+  annotationSession,
   onDirtyChange,
   file,
   workspace,
@@ -6585,35 +6619,43 @@ function FileWorkspace({
   onClose,
   previewMode = false,
 }) {
+  const [annotationToolbarTarget, setAnnotationToolbarTarget] = useState(null);
+  const [officeEditing, setOfficeEditing] = useState(false);
+  const fileLoadGeneration = useRef(0);
   const [data, setData] = useState(null),
     [content, setContent] = useState(""),
     [saved, setSaved] = useState(""),
     [loading, setLoading] = useState(false),
     [htmlPreview, setHtmlPreview] = useState(
-      previewMode && /\.html?$/i.test(file?.name || ""),
+      /\.html?$/i.test(file?.name || ""),
     ),
     [markdownPreview, setMarkdownPreview] = useState(false),
     [htmlRevision, setHtmlRevision] = useState(0);
   async function load() {
     if (!file?.path) return;
+    const generation = ++fileLoadGeneration.current;
     setLoading(true);
+    setData(null);
     try {
       const d = await get(`/api/file?path=${encodeURIComponent(file.path)}`);
+      if (generation !== fileLoadGeneration.current) return;
       setData(d);
       setContent(d.content || "");
       setSaved(d.content || "");
     } catch (e) {
-      onError(e);
+      if (generation === fileLoadGeneration.current) onError(e);
     } finally {
-      setLoading(false);
+      if (generation === fileLoadGeneration.current) setLoading(false);
     }
   }
   useEffect(() => {
-    setHtmlPreview(previewMode && /\.html?$/i.test(file?.name || ""));
+    setOfficeEditing(false);
+    setHtmlPreview(/\.html?$/i.test(file?.name || ""));
     setMarkdownPreview(false);
     setHtmlRevision(0);
     load();
-  }, [file?.path, previewMode]);
+    return () => { fileLoadGeneration.current++; };
+  }, [file?.path, workspace?.path, previewMode]);
   const dirty = data?.kind === "text" && content !== saved;
   const dirtyCallback = useRef(onDirtyChange);
   dirtyCallback.current = onDirtyChange;
@@ -6649,6 +6691,8 @@ function FileWorkspace({
     );
   const rawUrl = `/api/file/raw?path=${encodeURIComponent(file.path)}`;
   const browserUrl = `/api/file/raw/${file.path.split("/").map(encodeURIComponent).join("/")}${htmlRevision ? `?v=${htmlRevision}` : ""}`;
+  const annotatable = data && (htmlPreview || markdownPreview || ['image', 'pdf', 'office-text', 'office-binary', 'spreadsheet'].includes(data.kind));
+  const previewContent = <FilePreview data={data} content={content} setContent={setContent} rawUrl={htmlPreview ? browserUrl : rawUrl} renderHtml={htmlPreview} renderMarkdown={markdownPreview} />;
   return (
     <div className={`file-workspace ${previewMode ? "preview-workspace" : ""}`}>
       <header className="file-topbar">
@@ -6668,12 +6712,14 @@ function FileWorkspace({
           </span>
         </div>
         <div className="file-actions">
+          {window.desktop?.genOfficeOpen && /\.(docx|xlsx|pptx|pdf)$/i.test(file.name) && !officeEditing && <button className="genoffice-edit-button" aria-label="编辑文档" onClick={() => setOfficeEditing(true)}><Pencil size={14} />编辑<span role="tooltip">在本地编辑文档</span></button>}
+          {annotatable && !loading && !officeEditing && <div className="annotation-toolbar-slot" ref={setAnnotationToolbarTarget} />}
           <span>
             {data
               ? `${formatBytes(data.size)} · ${languageName(file.name)}`
               : ""}
           </span>
-          {previewMode && /\.html?$/i.test(file.name) && (
+          {/\.html?$/i.test(file.name) && (
             <>
               <button
                 title={htmlPreview ? "查看源码" : "打开预览"}
@@ -6702,7 +6748,7 @@ function FileWorkspace({
               {markdownPreview ? <Code2 size={15} /> : <Eye size={15} />}
             </button>
           )}
-          {data?.kind === "text" && (!previewMode || (!htmlPreview && !markdownPreview)) && (
+          {data?.kind === "text" && !htmlPreview && !markdownPreview && (
             <button className="file-save" onClick={save} disabled={!dirty}>
               <Save size={14} />
               保存
@@ -6729,27 +6775,20 @@ function FileWorkspace({
             </button>
           )}
           {onClose && (
-            <button title="关闭预览" aria-label="关闭预览" onClick={onClose}>
+            <button title="关闭预览" aria-label="关闭预览" onClick={async () => { try { if (officeEditing && !await window.desktop.genOfficeClose(`${workspace.path}/${file.path}`)) return; onClose(); } catch (error) { onError(error); } }}>
               <X size={16} />
             </button>
           )}
         </div>
       </header>
       <div className="file-surface">
-        {loading ? (
+        {officeEditing ? <React.Suspense fallback={<div className="file-empty">正在加载编辑器…</div>}><GenOfficeEditor key={`${workspace?.path}:${file.path}`} file={file} workspace={workspace} active={active} onCollaborate={onCollaborate} onPreview={() => { setOfficeEditing(false); load(); onSaved?.(); }} onError={onError} /></React.Suspense> : loading ? (
           <div className="file-empty">
             <LoaderCircle className="spin" size={24} />
             正在打开文件…
           </div>
         ) : (
-          <FilePreview
-            data={data}
-            content={content}
-            setContent={setContent}
-            rawUrl={htmlPreview ? browserUrl : rawUrl}
-            renderHtml={htmlPreview}
-            renderMarkdown={markdownPreview}
-          />
+          annotatable ? <PreviewAnnotations key={`${workspace?.path}:${file.path}:${annotationSession}`} storageKey={`mli:annotations:${workspace?.path}:${file.path}:${annotationSession}`} path={file.path} toolbarTarget={annotationToolbarTarget} onSend={dirty ? undefined : onCollaborate}>{previewContent}</PreviewAnnotations> : previewContent
         )}
       </div>
     </div>
@@ -6767,15 +6806,10 @@ function FilePreview({
   if (!data) return null;
   if (renderHtml && /\.html?$/i.test(data.name || ""))
     return (
-      <iframe
-        className="html-preview"
-        src={rawUrl}
-        title={`${data.name} 预览`}
-        sandbox="allow-scripts allow-forms"
-      />
+      <AnnotatedHtml src={rawUrl} name={data.name} />
     );
   if (renderMarkdown && /\.mdx?$/i.test(data.name || ""))
-    return <div className="markdown-file-preview"><Markdown text={content} /></div>;
+    return <div className="markdown-file-preview"><AnnotationSurface id="markdown" label="Markdown 文档" context={content}><Markdown text={content} /></AnnotationSurface></div>;
   if (data.kind === "text")
     return (
       <CodeMirror
@@ -6795,13 +6829,11 @@ function FilePreview({
     );
   if (data.kind === "image")
     return (
-      <div className="media-preview">
-        <img src={rawUrl} alt={data.name} />
-      </div>
+      <React.Suspense fallback={<div className="file-empty">正在加载图片…</div>}><ImagePreview src={rawUrl} name={data.name}/></React.Suspense>
     );
   if (data.kind === "pdf")
     return (
-      <iframe className="document-preview" src={rawUrl} title={data.name} />
+      <React.Suspense fallback={<div className="file-empty">正在加载 PDF…</div>}><AnnotatedPdf src={rawUrl} /></React.Suspense>
     );
   if (data.kind === "audio")
     return (
@@ -6821,9 +6853,9 @@ function FilePreview({
         {data.officeType === "PowerPoint" ? (
           <PresentationPreview slides={data.slides} text={data.content} />
         ) : (
-          <div className="office-document">
+          <div className="office-document"><AnnotationSurface id="office-document" label="文档" context={data.content}>
             <Markdown text={data.content || "文档没有可提取的文本内容"} />
-          </div>
+          </AnnotationSurface></div>
         )}
       </OfficePreview>
     );
@@ -6891,6 +6923,7 @@ function OfficeLayoutPreview({ data, onBack }) {
         return response.blob();
       })
       .then((blob) => {
+        if (controller.signal.aborted) return;
         objectUrl = URL.createObjectURL(blob);
         setSource(objectUrl);
         setStatus("ready");
@@ -6920,11 +6953,7 @@ function OfficeLayoutPreview({ data, onBack }) {
         )}
       </header>
       {status === "ready" ? (
-        <iframe
-          className="document-preview"
-          src={source}
-          title={`${data.name} 版式预览`}
-        />
+        <React.Suspense fallback={<div className="file-empty">正在加载 PDF…</div>}><AnnotatedPdf src={source} /></React.Suspense>
       ) : (
         <div className="office-preview-state">
           {status === "loading" ? (
@@ -6965,12 +6994,7 @@ function PresentationPreview({ slides = [], text = "" }) {
                 <span>幻灯片 {index + 1}</span>
                 <small>原始页面画布</small>
               </header>
-              <div className="presentation-slide-canvas">
-                <img
-                  src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`}
-                  alt={`幻灯片 ${index + 1}`}
-                />
-              </div>
+              <div className="presentation-slide-canvas"><AnnotatedHtml surfaceId={`slide-${index + 1}`} label={`幻灯片 ${index + 1}`} name={`幻灯片 ${index + 1}`} markup={`<!doctype html><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}svg{display:block;width:100%;height:100%}</style>${svg}`} /></div>
             </article>
           );
         })}
@@ -7000,7 +7024,7 @@ function PresentationPreview({ slides = [], text = "" }) {
             <span>幻灯片 {slide.number}</span>
             <small>{slide.lines.length} 行内容</small>
           </header>
-          <div className="presentation-slide-body">
+          <AnnotationSurface id={`slide-${slide.number}`} label={`幻灯片 ${slide.number}`} context={slide.lines.join('\n')} className="presentation-slide-body">
             {slide.lines.map((line, index) => (
               <p
                 key={`${slide.number}-${index}`}
@@ -7009,11 +7033,17 @@ function PresentationPreview({ slides = [], text = "" }) {
                 {line}
               </p>
             ))}
-          </div>
+          </AnnotationSurface>
         </article>
       ))}
     </div>
   );
+}
+
+function spreadsheetColumn(index) {
+  let label = '';
+  for (let value = index + 1; value > 0; value = Math.floor((value - 1) / 26)) label = String.fromCharCode(65 + (value - 1) % 26) + label;
+  return label;
 }
 
 function SpreadsheetPreview({ sheets }) {
@@ -7034,18 +7064,22 @@ function SpreadsheetPreview({ sheets }) {
       </div>
       <div className="sheet-grid-wrap">
         {sheet ? (
-          <table className="sheet-grid">
+          <AnnotationSurface key={active} id={`sheet-${active}`} label={`工作表 ${sheet.name}`} context={sheet.rows.map(row => row.join('\t')).join('\n')}><table className="sheet-grid">
             <tbody>
-              {sheet.rows.map((row, rowIndex) => (
+              {sheet.rows.map((row, rowIndex) => {
+                const cells = Array.isArray(row) ? row : row.cells || [];
+                const number = Array.isArray(row) ? rowIndex + 1 : row.number;
+                return (
                 <tr key={rowIndex}>
-                  <th>{rowIndex + 1}</th>
-                  {row.map((cell, columnIndex) => (
-                    <td key={columnIndex}>{String(cell ?? "")}</td>
+                  <th>{number}</th>
+                  {cells.map((cell, columnIndex) => (
+                    <td key={columnIndex} data-cell={`${spreadsheetColumn(columnIndex)}${number}`}>{String(cell ?? "")}</td>
                   ))}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
-          </table>
+          </table></AnnotationSurface>
         ) : (
           <div className="file-empty">工作簿没有可读取的工作表</div>
         )}

@@ -5,9 +5,10 @@ import { agentDataDir, getWorkspaceRoot, resolveInWorkspace } from './paths.mjs'
 
 const ALLOWED_MIME = new Set([
   'image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml',
-  'video/mp4', 'video/webm', 'video/quicktime', 'audio/mpeg', 'audio/wav', 'audio/ogg',
+  'video/mp4', 'video/webm', 'video/quicktime', 'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4',
 ]);
 const EXT_BY_MIME = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif', 'image/svg+xml': '.svg', 'video/mp4': '.mp4', 'video/webm': '.webm', 'video/quicktime': '.mov', 'audio/mpeg': '.mp3', 'audio/wav': '.wav', 'audio/ogg': '.ogg' };
+EXT_BY_MIME['audio/mp4'] = '.m4a';
 const MIME_BY_EXT = Object.fromEntries(Object.entries(EXT_BY_MIME).map(([mime, ext]) => [ext, mime]));
 const MAX_ASSET_BYTES = 100 * 1024 * 1024;
 

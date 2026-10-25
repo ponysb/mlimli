@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v0.4.5-245b43" alt="v0.4.5" />
+  <img src="https://img.shields.io/badge/version-v0.5.0-245b43" alt="v0.5.0" />
   <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="Apache-2.0" />
   <img src="https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-64748b" alt="Windows / macOS / Linux" />
 </p>
@@ -170,6 +170,8 @@
 
 ## 源码运行
 
+本仓库只发布客户端：桌面界面、本地 Agent 运行时、CLI / TUI 和客户端插件。`server.mjs` 是在本机运行的客户端服务；账户后台、管理后台、企业后台与官网不在开源范围内。
+
 源码运行需要 **Node.js 22.12 或更高版本** 与 npm：
 
 ```sh
@@ -178,10 +180,12 @@ cd mlimli
 npm ci
 cp config.example.json config.json
 npm run build:web
-npm run electron
+npm start
 ```
 
 Windows PowerShell 可用 `Copy-Item config.example.json config.json` 代替 `cp`。浏览器模式运行 `npm start` 后访问 `http://127.0.0.1:10860`。构建安装包和参与贡献的说明见 [Windows 打包](docs/WINDOWS-PACKAGING.md)、[终端版说明](docs/TERMINAL.md) 与仓库中的开发文档。
+
+桌面开发使用 `npm run electron`；运行前请按 [GenOffice 构建说明](docs/GENOFFICE.md) 准备第三方编辑器源码并执行 `npm run build:office`、`npm run verify:office`。编辑器源码和生成的二进制不放入本仓库，正式安装包已包含所需组件。
 
 ## 交流与支持
 

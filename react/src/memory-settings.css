@@ -68,5 +68,25 @@
 .memory-learning li div { flex: 1; font-size: 12px; }
 .memory-learning small { float: right; color: var(--muted); font-size: 11px; }
 .memory-learning p { color: var(--muted); margin: 6px 0; }
+.memory-profile-list { display: grid; border-top: 1px solid var(--line); }
+.memory-profile-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 4px; border-bottom: 1px solid var(--line); }
+.memory-profile-row.selected { border-left: 3px solid var(--green); padding-left: 9px; background: color-mix(in srgb, var(--green) 5%, transparent); }
+.memory-profile-identity { display: grid; gap: 4px; min-width: 0; }
+.memory-profile-identity b { overflow-wrap: anywhere; font-size: 13px; }
+.memory-profile-identity span, .memory-profile-actions small { color: var(--muted); font-size: 11px; }
+.memory-profile-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 7px; }
+.memory-profile-actions button, .memory-profile-editor button { border: 1px solid var(--line); border-radius: 5px; background: var(--canvas); color: inherit; padding: 6px 9px; font: inherit; font-size: 11px; }
+.memory-profile-actions .memory-delete { color: var(--red, #b42318); }
+.memory-profile-editor { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.memory-profile-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.memory-profile-fields label { display: grid; gap: 6px; color: var(--ink); font-size: 12px; font-weight: 600; }
+.memory-profile-fields input, .memory-profile-fields textarea { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--canvas); color: inherit; padding: 8px 10px; font: inherit; font-size: 12px; font-weight: 400; }
+.memory-profile-fields textarea { resize: vertical; line-height: 1.6; }
+.memory-profile-editor .memory-editor-actions { justify-content: flex-end; margin-top: 12px; }
+.memory-profile-editor .primary-action { display: inline-flex; align-items: center; gap: 5px; background: var(--green); color: white; }
+.memory-profile-proposal { padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 12px; overflow-wrap: anywhere; }
+.memory-profile-proposal p { margin: 7px 0; }
+.memory-profile-proposal blockquote { margin: 7px 0; padding-left: 10px; border-left: 2px solid var(--line); color: var(--muted); }
+.memory-profile-proposal button { margin-right: 8px; }
 @media (max-width: 1050px) { .memory-layout.has-editor { grid-template-columns: 1fr; } .memory-editor { margin-top: 4px; } .memory-list { max-height: 360px; } }
-@media (max-width: 640px) { .memory-options { grid-template-columns: 1fr; } .memory-options .setting-toggle:nth-last-child(-n+2) { border-bottom: 1px solid var(--line); } .memory-options .setting-toggle:last-child { border-bottom: 0; } .memory-row { padding: 12px; } .memory-row-foot { align-items: flex-start; flex-direction: column; gap: 7px; } .memory-row-usage { width: 100%; justify-content: space-between; } }
+@media (max-width: 640px) { .memory-options { grid-template-columns: 1fr; } .memory-options .setting-toggle:nth-last-child(-n+2) { border-bottom: 1px solid var(--line); } .memory-options .setting-toggle:last-child { border-bottom: 0; } .memory-row { padding: 12px; } .memory-row-foot { align-items: flex-start; flex-direction: column; gap: 7px; } .memory-row-usage { width: 100%; justify-content: space-between; } .memory-profile-row { align-items: flex-start; flex-direction: column; } .memory-profile-actions { justify-content: flex-start; width: 100%; } .memory-profile-fields { grid-template-columns: 1fr; } }

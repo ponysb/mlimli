@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { USER_PLUGINS_DIR } from './paths.mjs';
 import { readZip } from './zip.mjs';
+import { resolveResourceCover } from './resource-images.mjs';
 
 function safeEntryName(name) {
   const normalized = String(name || '').replaceAll('\\', '/');
@@ -73,7 +74,7 @@ export async function listPlatformPlugins({ baseUrl, token, organizationId }) {
   const response = await fetch(`${baseUrl.replace(/\/$/, '')}/api/v2/plugins`, { headers, signal: AbortSignal.timeout(15000) });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.success === false) throw new Error(payload.error?.message || payload.error || `插件仓库 HTTP ${response.status}`);
-  return payload.data?.plugins || [];
+  return (payload.data?.plugins || []).map(item => ({ ...item, coverUrl: resolveResourceCover(item.coverUrl, baseUrl) }));
 }
 
 export async function installPlatformPlugin({ baseUrl, token, id, sha256 }) {

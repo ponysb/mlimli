@@ -10,11 +10,14 @@ const JOB = { queued: '等待回顾', running: '正在回顾', completed: '回�
 const date = value => value ? new Date(value).toLocaleString() : '尚未召回';
 const preview = value => String(value || '').replace(/\s+/g, ' ').trim();
 const fresh = () => ({ title: '', content: '', scope: 'project', kind: 'fact', tags: [], evidence: '', pinned: false, status: 'active' });
+const blankProfile = () => ({ displayName: '', role: '', team: '', responsibilities: '', goals: '', expertise: '', preferences: '', collaboration: '' });
+const PROFILE_FIELDS = [['displayName', '档案名称'], ['role', '职责/岗位'], ['team', '团队'], ['responsibilities', '负责事项'], ['goals', '当前目标'], ['expertise', '专长'], ['preferences', '工作偏好'], ['collaboration', '协作方式']];
 
 export default function MemorySettings({ get, post, api, onError, onSaved, onOpenSession, workspace }) {
   const [data, setData] = useState(null), [jobs, setJobs] = useState([]), [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
   const [scope, setScope] = useState('all'), [status, setStatus] = useState('all'), [kind, setKind] = useState('all'), [query, setQuery] = useState('');
   const [draft, setDraft] = useState(null), [dirty, setDirty] = useState(false), [versions, setVersions] = useState(false);
+  const [profileData, setProfileData] = useState(null), [profileDraft, setProfileDraft] = useState(null), [profileBusy, setProfileBusy] = useState(false);
   const mounted = useRef(true), request = useRef(0);
   async function refresh() {
     const current = ++request.current;
@@ -23,12 +26,14 @@ export default function MemorySettings({ get, post, api, onError, onSaved, onOpe
       if (mounted.current && current === request.current) { setData(memories); setJobs(learning.jobs); }
     } catch (error) { if (mounted.current) onError?.(error); }
   }
+  async function refreshProfiles() { try { setProfileData(await get('/api/user-profiles')); } catch (error) { onError?.(error); } }
   useEffect(() => {
-    mounted.current = true; refresh();
+    mounted.current = true; refresh(); refreshProfiles();
     const events = new EventSource('/api/event'); let timer;
     events.onmessage = event => {
       let item; try { item = JSON.parse(event.data); } catch { return; }
       if (['memory_updated', 'memory_settings_updated', 'memory_learning_updated'].includes(item.type)) { clearTimeout(timer); timer = setTimeout(refresh, 150); }
+      if (item.type === 'user_profiles_updated') refreshProfiles();
     };
     return () => { mounted.current = false; clearTimeout(timer); events.close(); };
   }, []);
@@ -60,10 +65,42 @@ export default function MemorySettings({ get, post, api, onError, onSaved, onOpe
   async function updateSetting(key, value) {
     await action(async () => { const result = await post('/api/memory/settings', { [key]: value }); setData(current => ({ ...current, settings: result.settings })); await onSaved?.(); }, '设置已更新');
   }
+  async function saveProfile(event) {
+    event.preventDefault(); if (profileBusy) return; setProfileBusy(true);
+    try {
+      const saved = profileDraft.id
+        ? await api(`/api/user-profiles/${profileDraft.id}`, { method: 'PUT', body: { ...profileDraft, expectedRevision: profileDraft.revision } })
+        : await post('/api/user-profiles', profileDraft);
+      setProfileDraft(null); await refreshProfiles(); setNotice(`档案“${saved.profile.displayName}”已保存`);
+    } catch (error) { onError?.(error); } finally { setProfileBusy(false); }
+  }
+  async function activateProfile(id) {
+    if (!await mayLeave()) return;
+    setProfileBusy(true); try { setProfileData(await post('/api/user-profiles/active', { id })); setDraft(null); setDirty(false); await refresh(); setNotice('当前使用者已切换；个人偏好记忆按档案隔离'); } catch (error) { onError?.(error); } finally { setProfileBusy(false); }
+  }
+  async function removeProfile(profile) {
+    if (!await confirmAction(`删除“${profile.displayName}”档案？其个人偏好记忆不会删除。`)) return;
+    setProfileBusy(true); try { setProfileData(await api(`/api/user-profiles/${profile.id}`, { method: 'DELETE', body: { expectedRevision: profile.revision } })); setProfileDraft(null); } catch (error) { onError?.(error); } finally { setProfileBusy(false); }
+  }
+  async function reviewProfile(profile, proposal, approve) {
+    setProfileBusy(true);
+    try { setProfileData(await post(`/api/user-profiles/${profile.id}/proposals/${proposal.id}`, { expectedRevision: profile.revision, approve })); }
+    catch (error) { onError?.(error); } finally { setProfileBusy(false); }
+  }
   const items = (data?.items || []).filter(item => (scope === 'all' || item.scope === scope) && (status === 'all' || item.status === status) && (kind === 'all' || item.kind === kind) && `${item.title} ${item.content} ${item.tags.join(' ')}`.toLowerCase().includes(query.trim().toLowerCase()));
   if (!data) return <div className="page-content"><section className="section-block"><p>正在读取记忆…</p></section></div>;
   const settings = data.settings;
   return <div className="page-content memory-settings">
+    <section className="section-block">
+      <div className="section-head"><div><h2>个人档案卡</h2><p>一台设备可维护多位使用者；只有当前档案会进入 Agent 的任务上下文。</p></div><button type="button" disabled={profileBusy} onClick={() => setProfileDraft(blankProfile())}><Plus size={14}/>新增档案</button></div>
+      <div className="memory-profile-list">{(profileData?.profiles || []).map(profile => <article className={`memory-profile-row ${profileData.activeId === profile.id ? 'selected' : ''}`} key={profile.id}>
+        <div className="memory-profile-identity"><b>{profile.displayName}</b><span>{[profile.role, profile.team].filter(Boolean).join(' · ') || '尚未补充身份信息'}</span></div>
+        <div className="memory-profile-actions">{profileData.activeId === profile.id ? <small>当前使用者</small> : <button type="button" disabled={profileBusy} onClick={() => activateProfile(profile.id)}>设为当前</button>}<button type="button" disabled={profileBusy} onClick={() => setProfileDraft(profile)}>编辑</button><button type="button" className="memory-delete" disabled={profileBusy} onClick={() => removeProfile(profile)}>删除</button></div>
+      </article>)}{!profileData?.profiles?.length && <p className="memory-hint">尚无档案卡。添加后 Agent 才能区分本机的不同使用者。</p>}</div>
+      <p className="memory-hint">开启自动沉淀后，AI 会根据日常对话中的明确自述自动建立并补充当前档案；已有资料的变化会在下方等待确认。档案保存在本机并按登录账户隔离，企业成员档案同步暂未接入账户服务。</p>
+      {(profileData?.profiles || []).flatMap(profile => (profile.pending || []).map(proposal => <div className="memory-profile-proposal" key={proposal.id}><b>{profile.displayName} · {PROFILE_FIELDS.find(([field]) => field === proposal.field)?.[1] || proposal.field}</b><p>{proposal.previous ? `${proposal.previous} → ` : ''}{proposal.value}</p><blockquote>依据：{proposal.evidence?.quote}</blockquote><button type="button" disabled={profileBusy} onClick={() => reviewProfile(profile, proposal, true)}>确认更新</button><button type="button" disabled={profileBusy} onClick={() => reviewProfile(profile, proposal, false)}>忽略建议</button></div>))}
+      {profileDraft && <form className="memory-profile-editor" onSubmit={saveProfile}><div className="memory-profile-fields">{PROFILE_FIELDS.map(([field, label]) => <label key={field}>{label}{field === 'displayName' || field === 'role' || field === 'team' ? <input aria-label={label} maxLength={120} required={field === 'displayName'} value={profileDraft[field] || ''} onChange={event => setProfileDraft(value => ({ ...value, [field]: event.target.value }))}/> : <textarea aria-label={label} maxLength={1600} rows={2} value={profileDraft[field] || ''} onChange={event => setProfileDraft(value => ({ ...value, [field]: event.target.value }))}/>}</label>)}</div><div className="memory-editor-actions"><button type="button" disabled={profileBusy} onClick={() => setProfileDraft(null)}>取消</button><button className="primary-action" type="submit" disabled={profileBusy || !profileDraft.displayName.trim()}><Save size={14}/>保存档案</button></div></form>}
+    </section>
     <section className="section-block">
       <div className="section-head"><div><h2><BookOpen size={18}/>记忆</h2><p>保留你的偏好和经过实践的经验，让后续任务少走弯路。</p></div><button type="button" disabled={busy} onClick={refresh}><RefreshCw size={14}/>刷新</button></div>
       <div className="memory-options">

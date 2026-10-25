@@ -1,17 +1,26 @@
 import { normalizeRunLimit } from './run-control.mjs';
 
 const READ = ['read_file', 'read_attachment', 'read_tool_output', 'find', 'grep', 'read_skill', 'list_memories', 'read_memory', 'search_memories', 'search_history', 'agent_send', 'agent_inspect'];
-const BUILTINS = {
-  explorer: { name: '代码探索', delegationHint: '跨模块定位、追踪调用链或大量搜索时主动使用；按模块或问题拆分探索范围。', description: '只读探索代码与文件，返回文件位置和证据。', tools: [...READ, 'bash'], readOnly: true },
-  researcher: { name: '资料研究', delegationHint: '需要多个独立来源、方案或接口文档时使用；每个任务给出来源边界。', description: '检索资料和网页，返回来源及可验证结论。', tools: [...READ, 'web_fetch'], readOnly: true },
-  reviewer: { name: '审查', delegationHint: '重要实现完成且文件稳定后，主动做独立审查，重点检查异常路径和遗漏的验收项。', description: '只读检查正确性、风险和验证缺口，附证据。', tools: [...READ, 'bash'], readOnly: true },
-  worker: { name: '实现', delegationHint: '目标和文件范围已确定、适合独立交付文件修改时使用；本角色不执行 shell、MCP 或桌面操作。', description: '负责指定文件的修改；共享目录同时只有一个写入者。', tools: [...READ, 'write_file', 'edit_file'], readOnly: false },
-};
+export const swarmCapabilities = Object.freeze({ read: READ, web: ['web_fetch'], command: ['bash'], write: ['write_file', 'edit_file'] });
+// Compatibility for saved tasks; new tasks declare their own responsibilities and capabilities.
+const LEGACY = { explorer: ['read', 'command'], researcher: ['read', 'web'], reviewer: ['read', 'command'], worker: ['read', 'write'] };
 
-export function agentProfiles(config = {}) {
-  return Object.entries(BUILTINS).map(([id, profile]) => {
-    const override = config.agent?.subagents?.profiles?.[id] || {};
-    // Configuration can select models and tighten budgets, but cannot expand capabilities.
-    return { ...profile, id, modelId: override.modelId, maxSteps: normalizeRunLimit(override.maxSteps), maxDurationMs: normalizeRunLimit(override.maxDurationMs), prompt: String(override.prompt || '').slice(0, 8000) };
-  });
+export function resolveTaskAgent(input = {}, config = {}) {
+  const capabilities = input.capabilities ?? LEGACY[input.profile] ?? ['read'];
+  if (!Array.isArray(capabilities) || capabilities.some(name => !Object.hasOwn(swarmCapabilities, name))) throw new Error('未知 Agent 能力');
+  if (input.profile && input.capabilities == null && !Object.hasOwn(LEGACY, input.profile)) throw new Error('旧版 Agent 角色无效；请使用 capabilities');
+  if (input.role != null && (typeof input.role !== 'string' || input.role.length > 160)) throw new Error('Agent 职责不超过 160 字符');
+  const options = config.agent?.subagents || {};
+  const legacy = input.profile ? options.profiles?.[input.profile] || {} : {};
+  return {
+    id: 'dynamic', name: input.role?.trim() || input.title || '任务 Agent',
+    description: input.role?.trim() || '根据目标、负责范围和验收条件完成工作。',
+    capabilities: [...new Set(['read', ...capabilities])], readOnly: !capabilities.includes('write'),
+    tools: [...new Set(['read', ...capabilities].flatMap(name => swarmCapabilities[name]))],
+    modelId: options.modelId || legacy.modelId,
+    maxSteps: normalizeRunLimit(options.maxSteps ?? legacy.maxSteps),
+    maxDurationMs: normalizeRunLimit(options.maxDurationMs ?? legacy.maxDurationMs),
+    prompt: String(options.prompt || legacy.prompt || '').slice(0, 8000),
+  };
 }
+

@@ -49,6 +49,7 @@ export function setPlatformExperts(items) {
       name: item.name,
       category: item.category || (scopeType === 'enterprise' ? '企业' : '平台'),
       description: item.description || '',
+      coverUrl: item.coverUrl || null,
       tags: item.tags || [],
       prompt: item.content,
       platform: true,

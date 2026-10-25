@@ -77,7 +77,7 @@ test('isolated source desktop loads root .env and packaged runtime loads public 
     } });
     context.after(() => { if (childRuntime.child.exitCode === null) childRuntime.child.kill(); });
     try {
-      const address = await childRuntime.ready;
+      const address = await childRuntime.ready.catch(error => { throw new Error(error.message + '\n' + fs.readFileSync(path.join(data, 'desktop.log'), 'utf8')); });
       const info = await (await fetch(`${address.url}/api/info`)).json();
       assert.equal(info.account.enabled, false);
       assert.equal(info.account.baseUrl, `http://127.0.0.1:1/${packaged ? 'packaged' : 'source'}`);

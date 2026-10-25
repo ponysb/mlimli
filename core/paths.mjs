@@ -68,7 +68,9 @@ export function resolveInWorkspace(p, { write = false } = {}) {
   validatePath(p);
   const workspaceRoot = getWorkspaceRoot();
   const abs = path.resolve(workspaceRoot, p);
-  if (!isInside(abs, workspaceRoot)) {
+  // Accept OS aliases of the root (/var -> /private/var on macOS), while
+  // retaining the lexical owner check before resolving links inside it.
+  if (!isInside(abs, workspaceRoot) && !isInside(abs, canonicalPath(workspaceRoot))) {
     throw new Error(`路径越界：${p} 不在工作区 ${workspaceRoot} 内`);
   }
   const real = canonicalPath(abs), root = canonicalPath(workspaceRoot);
@@ -79,6 +81,7 @@ export function resolveInWorkspace(p, { write = false } = {}) {
 
 function validatePath(p) {
   if (p.includes('\0')) throw new Error('路径包含无效字符');
+  if (process.platform !== 'win32' && (p.includes('\\') || /^[a-z]:/i.test(p))) throw new Error('路径包含不支持的跨平台分隔符或盘符');
   if (process.platform === 'win32') {
     const rest = p.replace(/^[a-z]:/i, '');
     if (rest.includes(':') || /^\\\\[?.]\\/.test(p) || rest.split(/[\\/]/).some(part => /[. ]$/.test(part) && !['.', '..'].includes(part))) throw new Error('不支持设备路径、备用数据流或尾随点/空格');
@@ -106,6 +109,9 @@ function assertToolPath(abs, real, { write = false } = {}) {
   if (!policy || policy.enabled === false || policy.mode === 'off') return;
   if (write && policy.mode === 'read-only') throw new SandboxError('只读沙箱禁止修改文件');
   for (const root of new Set([getWorkspaceRoot(), APP_ROOT, DATA_ROOT])) {
+    // Managed task snapshots live under private runtime storage. Apply their
+    // own workspace protections without treating the storage ancestor as data.
+    if (getRunContext()?.isolatedWorkspace && root !== getWorkspaceRoot() && isInside(abs, getWorkspaceRoot()) && isInside(real, canonicalPath(getWorkspaceRoot()))) continue;
     for (const [candidate, parent] of [[abs, root], [real, canonicalPath(root)]]) {
       if (!isInside(candidate, parent)) continue;
       const protection = pathProtection(path.relative(parent, candidate));
@@ -132,8 +138,8 @@ export function resolveReadable(p) {
   validatePath(p);
   const workspaceRoot = getWorkspaceRoot();
   const abs = path.resolve(workspaceRoot, p);
-  const inWorkspace = isInside(abs, workspaceRoot);
-  const inApp = isInside(abs, APP_ROOT);
+  const inWorkspace = isInside(abs, workspaceRoot) || isInside(abs, canonicalPath(workspaceRoot));
+  const inApp = isInside(abs, APP_ROOT) || isInside(abs, canonicalPath(APP_ROOT));
   if (!inWorkspace && !inApp) throw new Error(`路径不可读：${p}（仅允许工作区或程序目录）`);
   const real = canonicalPath(abs);
   // The lexical root owns the read: a workspace link into the installation is

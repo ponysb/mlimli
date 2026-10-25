@@ -7,7 +7,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { spawn as spawnPty } from 'node-pty';
+import { spawnPty } from './core/pty-runtime.mjs';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, getConfig, applyProviderPatch, saveConfigFile, publicSettings, listRemoteModels, testProvider, refreshManagedCatalog } from './core/llm.mjs';
 import { modelProfiles } from './core/model-profiles.mjs';
@@ -17,6 +17,7 @@ import { setWorkspaceRoot, APP_ROOT, DATA_ROOT, getWorkspaceRoot, isWorkspaceRoo
 import { uiPreferences, updateUiPreferences } from './core/ui-preferences.mjs';
 import { listWorkspaces, addWorkspace, setActiveWorkspace, removeWorkspace, ensureWorkspace } from './core/workspaces.mjs';
 import { listWorkspaceReferences } from './core/workspace-reference-files.mjs';
+import { filmCanvasMediaPath, readFilmCanvas, saveFilmCanvasEdits, archiveFilmCanvasNode, restoreFilmCanvasVersion, batchUpdateFilmCanvasNodes, deleteFilmCanvasNodes, disconnectFilmCanvasEdges, arrangeFilmCanvasNodes, groupFilmCanvasNodes } from './core/film-canvas.mjs';
 import { loadAll, pluginsInfo, resolveUiRequest, getCommands, setPlatformSkills } from './core/plugins.mjs';
 import { resolveRequest, listPersistentRules, replacePersistentRules, pendingRequest } from './core/permissions.mjs';
 import { maybeCompact } from './core/compact.mjs';
@@ -24,6 +25,7 @@ import { disposeLogReader, getApiLogAsync, queryApiLogsAsync } from './core/api-
 import { disposeSessionReader, readSessionView } from './core/session-view-service.mjs';
 import { copyWorkspaceItem, createWorkspaceItem, deleteWorkspaceItem, listDirectory, moveWorkspaceItem, openWorkspaceItem, rawWorkspaceFile, readWorkspaceFile, renameWorkspaceItem, revealWorkspaceItem, writeWorkspaceFile } from './core/workspace-files.mjs';
 import { addAsset, addAssetFromFile, assetFile, deleteAsset, listAssets } from './core/assets.mjs';
+import { serveMedia } from './core/media-response.mjs';
 import { checkAccountEmail, createPurchaseOrder, getAccountCaptcha, listPurchasePackages, listPlatformLibrary, listTeamMemory, listAccountPlugins, installAccountPlugin, loginAccount, logoutAccount, publicAccountStatus, queryPurchaseOrder, recordClientLaunch, refreshAccount, registerAccount, requireAccount, resetAccountPassword, sendRegisterCode, sendResetCode, setAccountConfig, updateAccountNickname, verifyAccountCaptcha } from './core/account.mjs';
 import { getMarketingConfig, getMarketingSummary, claimDailyCheckin } from './core/account.mjs';
 import { listSubjects, switchSubject } from './core/account.mjs';
@@ -34,13 +36,14 @@ import { convertOfficeFile } from './plugins/office/plugin.mjs';
 import { CONFIG_FILE, initializeRuntime, activeSequences, runningSessions, runSequence, prepareTaskResume, assertWorkspaceIdle, stopSession, shutdownRuntime, scheduler } from './core/runtime.mjs';
 import { pendingUiRequests } from './core/plugins.mjs';
 import { agentManager } from './core/agent-manager.mjs';
-import { agentProfiles } from './core/agent-profiles.mjs';
+import { swarmCapabilities } from './core/agent-profiles.mjs';
 import { acpSettings, updateAcpSettings } from './core/acp-settings.mjs';
 import { discoverAcpAgents } from './core/acp-client.mjs';
 import { contextForSession } from './core/runtime.mjs';
 import { withRunContext } from './core/run-context.mjs';
 import { approveMemory, deleteMemory, getMemory, listMemories, memoryLocations, restoreMemory, saveMemory } from './core/memory.mjs';
 import { memorySettings, updateMemorySettings } from './core/memory-policy.mjs';
+import { deleteUserProfile, listUserProfiles, saveUserProfile, setActiveUserProfile, reviewUserProfileUpdate } from './core/user-profiles.mjs';
 import { memoryLearner } from './core/memory-learning.mjs';
 import { stopProcessTree } from './core/process-tree.mjs';
 import { sandboxStatus, updateSandbox, hasActiveSandboxCommands, shutdownSandboxBroker } from './core/sandbox.mjs';
@@ -81,14 +84,14 @@ if (runtimeHost) {
   const started = Date.now();
   setInterval(() => {
     for (const [id, touched] of leases) if (Date.now() - touched > 90000) leases.delete(id);
-    if (!leases.size && Date.now() - started > 90000) shutdown();
+    if (!leases.size && !activeSequences.size && !agentManager.hasPending() && Date.now() - started > 90000) shutdown();
   }, 15000).unref();
 }
 let platformLibraryLoadedAt = 0;
 let platformLibraryRefresh = null;
 async function refreshPlatformLibrary(force = false) {
   if (!force && Date.now() - platformLibraryLoadedAt < 30000) return false;
-  if (platformLibraryRefresh) return platformLibraryRefresh;
+  if (platformLibraryRefresh) { await platformLibraryRefresh; return false; }
   platformLibraryRefresh = (async () => {
     const { items } = await listPlatformLibrary();
     setPlatformExperts(items);
@@ -221,7 +224,7 @@ function stopInteractiveTerminal(id) {
 const sseClients = new Set();
 const refreshModelProfiles = () => modelProfiles.refresh({ force: true }).then(changed => { if (changed) emit('catalog_updated', { ok: true }); }).catch(() => {});
 setInterval(refreshModelProfiles, 60000).unref();
-void refreshModelProfiles();
+// The first /api/info refreshes all catalogs in one notification.
 onEvent((evt) => {
   const frame = `data: ${JSON.stringify(evt)}\n\n`;
   for (const res of sseClients) {
@@ -241,13 +244,13 @@ function json(res, code, data) {
 function badRequest(res, msg) { json(res, 400, { error: msg }); }
 function notFound(res, msg = 'not found') { json(res, 404, { error: msg }); }
 
-function readBody(req) {
+function readBody(req, maxBytes = 64 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
     req.on('data', (c) => {
       size += c.length;
-      if (size > 64 * 1024 * 1024) { reject(new Error('请求体过大')); req.destroy(); return; }
+      if (size > maxBytes) { reject(new Error('请求体过大')); req.destroy(); return; }
       chunks.push(c);
     });
     req.on('end', () => {
@@ -274,7 +277,7 @@ function registeredWorkspace(workspacePath) {
 }
 
 const MIME = {
-  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json',
   '.woff2': 'font/woff2',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
@@ -340,15 +343,19 @@ async function route(req, res, url) {
     if (!runtimeHost || body.instance !== runtimeHost.instance || !/^[\w-]{16,80}$/.test(body.id || '')) return json(res, 409, { error: '运行时标识不匹配' });
     if (body.release) {
       const existed = leases.delete(body.id);
-      json(res, 200, { ok: true, remaining: leases.size });
-      if (existed && !leases.size) setImmediate(() => { if (!leases.size) shutdown(); });
+      json(res, 200, { ok: true, remaining: leases.size, background: Boolean(activeSequences.size || agentManager.hasPending()) });
+      if (existed && !leases.size) setImmediate(() => { if (!leases.size && !activeSequences.size && !agentManager.hasPending()) shutdown(); });
       return;
     }
     if (shuttingDown) return json(res, 503, { error: '运行时正在关闭' });
     leases.set(body.id, Date.now());
     return json(res, 200, { ok: true });
   }
-  const clientWorkspace = req.headers['x-mli-workspace'];
+  let clientWorkspace = req.headers['x-mli-workspace'];
+  if (req.headers['x-mli-workspace-encoded'] !== undefined) {
+    try { clientWorkspace = decodeURIComponent(String(req.headers['x-mli-workspace-encoded'])); }
+    catch { return json(res, 400, { error: '工作目录请求头编码无效' }); }
+  }
   if (clientWorkspace && !isWorkspaceRoot(String(clientWorkspace))) return json(res, 409, { error: '工作目录已被其他客户端切换，请重新连接当前项目', code: 'WORKSPACE_CHANGED' });
 
   // SSE
@@ -587,10 +594,35 @@ async function route(req, res, url) {
     return json(res, 200, { terminalId: run.id, command: run.command, cwd: run.cwd, status: run.status, output: run.output, startedAt: run.startedAt });
   }
   if (pathname === '/api/assets' && req.method === 'GET') return json(res, 200, { assets: listAssets() });
-  if (pathname === '/api/assets' && req.method === 'POST') { const body = await readBody(req); return json(res, 200, { asset: addAsset({ ...body, source: body.source || 'user' }) }); }
+  if (pathname === '/api/film-canvas' && req.method === 'GET') return json(res, 200, { canvas: readFilmCanvas() });
+  if (pathname === '/api/film-canvas/actions' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const actions = {
+        archive: () => archiveFilmCanvasNode(body.nodeId),
+        'restore-version': () => restoreFilmCanvasVersion(body.nodeId, body.versionId),
+        batch: () => batchUpdateFilmCanvasNodes(body.updates),
+        delete: () => deleteFilmCanvasNodes(body.nodeIds),
+        disconnect: () => disconnectFilmCanvasEdges(body.edgeIds),
+        arrange: () => arrangeFilmCanvasNodes(body),
+        group: () => groupFilmCanvasNodes(body),
+      };
+      if (!Object.hasOwn(actions, body.action)) return json(res, 400, { error: '未知画布操作' });
+      return json(res, 200, { canvas: actions[body.action]() });
+    } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+  }
+  if (pathname === '/api/film-canvas' && req.method === 'PUT') {
+    try { return json(res, 200, { canvas: saveFilmCanvasEdits(await readBody(req)) }); }
+    catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+  }
+  if (pathname === '/api/film-canvas/media' && req.method === 'GET') {
+    const media = filmCanvasMediaPath(url.searchParams.get('path') || '');
+    return serveMedia(req, res, media.path, media.mime, { 'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(media.name)}`, 'cache-control': 'no-store' });
+  }
+  if (pathname === '/api/assets' && req.method === 'POST') { const body = await readBody(req, 140 * 1024 * 1024); return json(res, 200, { asset: addAsset({ ...body, source: body.source || 'user' }) }); }
   if ((match = m(/^\/api\/assets\/([\w-]+)$/)) && req.method === 'DELETE') return json(res, 200, { asset: deleteAsset(match[1]) });
   if ((match = m(/^\/api\/assets\/([\w-]+)\/raw$/)) && req.method === 'GET') {
-    const asset = assetFile(match[1]); res.writeHead(200, { 'content-type': asset.item.mime, 'content-length': fs.statSync(asset.path).size, 'cache-control': 'private, max-age=3600' }); fs.createReadStream(asset.path).pipe(res); return true;
+    const asset = assetFile(match[1]); return serveMedia(req, res, asset.path, asset.item.mime);
   }
   if (pathname === '/api/file' && req.method === 'GET') return json(res, 200, readWorkspaceFile(url.searchParams.get('path') || ''));
   if (pathname === '/api/file/meta' && req.method === 'GET') {
@@ -716,6 +748,36 @@ async function route(req, res, url) {
     return json(res, 200, preferences);
   }
   if (pathname === '/api/memory/settings' && req.method === 'GET') return json(res, 200, { settings: memorySettings() });
+  if (pathname === '/api/user-profiles' && req.method === 'GET') return json(res, 200, listUserProfiles());
+  if (pathname === '/api/user-profiles' && req.method === 'POST') {
+    const body = await readBody(req);
+    if (body.id) return badRequest(res, '新增档案不能包含已有 ID');
+    try { return json(res, 201, { profile: saveUserProfile(body), ...listUserProfiles() }); }
+    catch (error) { return json(res, error.status || 400, { error: error.message }); }
+  }
+  if (pathname === '/api/user-profiles/active' && req.method === 'POST') {
+    const body = await readBody(req);
+    if (body.id !== '' && (typeof body.id !== 'string' || body.id.length > 80)) return badRequest(res, '无效档案 ID');
+    try { return json(res, 200, setActiveUserProfile(body.id)); }
+    catch (error) { return json(res, error.status || 400, { error: error.message }); }
+  }
+  if ((match = m(/^\/api\/user-profiles\/([\w-]+)\/proposals\/([\w-]+)$/)) && req.method === 'POST') {
+    const body = await readBody(req);
+    if (!Number.isInteger(body.expectedRevision) || typeof body.approve !== 'boolean') return badRequest(res, '请提供档案版本和审核结果');
+    try { return json(res, 200, { profile: reviewUserProfileUpdate(match[1], match[2], body.expectedRevision, body.approve), ...listUserProfiles() }); }
+    catch (error) { return json(res, error.status || 400, { error: error.message }); }
+  }
+  if ((match = m(/^\/api\/user-profiles\/([\w-]+)$/)) && ['PUT', 'DELETE'].includes(req.method)) {
+    const body = await readBody(req);
+    try {
+      if (req.method === 'DELETE') {
+        if (!Number.isInteger(body.expectedRevision)) return badRequest(res, '请提供档案版本 expectedRevision');
+        deleteUserProfile(match[1], body.expectedRevision);
+        return json(res, 200, listUserProfiles());
+      }
+      return json(res, 200, { profile: saveUserProfile({ ...body, id: match[1] }), ...listUserProfiles() });
+    } catch (error) { return json(res, error.status || 400, { error: error.message }); }
+  }
   if (pathname === '/api/memory/settings' && req.method === 'POST') {
     const body = await readBody(req), previous = getConfig().memory;
     try {
@@ -951,12 +1013,13 @@ async function route(req, res, url) {
     if (req.method === 'GET') {
       const group = agentManager.view(s);
       const ids = [group.rootSessionId, s.id, ...group.tasks.map(task => task.sessionId)].filter((id, index, all) => all.indexOf(id) === index);
-      const permissions = ids.map(pendingRequest).filter(Boolean);
+      // Read live approval requests after the asynchronous worker snapshot.
       const contextWindow = agentManager.executionFor(s)?.context.modelSelection?.model?.contextWindow || cfg.provider?.contextWindow || 128000;
       const snapshot = paged || all ? await readSessionView(s.id, 'snapshot', { contextWindow, all, limit: url.searchParams.get('limit') || 120, before: url.searchParams.get('before') }, s.directory) : { ...s.snapshot(contextWindow), queue: s.queued() };
       if (!snapshot) return notFound(res, '会话不存在');
       if (!snapshot.meetingId && snapshot.expertId === 'meeting-secretary') snapshot.meetingId = listMeetings().find(meeting => meeting.summarySessionId === s.id)?.id || null;
-      return json(res, 200, { ...snapshot, running: isRunning(s.id) || activeSequences.has(s.id), activeStep: runningStep(s.id), eventSeq: eventSequence(), group, permissions, permission: permissions[0] || null, uiRequests: ids.flatMap(pendingUiRequests) });
+      const permissions = ids.map(pendingRequest).filter(Boolean);
+      return json(res, 200, { ...snapshot, running: isRunning(s.id) || activeSequences.has(s.id), activeStep: runningStep(s.id), eventSeq: eventSequence(), group: agentManager.view(s), permissions, permission: permissions[0] || null, uiRequests: ids.flatMap(pendingUiRequests) });
     }
     if (req.method === 'DELETE') {
       if (isRunning(s.id) || activeSequences.has(s.id) || agentManager.pending(s).length) return json(res, 409, { error: '任务或子任务正在运行，停止后才能删除' });
@@ -967,7 +1030,18 @@ async function route(req, res, url) {
     }
     return notFound(res);
   }
-  if (pathname === '/api/agent-profiles' && req.method === 'GET') return json(res, 200, { enabled: cfg.agent?.subagents?.enabled !== false, profiles: agentProfiles(getConfig()).map(({ prompt, tools, ...profile }) => profile) });
+  if (pathname === '/api/agent-profiles' && req.method === 'GET') return json(res, 200, { enabled: cfg.agent?.subagents?.enabled !== false, mode: 'dynamic', profiles: [], capabilities: Object.keys(swarmCapabilities) });
+  if ((match = m(/^\/api\/session\/([\w-]+)\/mission$/))) {
+    const s = getSessionOr400(res, match[1]); if (!s) return;
+    if (s.parentSessionId) return badRequest(res, '请从主任务管理目标要求');
+    if (req.method === 'GET') return json(res, 200, { mission: agentManager.view(s).mission });
+    if (req.method === 'POST') {
+      const body = await readBody(req), context = contextForSession(s);
+      try { return json(res, 200, { mission: withRunContext(context, () => agentManager.updateMission(s, body)) }); }
+      catch (error) { return badRequest(res, error.message); }
+    }
+    return notFound(res);
+  }
   if ((match = m(/^\/api\/session\/([\w-]+)\/agents$/))) {
     const s = getSessionOr400(res, match[1]); if (!s) return;
     if (req.method === 'GET') return json(res, 200, agentManager.view(s));
@@ -1086,6 +1160,7 @@ async function route(req, res, url) {
   }
   if ((match = m(/^\/api\/session\/([\w-]+)\/desktop$/)) && req.method === 'POST') {
     const s = getSessionOr400(res, match[1]); if (!s) return;
+    if (s.parentSessionId) return badRequest(res, '子 Agent 的工具权限由派发时决定');
     const body = await readBody(req);
     if (typeof body.enabled !== 'boolean') return badRequest(res, '无效桌面会话开关');
     const preferences = updateUiPreferences({ desktopEnabled: body.enabled });

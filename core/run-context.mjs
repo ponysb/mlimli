@@ -19,7 +19,7 @@ export function createRunContext({ session, executionRoot, modelSelection, confi
   return Object.freeze({
     agentId: session.id, rootSessionId: session.rootSessionId || session.id,
     sessionStorageRoot: storageRoot, executionRoot: path.resolve(executionRoot || storageRoot),
-    modelSelection, config: structuredClone(config), ...options,
+    modelSelection, config: structuredClone(config), profileOwnerId: options.profileOwnerId || 'local', ...options,
     executionEnvironment: executionEnvironment(options.executionEnvironment),
   });
 }

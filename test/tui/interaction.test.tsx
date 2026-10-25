@@ -22,7 +22,7 @@ async function screen(width = 90, height = 30) {
     if (url === '/api/info') return { models: [{ id: 'mock', name: '本地测试模型' }], activeModelId: 'mock' };
     if (url === '/api/sessions') return { sessions: [{ id: 'history', title: '测试会话' }] };
     if (url === '/api/session' && body) return { id: 'created', title: body.title };
-    if (url === '/api/session/created' || url === '/api/session/history') return { id: url.split('/').at(-1), title: '测试会话', entries: [], running: false };
+    if (url.split('?')[0] === '/api/session/created' || url.split('?')[0] === '/api/session/history') return { id: url.split('?')[0].split('/').at(-1), title: '测试会话', entries: [], running: false };
     return {};
   } };
   const controller = new TuiController(client, { cwd: 'C:\\Projects\\工作区' });
@@ -37,6 +37,19 @@ async function screen(width = 90, height = 30) {
 }
 
 describe('OpenTUI input modes', () => {
+  test('narrow terminal exposes recovery, goals and pending attachment state', async () => {
+    const s = await screen(45, 26);
+    s.controller.session = { ...emptySession('s'), title: '任务', goal: { text: '完成文件检查', status: 'active' }, recovery: { available: true, checkpointId: 1 }, parts: [] };
+    s.controller.attachments.s = [{ name: '资料.txt', size: 4 }];
+    s.controller.changed(); await s.flush();
+    const frame = s.captureCharFrame();
+    expect(frame).toContain('完成文件检查');
+    expect(frame).toContain('从检查点继续');
+    expect(frame).toContain('资料.txt');
+    const commands = s.controller.commands().map((item: any) => item.value);
+    expect(commands).toContain('/attach');
+    expect(commands).toContain('/continue');
+  });
   test('home accepts Chinese and sends only after Enter', async () => {
     const s = await screen();
     expect(s.captureCharFrame()).toContain('魔力工作台');
@@ -205,7 +218,7 @@ test('rendered TUI completes a real runtime task with approval and restores it',
   const s = await testRender(() => <App controller={controller} />, { width: 100, height: 32, kittyKeyboard: true });
   const wait = async (predicate: () => boolean) => {
     for (let i = 0; i < 200; i++) { if (predicate()) return; await Bun.sleep(25); }
-    throw new Error('Runtime integration timed out');
+    throw new Error(`Runtime integration timed out: ${JSON.stringify({ connected: controller.connected, notice: controller.notice, id: controller.session.id, running: controller.session.running, permission: controller.session.permission, busy: controller.busy })}`);
   };
   try {
     await controller.start();

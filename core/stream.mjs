@@ -372,6 +372,11 @@ export async function* mockStream(messages, tools) {
     yield { type: "done" };
     return;
   }
+  if (text.startsWith('[隔离交付尚未接收]')) {
+    yield* emitText('隔离成果待负责人核对接收；mock 不自动验收或重复创建文件。');
+    yield { type: 'done' };
+    return;
+  }
   if (text.startsWith("[主任务协作汇总]")) {
     yield* emitText("正在等待子任务并汇总结果；mock 模式仅演示协作流程。");
     yield { type: "done" };
@@ -445,12 +450,14 @@ export async function* mockStream(messages, tools) {
       argsChunk: JSON.stringify({
         tasks: [
           {
-            profile: "explorer",
+            role: "代码结构调查",
+            capabilities: ["read", "command"],
             title: "代码结构",
             instruction: "只读分析代码结构，返回文件证据。",
           },
           {
-            profile: "reviewer",
+            role: "验证入口核查",
+            capabilities: ["read", "command"],
             title: "验证检查",
             instruction: "只读检查验证入口，返回证据。",
           },

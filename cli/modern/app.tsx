@@ -3,6 +3,7 @@ import { SyntaxStyle, type TextareaRenderable, type ScrollBoxRenderable } from '
 import { useKeyboard, usePaste, useRenderer, useTerminalDimensions } from '@opentui/solid';
 import { createPatch } from 'diff';
 import { modelLabel, safeText } from './state.mjs';
+import { pendingAttachments } from '../actions.mjs';
 
 const colors = { bg: '#141619', panel: '#202327', text: '#e5e7e9', muted: '#969ca4', accent: '#79d5c2', selected: '#303a3e', warning: '#e6bf78', error: '#ef9393' };
 const styles = () => SyntaxStyle.fromStyles({
@@ -21,6 +22,7 @@ function Part(props: { part: any; syntax: SyntaxStyle; expanded: boolean }) {
       <box border={['left']} borderColor={colors.accent} paddingLeft={1} paddingRight={1} backgroundColor={colors.panel}>
         <text fg={colors.accent}>你</text>
         <text fg={colors.text} wrapMode="word">{part().text}</text>
+        <For each={Array.isArray(part().content) ? part().content.filter((item: any) => item.name) : []}>{(item: any) => <text fg={colors.muted}>{safeText(item.name)}</text>}</For>
       </box>
     </Show>
     <Show when={part().kind === 'assistant'}>
@@ -40,6 +42,7 @@ function Part(props: { part: any; syntax: SyntaxStyle; expanded: boolean }) {
         <box paddingLeft={2} border={['left']} borderColor={colors.selected}>
           <text fg={colors.muted} wrapMode="word">{safeText(JSON.stringify(part().args || {}, null, 2))}</text>
           <text fg={colors.text} wrapMode="word">{part().text}</text>
+          <Show when={part().previewTruncated}><text fg={colors.warning}>完整记录 ID: {part().previewEntryId}</text></Show>
           <For each={part().media || []}>{(media: any) => <text fg={colors.accent}>{safeText(media.name || media.path || media.type)}</text>}</For>
         </box>
       </Show>
@@ -47,6 +50,15 @@ function Part(props: { part: any; syntax: SyntaxStyle; expanded: boolean }) {
     <Show when={part().kind === 'end'}><text fg={part().reason === 'error' ? colors.error : colors.muted}>
       {part().reason === 'done' ? '已完成' : part().reason === 'aborted' ? '已停止' : part().text} · {Math.round((part().durationMs || 0) / 1000)}s
     </text></Show>
+    <Show when={part().kind === 'summary'}>
+      <box border={['left']} borderColor={colors.accent} paddingLeft={1}>
+        <text fg={colors.accent}>{safeText(part().summary.title || '任务结果')}</text>
+        <text fg={colors.muted} wrapMode="word">{safeText(part().summary.reason)} · {part().summary.stepCount || 0} 轮 · {part().summary.toolCount || 0} 次工具 · {part().summary.billing?.totalTokens || 0} tokens</text>
+        <For each={(part().summary.files || []).slice(0, 3)}>{(file: any) => <text fg={colors.text} wrapMode="word">{safeText(file.path)}</text>}</For>
+        <Show when={open() || props.expanded}><text fg={colors.muted} wrapMode="word">{safeText(JSON.stringify(part().summary.quality || {}, null, 2))}</text></Show>
+        <text fg={colors.accent} onMouseDown={() => setOpen(!open())}>{open() ? '收起验收' : '展开验收'}</text>
+      </box>
+    </Show>
   </box>;
 }
 
@@ -267,6 +279,7 @@ export function App(props: { controller: any; onReady?: (value: any) => void }) 
     </Show>
     <box flexGrow={1} minHeight={0} justifyContent={session().id ? 'flex-start' : 'flex-end'} alignItems="center">
       <Show when={!session().id} fallback={<scrollbox id="transcript" ref={value => { transcript = value; }} width="100%" flexGrow={1} minHeight={0} stickyScroll stickyStart="bottom" paddingRight={1}>
+        <Show when={session().history?.hasMore}><text fg={colors.accent} onMouseDown={() => perform(() => controller.loadOlder())}>更早历史</text></Show>
         <For each={partIds()}>{id => <Part part={session().parts.find((part: any) => part.id === id)} syntax={syntax} expanded={expanded()} />}</For>
       </scrollbox>}>
         <box width="100%" maxWidth={75} flexShrink={0} paddingBottom={2}>
@@ -276,6 +289,9 @@ export function App(props: { controller: any; onReady?: (value: any) => void }) 
       </Show>
     </box>
     <box width="100%" maxWidth={session().id ? undefined : 75} alignSelf="center" flexShrink={0} paddingTop={1}>
+      <Show when={session().goal?.status === 'active'}><text fg={colors.accent} wrapMode="word" onMouseDown={() => perform(() => controller.command('/goal'))}>{safeText(session().goal.text)}</text></Show>
+      <Show when={session().recovery?.available && !session().running}><text fg={colors.warning} onMouseDown={() => perform(() => controller.command('/continue'))}>从检查点继续</text></Show>
+      <text fg={colors.muted} wrapMode="word" onMouseDown={() => perform(() => controller.command('/attachments'))}>{(() => { revision(); return pendingAttachments(controller).map((item: any) => safeText(item.name)).join(' · '); })()}</text>
       <Show when={completion().length}>
         <box backgroundColor={colors.panel} paddingLeft={1} paddingRight={1} flexShrink={0}>
           <For each={completion()}>{(item: any, index) => <box backgroundColor={index() === completionIndex() ? colors.selected : colors.panel} onMouseDown={() => { setCompletionIndex(index()); chooseCompletion(true); }}>
@@ -314,8 +330,13 @@ export function App(props: { controller: any; onReady?: (value: any) => void }) 
         <text fg={colors.muted} onMouseDown={() => perform(() => controller.palette())}> / 命令  </text>
         <text fg={colors.muted} onMouseDown={() => perform(() => controller.command('/model'))}> 模型  </text>
         <text fg={colors.muted} onMouseDown={() => perform(() => controller.command('/resume'))}> 会话  </text>
+        <text fg={colors.muted} onMouseDown={() => perform(() => controller.command('/agents'))}> Agent  </text>
+        <text fg={colors.muted} onMouseDown={() => perform(() => controller.command('/queue'))}> 队列  </text>
         <text fg={session().running ? colors.warning : colors.accent}>{!status().connected ? '连接中…' : status().busy ? '提交中…' : session().permission ? '等待审批' : session().running ? '● 运行中' : '● 就绪'}{session().queue.length ? ` · 队列 ${session().queue.length}` : ''}</text>
       </box>
+      <Show when={session().group?.tasks?.length}>
+        <text fg={colors.muted} wrapMode="word" onMouseDown={() => perform(() => controller.command('/agents'))}>{session().group.tasks.map((task: any) => `${safeText(task.title)}: ${safeText(task.status)}`).join(' · ')}</text>
+      </Show>
     </box>
     <Show when={!session().id}><box flexGrow={1} minHeight={0} /></Show>
     <box flexShrink={0} paddingTop={1} paddingBottom={1}>

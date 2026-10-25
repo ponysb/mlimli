@@ -25,11 +25,15 @@ export function hydrate(snapshot) {
     else state.parts[index] = { ...state.parts[index], ...part };
   };
   for (const entry of snapshot.entries || []) {
-    if (entry.type === 'message' && entry.role === 'user') upsert({ id: `user:${entry.id}`, kind: 'user', text: contentText(entry.content), turnId: entry.turnId });
+    if (entry.type === 'message' && entry.role === 'user') upsert({ ...entry, id: `user:${entry.id}`, kind: 'user', text: contentText(entry.content), turnId: entry.turnId });
     if (entry.type === 'step_start') upsert({ id: stepKey(entry), kind: 'assistant', text: '', thinking: '', turnId: entry.turnId, step: entry.step, status: 'running' });
-    if (entry.type === 'message' && entry.role === 'assistant') upsert({ id: entry.turnId ? stepKey(entry) : `assistant:${entry.id}`, kind: 'assistant', text: safeText(entry.text), turnId: entry.turnId, step: entry.step, status: 'ok' });
+    if (entry.type === 'message' && entry.role === 'assistant') upsert({ ...entry, id: entry.turnId ? stepKey(entry) : `assistant:${entry.id}`, kind: 'assistant', text: safeText(entry.text || contentText(entry.content)), turnId: entry.turnId, step: entry.step, status: 'ok' });
     if (entry.type === 'step_end') upsert({ id: stepKey(entry), kind: 'assistant', text: safeText(entry.text), thinking: safeText(entry.thinking), turnId: entry.turnId, step: entry.step, status: entry.status });
-    if (entry.type === 'tool_start' || entry.type === 'tool_end') upsert({ ...entry, id: `tool:${entry.callId}`, kind: 'tool', text: safeText(entry.content), status: entry.type === 'tool_start' ? 'running' : entry.status });
+    if (entry.type === 'tool_start' || entry.type === 'tool_end') {
+      upsert({ ...entry, id: `tool:${entry.callId}`, kind: 'tool', text: safeText(entry.content), status: entry.type === 'tool_start' ? 'running' : entry.status });
+      if (entry.taskContract) state.plan = entry.taskContract;
+    }
+    if (entry.type === 'task_summary') { state.summary = entry; upsert({ id: `summary:${entry.turnId || entry.id}`, kind: 'summary', summary: entry }); }
     if (entry.type === 'turn_end') {
       for (const part of state.parts) if (part.turnId === entry.turnId && part.status === 'running') part.status = entry.reason;
       upsert({ id: `end:${entry.turnId}`, kind: 'end', text: entry.error || entry.reason, reason: entry.reason, durationMs: entry.durationMs });
@@ -59,7 +63,7 @@ export function reduceEvent(current, event) {
   if (event.type === 'text_delta') assistant().text += safeText(event.text);
   if (event.type === 'thinking_delta') assistant().thinking += safeText(event.text);
   if (event.type === 'tool_call') upsert({ id: `tool:${event.call.id}`, kind: 'tool', callId: event.call.id, name: event.call.name, args: event.call.args, turnId: event.turnId, status: 'running', text: '' });
-  if (event.type === 'tool_result') upsert({ id: `tool:${event.callId}`, kind: 'tool', ...event, text: safeText(event.content) });
+  if (event.type === 'tool_result') { upsert({ id: `tool:${event.callId}`, kind: 'tool', ...event, text: safeText(event.content) }); if (event.taskContract) next.plan = event.taskContract; }
   if (event.type === 'tool_output') {
     const part = next.parts.findLast(item => item.kind === 'tool' && item.status === 'running' && item.name === event.name);
     if (part) part.text = (part.text + safeText(event.text)).slice(-12000);
@@ -77,6 +81,10 @@ export function reduceEvent(current, event) {
   if (event.type === 'ui_request' && !next.uiRequests.some(item => item.reqId === event.request.reqId)) next.uiRequests = [...next.uiRequests, event.request];
   if (event.type === 'ui_resolved') next.uiRequests = next.uiRequests.filter(item => item.reqId !== event.reqId);
   if (event.type === 'context_update') next.context = event.context;
+  if (event.type === 'goal_updated') next.goal = event.goal;
+  if (event.type === 'task_summary') { next.summary = event.summary; upsert({ id: `summary:${event.summary.turnId || event.summary.id}`, kind: 'summary', summary: event.summary }); }
+  if (event.type === 'session_run_started') next.running = true;
+  if (event.type === 'session_run_completed' || event.type === 'session_run_finished') next.running = false;
   return next;
 }
 
@@ -86,5 +94,6 @@ export const COMMANDS = [
   { label: '权限模式', value: '/mode' }, { label: '选择专家', value: '/expert' },
   { label: 'Skills', value: '/skills' }, { label: '账户登录', value: '/login' },
   { label: '退出账户', value: '/logout' }, { label: '压缩上下文', value: '/compact' },
-  { label: '停止任务', value: '/stop' }, { label: '退出', value: '/exit' },
+  { label: '停止任务', value: '/stop' }, { label: 'Agent 任务组', value: '/agents' },
+  { label: '任务队列', value: '/queue' }, { label: '退出', value: '/exit' },
 ];

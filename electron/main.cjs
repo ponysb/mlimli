@@ -12,7 +12,7 @@ function smokeStage(stage) {
   if (smokeArgument) fs.appendFileSync(`${path.resolve(smokeArgument.slice('--mli-smoke-report='.length))}.startup.log`, `${stage}\n`);
 }
 smokeStage('entry');
-const { app, BrowserWindow, dialog, ipcMain, Menu, Notification, shell, powerMonitor, nativeImage, screen } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, Notification, shell, powerMonitor, nativeImage, screen, protocol } = require('electron');
 smokeStage('electron');
 const { acquireRuntime } = require('./runtime.cjs');
 const { registerDebugConsole, observeDebugConsole } = require('./debug-console.cjs');
@@ -53,6 +53,12 @@ const configureDisplayCapture = registerDisplayCapture(ipcMain, () => mainWindow
 async function createWindow() {
   const win = new BrowserWindow({ width: 1440, height: 920, minWidth: 1024, minHeight: 680, backgroundColor: '#f6f7f8', icon: appIconPath, ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 13, y: 12 } } : { frame: false }), autoHideMenuBar: true, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false } });
   mainWindow = win;
+  let officeCloseApproved = false;
+  win.on('close', event => {
+    if (officeCloseApproved || !genOffice.hasViews()) return;
+    event.preventDefault();
+    genOffice.closeAll().then(ok => { if (ok && !win.isDestroyed()) { officeCloseApproved = true; win.close(); } }).catch(error => dialog.showErrorBox('无法关闭编辑器', error.message));
+  });
   meetingMini?.observe(win);
   observeDebugConsole(win.webContents);
   // Keep capture grants scoped to the local workbench; the OS/browser still
@@ -91,6 +97,15 @@ async function createWindow() {
     win.on('closed', () => fs.unwatchFile(closeFile));
   }
 }
+const { resolveGenOfficeRoot } = require('./genoffice-package.cjs');
+const genOffice = require('./genoffice.cjs').registerGenOffice({
+  app,
+  protocol,
+  ipcMain,
+  getWindow: () => mainWindow,
+  getServerUrl: () => serverUrl,
+  resourceRoot: resolveGenOfficeRoot({ developmentMode, electronDirectory: __dirname, resourcesPath: process.resourcesPath }),
+});
 registerDebugConsole(ipcMain, () => mainWindow);
 registerWindowControls({ ipcMain, getWindow: () => mainWindow, getServerUrl: () => serverUrl });
 ipcMain.handle('choose-directory', async () => {
@@ -178,6 +193,7 @@ if (ownsInstance) app.whenReady().then(async () => {
   const desktopUpdater = registerDesktopUpdater({ app, ipcMain, getWindow: () => mainWindow, development: developmentMode,
     baseUrl: configuredUpdateServer({ runtimeRoot, dataRoot }),
     beforeInstall: async () => {
+      if (!await genOffice.closeAll()) throw new Error('已取消更新，编辑器仍有未保存的更改');
       quitting = true;
       try { await runtimeConnection.prepareUpdate(); }
       catch (error) { quitting = false; throw error; }
@@ -218,9 +234,15 @@ app.on('before-quit', event => {
   smokeStage(`before-quit:${quitting}`);
   if (quitting || !runtimeConnection) return;
   event.preventDefault();
-  quitting = true;
-  meetingMini?.destroy();
-  appBrowser?.destroy();
-  runtimeConnection.release().finally(() => { smokeStage('runtime-released'); app.quit(); });
+  if (app.officeQuitPending) return;
+  app.officeQuitPending = true;
+  genOffice.closeAll().then(async ok => {
+    if (!ok) return;
+    quitting = true;
+    meetingMini?.destroy();
+    appBrowser?.destroy();
+    await runtimeConnection.release();
+    smokeStage('runtime-released'); app.quit();
+  }).catch(error => dialog.showErrorBox('无法退出', error.message)).finally(() => { app.officeQuitPending = false; });
 });
 app.on('will-quit', () => smokeStage('will-quit'));

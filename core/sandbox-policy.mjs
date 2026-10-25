@@ -36,7 +36,7 @@ export function getSandboxPolicy() { const value = execution.getStore() || getRu
 export function toolSandboxPolicy() { return execution.getStore(); }
 export function withSandboxPolicy(value, fn) { return execution.run(Object.freeze({ ...value }), fn); }
 
-export const PRIVATE_DIRS = ['.agent', '.security', '.codex', '.ssh', '.aws', '.gnupg', 'partitions', 'session storage', 'local storage', 'indexeddb'];
+export const PRIVATE_DIRS = ['.agent', '.security', '.codex', '.ssh', '.aws', '.gnupg', 'user-profiles', 'partitions', 'session storage', 'local storage', 'indexeddb'];
 export const READ_ONLY_DIRS = ['.git', '.agents'];
 export function privateFile(name) {
   const lower = name.toLowerCase();

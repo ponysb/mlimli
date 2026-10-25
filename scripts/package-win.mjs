@@ -12,6 +12,7 @@ import { buildTui } from './build-tui.mjs';
 import { createSandboxRepairBundle } from './sandbox-repair-bundle.mjs';
 import { verifyInstalledBuildDependencies, verifyRuntimeDependencies } from './runtime-dependencies.mjs';
 const { updateFeedUrl } = createRequire(import.meta.url)('../electron/updater.cjs');
+const { assertGenOfficePackage } = createRequire(import.meta.url)('../electron/genoffice-package.cjs');
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -156,6 +157,7 @@ export function windowsBuildConfig(stage, electronDist = path.join(ROOT, 'node_m
       // contents as a dedicated resource keeps runtime packages in the app.
       { from: path.join(stage.runtimeDirectory, 'node_modules'), to: 'client/node_modules', filter: ['**/*'] },
       ...(fs.existsSync(path.join(stage.destination, 'stage', 'node')) ? [{ from: path.join(stage.destination, 'stage', 'node'), to: 'node', filter: ['**/*'] }] : []),
+      ...(!legacy && process.platform === 'win32' && process.arch === 'x64' && fs.existsSync(path.join(ROOT, 'resources/genoffice/main/runtime.cjs')) ? [{ from: path.join(ROOT, 'resources/genoffice'), to: 'genoffice', filter: ['**/*'] }] : []),
     ],
     extraFiles: [{ from: path.join(stage.runtimeDirectory, 'cli', 'launchers', 'mli.cmd'), to: 'mli.cmd' }],
     asar: true,
@@ -202,6 +204,7 @@ async function main() {
     const files = [];
     for (const variant of variants) {
       const legacy = variant === 'legacy';
+      if (!legacy) assertGenOfficePackage(path.join(ROOT, 'resources/genoffice'), { platform: 'win32', arch: 'x64' });
       await buildFrontend({ configFile: path.join(ROOT, 'vite.config.js'), root: path.join(ROOT, 'react'), mode: legacy ? 'legacy' : 'production' });
       const electronDist = await ensureElectronDistribution(legacy);
       const stage = stageWindowsClient({ legacy, output: path.join(working, variant) });

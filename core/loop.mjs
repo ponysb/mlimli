@@ -14,12 +14,13 @@ import crypto from 'node:crypto';
 import { getRunContext, withRunContext } from './run-context.mjs';
 import { createMemorySnapshot, recordMemoryRecall } from './memory.mjs';
 import { createTeamMemorySnapshot } from './team-memory.mjs';
+import { userProfileSnapshot } from './user-profiles.mjs';
 import { agentManager } from './agent-manager.mjs';
 import { qualityPolicy, assessTaskQuality, qualityFeedback } from './task-quality.mjs';
 import { RunControl, runLimits, runDeadline } from './run-control.mjs';
 import { prepareToolOutput } from './tool-output.mjs';
 import { QualityProgress, deliveryVersion } from './quality-progress.mjs';
-import { saveTaskCheckpoint, taskRecoveryState, recoveryPrompt } from './task-checkpoint.mjs';
+import { saveTaskCheckpoint, taskRecoveryState, recoveryPrompt, recoveryActionIsReadOnly } from './task-checkpoint.mjs';
 
 let loopConfig = { agent: {}, security: {} };
 export function setLoopConfig(c) { loopConfig = c; }
@@ -119,6 +120,11 @@ function emitAssistantText(session, text) {
 
 /** 一轮对话：user 输入 → 循环 → turn_end */
 export async function runTurn(session, userText, attachments = [], { clientMessageId, queuedId, savedAttachments: queuedAttachments, resumeCheckpointId } = {}) {
+  const existing = getRunContext();
+  if (!existing?.userProfileSnapshot) {
+    const snapshot = structuredClone(userProfileSnapshot());
+    return withRunContext(Object.freeze({ ...existing, userProfileSnapshot: snapshot }), () => runTurn(session, userText, attachments, { clientMessageId, queuedId, savedAttachments: queuedAttachments, resumeCheckpointId }));
+  }
   const parent = getRunContext();
   let memorySnapshot = { body: '', ids: [] };
   let teamMemorySnapshot = { body: '', ids: [], organizationId: null };
@@ -376,11 +382,29 @@ async function runBoundTurn(session, userText, attachments = [], { clientMessage
           continue;
         }
         if (agentManager.consume(session, { finishing: true })) continue;
-        if (!context?.taskId && agentManager.pending(session).length) {
+        if (agentManager.pendingDeliveries(session).length) {
+          const deliveries = agentManager.pendingDeliveries(session).map(task => ({ taskId: task.taskId, delivery: task.delivery }));
+          const progress = qualityProgress.observe({ missing: deliveries.map(task => task.taskId), checks: [] }, JSON.stringify(deliveries));
+          if (progress.blocked) { finish('needs_validation'); return; }
+          session.append({ type: 'message', role: 'user', source: 'runtime', turnId, content: `[隔离交付尚未接收] ${JSON.stringify(deliveries)}\n核对成果后用 agent_integrate 接收；若存在冲突请报告或创建新任务修复，不能声称已完成。` });
+          continue;
+        }
+        if (agentManager.pending(session).length) {
           emit('status', { sessionId, text: '等待子 Agent 完成并汇总结果' });
-          while (!signal.aborted && agentManager.pending(session).length) await agentManager.wait(session, { timeoutMs: 30000, ignoreBlocked: true }, signal);
+          while (!signal.aborted && agentManager.pending(session).length && !agentManager.pendingDeliveries(session).length) {
+            const revision = agentManager.view(session).revision;
+            await agentManager.wait(session, { taskIds: agentManager.pending(session).map(task => task.taskId), mode: 'any', afterRevision: revision, timeoutMs: 30000, ignoreBlocked: true }, signal);
+            if (agentManager.consume(session, { finishing: true })) break;
+          }
           if (signal.aborted) break;
           agentManager.consume(session, { finishing: true });
+          continue;
+        }
+        if (!context?.taskId && agentManager.unmetRequirements(session).length) {
+          const missing = agentManager.unmetRequirements(session);
+          const progress = qualityProgress.observe({ missing: missing.map(item => item.id), checks: [] }, JSON.stringify(missing));
+          if (progress.blocked) { finish('needs_validation'); return; }
+          session.append({ type: 'message', role: 'user', source: 'runtime', turnId, content: `[蜂群目标尚未验收] ${JSON.stringify(missing)}\n继续完成并核对证据，用 agent_mission 更新要求状态。不要仅为结束任务而标记验收。` });
           continue;
         }
         if (!context?.taskId && quality.enabled && context?.modelSelection?.provider?.protocol !== 'mock') {
@@ -435,7 +459,7 @@ async function runBoundTurn(session, userText, attachments = [], { clientMessage
         }
 
         let vetoed = null;
-        if (phase === 'reconciling' && recovery?.unknownActions.length && (tool.permission !== 'L0' || recovery.unknownActions.some(action => action.name === call.name))) vetoed = '恢复检查尚未完成：先使用读取/状态工具核对真实状态，再决定是否继续产生副作用。';
+        if (phase === 'reconciling' && recovery?.unknownActions.length && (tool.permission !== 'L0' || recovery.unknownActions.some(action => action.name === call.name && !recoveryActionIsReadOnly(action.name)))) vetoed = '恢复检查尚未完成：先使用读取/状态工具核对真实状态，再决定是否继续产生副作用。';
         for (const h of getHooks().authorize_tool_call) {
           try {
             const r = await h({ session, tool, args: call.args, name: call.name });
@@ -534,7 +558,10 @@ async function runBoundTurn(session, userText, attachments = [], { clientMessage
     }
   } finally {
     cancelDeadline();
-    if (!context?.taskId && session.entries().findLast(entry => entry.type === 'turn_end')?.reason !== 'done') agentManager.stop(sessionId, context?.sessionStorageRoot);
+    if (session.entries().findLast(entry => entry.type === 'turn_end')?.reason !== 'done') {
+      if (context?.taskId) { const group = agentManager.group(session); agentManager.stopDescendants(group, group.tasks[context.taskId]); }
+      else agentManager.stop(sessionId, context?.sessionStorageRoot);
+    }
     aborts.delete(sessionId);
     activeModelRequests.delete(sessionId);
     activeSteps.delete(sessionId);

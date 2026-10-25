@@ -150,11 +150,13 @@ test('real Electron updaters download full installers and reject SHA-512 mismatc
   context.after(() => fs.rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const bytes = Buffer.from('MZinstaller-smoke-bytes');
   const hash = crypto.createHash('sha512').update(bytes).digest('base64');
+  const currentVersion = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+  const developmentVersion = `${Number(currentVersion.split('.')[0]) + 1}.0.0`;
   const server = http.createServer((req, res) => {
     const bad = req.url.startsWith('/bad/');
     if (req.url.split('?')[0].endsWith('/latest.yml')) {
       res.setHeader('content-type', 'text/yaml');
-      res.end(JSON.stringify({ version: req.url.startsWith('/development/') ? '0.4.1' : '99.0.0', files: [{ url: 'fixture.exe', sha512: hash, size: bytes.length }], path: 'fixture.exe', sha512: hash, releaseNotes: '真实下载验证' }));
+      res.end(JSON.stringify({ version: req.url.startsWith('/development/') ? developmentVersion : '99.0.0', files: [{ url: 'fixture.exe', sha512: hash, size: bytes.length }], path: 'fixture.exe', sha512: hash, releaseNotes: '真实下载验证' }));
     } else if (req.url.endsWith('/fixture.exe')) {
       res.setHeader('content-length', bytes.length); res.end(bad ? Buffer.from('MZinstaller-wrong-bytes') : bytes);
     } else { res.writeHead(404); res.end(); }
@@ -168,13 +170,13 @@ test('real Electron updaters download full installers and reject SHA-512 mismatc
     fs.copyFileSync('test/fixtures/desktop-update-smoke.cjs', path.join(root, 'main.cjs'));
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: `mli-updater-smoke-${index}`, version: '0.2.0', main: 'main.cjs' }));
     const report = path.join(root, 'result.json');
-    const env = { ...process.env, LOCALAPPDATA: root, MLI_UPDATE_SMOKE_ROOT: path.resolve('package.json'), MLI_UPDATE_SMOKE_REPORT: report, MLI_UPDATE_SMOKE_URL: `http://127.0.0.1:${server.address().port}` };
+    const env = { ...process.env, LOCALAPPDATA: root, MLI_UPDATE_SMOKE_ROOT: path.resolve('package.json'), MLI_UPDATE_SMOKE_REPORT: report, MLI_UPDATE_SMOKE_URL: `http://127.0.0.1:${server.address().port}`, MLI_UPDATE_SMOKE_VERSION: developmentVersion };
     delete env.ELECTRON_RUN_AS_NODE;
     try { await promisify(execFile)(executable, [root], { windowsHide: true, env, timeout: 25000 }); }
     catch (error) { throw new Error(`Electron updater: ${fs.existsSync(report) ? fs.readFileSync(report, 'utf8') : error.message}`); }
     const result = JSON.parse(fs.readFileSync(report));
     assert.equal(result.valid.status, 'downloaded'); assert.equal(result.corrupt.status, 'error');
-    assert.equal(result.development.status, 'available'); assert.equal(result.development.version, '0.4.1');
+    assert.equal(result.development.status, 'available'); assert.equal(result.development.version, developmentVersion);
     assert.equal(result.development.canInstall, false);
     context.diagnostic(`Electron ${result.electron} / Node ${result.node}: real download and checksum passed`);
   }

@@ -1,0 +1,19 @@
+/* Embedded Office uses the workbench Agent; upstream Friday is unavailable. */
+.ai-dock,
+.ai-entry,
+.stage-ai-bar,
+.pdf-sel-ask,
+.pdf-sel-popup-sep:has(+ .pdf-sel-ask),
+.ribbon-group:has(.ai-entry) {
+  display: none !important;
+}
+.ribbon-group:has([hidden]):not(:has(button:not([hidden]), input, select, .ribbon-tool:not([hidden]))) {
+  display: none !important;
+}
+[hidden] { display: none !important; }
+.sheet-body { grid-template-columns: minmax(0, 1fr) !important; }
+#workbench-agent { position:fixed;inset:0;z-index:10000;pointer-events:none;font-family:inherit; }
+#workbench-agent .annotated-preview { --annotation-accent:#2d8a68;--annotation-soft:#eaf5f0; }
+#workbench-agent .preview-agent-composer { pointer-events:auto;bottom:48px;color:#35433b; }
+#workbench-agent .annotation-error { pointer-events:auto; }
+.office-agent-save-hint { position:absolute;right:36px;bottom:145px;color:#87928c;font-size:10px; }

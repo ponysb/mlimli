@@ -1,5 +1,6 @@
 // plugins/office/lib/ooxml.mjs —— docx / xlsx / pptx 的纯原生读写（ZIP + 字符串级 XML 操作）
 import { readZipMap, writeZip } from './zip.mjs';
+import path from 'node:path';
 
 // ---------- XML 工具 ----------
 export function escapeXml(s) {
@@ -42,8 +43,8 @@ export function docxExtractText(buf) {
   const paras = xml.toString('utf8').match(/<w:p[ >][\s\S]*?<\/w:p>|<w:p\/>/g) ?? [];
   const lines = paras.map((p) => {
     let t = '';
-    for (const m of p.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>|<w:tab\/>|<w:br\/>/g)) {
-      t += m[1] !== undefined ? decodeXml(m[1]) : (m[0] === '<w:tab/>' ? '\t' : '\n');
+    for (const m of p.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\s*\/>|<w:br(?:\s[^>]*)?\/>/g)) {
+      t += m[1] !== undefined ? decodeXml(m[1]) : (/^<w:tab/.test(m[0]) ? '\t' : '\n');
     }
     return t;
   });
@@ -83,16 +84,18 @@ function parseSharedStrings(zip) {
   });
 }
 
-function parseSheet(xml, shared) {
+function parseSheet(xml, shared, { maxRows = Infinity, maxColumns = Infinity } = {}) {
   const rows = [];
   for (const rm of xml.matchAll(/<row[^>]*r="(\d+)"[^>]*>([\s\S]*?)<\/row>/g)) {
     const rowIdx = parseInt(rm[1], 10) - 1;
+    if (rowIdx >= maxRows) continue;
     const cells = [];
     for (const cm of rm[2].matchAll(/<c([^>]*?)\/>|<c([^>]*?)>([\s\S]*?)<\/c>/g)) {
       const attrs = cm[1] ?? cm[2];
       const inner = cm[3] ?? '';
       const ref = /r="([A-Z]+\d+)"/.exec(attrs)?.[1] ?? '';
       const col = colToIndex(ref);
+      if (col < 0 || col >= maxColumns) continue;
       const t = /t="(\w+)"/.exec(attrs)?.[1] ?? '';
       let value = '';
       if (t === 's') {
@@ -113,12 +116,12 @@ function parseSheet(xml, shared) {
   }
   // 压实稀疏数组
   const dense = [];
-  for (let i = 0; i < rows.length; i++) dense.push((rows[i] ?? []).map((c) => c ?? ''));
+  for (let i = 0; i < rows.length; i++) dense.push(Array.from(rows[i] ?? [], c => c ?? ''));
   return dense;
 }
 
 /** 读 xlsx → [{ name, rows: string[][] }]（值统一为字符串） */
-export function xlsxRead(buf) {
+export function xlsxRead(buf, options = {}) {
   const zip = readZipMap(buf);
   const wb = zip.get('xl/workbook.xml');
   if (!wb) throw new Error('不是有效的 xlsx');
@@ -136,9 +139,9 @@ export function xlsxRead(buf) {
     const file = 'xl/' + target.replace(/^\/?(xl\/)?/, '');
     const sheetXml = zip.get(file) ?? zip.get('xl/' + target);
     if (!sheetXml) continue;
-    sheets.push({ name: decodeXml(name), rows: parseSheet(sheetXml.toString('utf8'), shared) });
+    sheets.push({ name: decodeXml(name), rows: parseSheet(sheetXml.toString('utf8'), shared, options) });
   }
-  if (!sheets.length) sheets.push({ name: 'Sheet1', rows: parseSheet(zip.get('xl/worksheets/sheet1.xml')?.toString('utf8') ?? '', shared) });
+  if (!sheets.length) sheets.push({ name: 'Sheet1', rows: parseSheet(zip.get('xl/worksheets/sheet1.xml')?.toString('utf8') ?? '', shared, options) });
   return sheets;
 }
 
@@ -328,7 +331,25 @@ export function pptxRenderSlides(buf) {
   const slideFiles = [...zip.keys()].filter((key) => /^ppt\/slides\/slide\d+\.xml$/.test(key)).sort((a, b) => Number(a.match(/(\d+)\.xml$/)[1]) - Number(b.match(/(\d+)\.xml$/)[1]));
   return slideFiles.map((file) => {
     const xml = zip.get(file).toString('utf8');
-    const shapes = [...xml.matchAll(/<p:sp(?:\s[^>]*)?>([\s\S]*?)<\/p:sp>/g)].map((match) => renderPptxShape(match[0], scale)).join('');
+    const rels = zip.get(`${path.posix.dirname(file)}/_rels/${path.posix.basename(file)}.rels`)?.toString('utf8') || '';
+    const images = new Map();
+    for (const match of rels.matchAll(/<Relationship\b([^>]*?)\/?\s*>/g)) {
+      const attrs = match[1];
+      if (xmlAttr(attrs, 'TargetMode') === 'External') continue;
+      const target = decodeXml(xmlAttr(attrs, 'Target'));
+      const name = target.startsWith('/') ? target.slice(1) : path.posix.normalize(path.posix.join(path.posix.dirname(file), target));
+      const mime = ({ '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.gif':'image/gif', '.webp':'image/webp' })[path.posix.extname(name).toLowerCase()];
+      const bytes = zip.get(name);
+      if (mime && bytes) images.set(xmlAttr(attrs, 'Id'), `data:${mime};base64,${bytes.toString('base64')}`);
+    }
+    const shapes = [...xml.matchAll(/<p:(sp|pic)(?:\s[^>]*)?>[\s\S]*?<\/p:\1>/g)].map(match => {
+      if (match[1] === 'sp') return renderPptxShape(match[0], scale);
+      const picture = match[0], ref = /<a:blip\b([^>]*)/.exec(picture)?.[1] || '';
+      const href = images.get(xmlAttr(ref, 'r:embed'));
+      const off = /<a:off\b([^>]*)/.exec(picture)?.[1] || '', ext = /<a:ext\b([^>]*)/.exec(/<p:spPr\b[\s\S]*/.exec(picture)?.[0] || '')?.[1] || '';
+      if (!href) return '';
+      return `<image x="${Number(xmlAttr(off, 'x')) * scale}" y="${Number(xmlAttr(off, 'y')) * scale}" width="${Number(xmlAttr(ext, 'cx')) * scale}" height="${Number(xmlAttr(ext, 'cy')) * scale}" href="${href}" preserveAspectRatio="none"/>`;
+    }).join('');
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width * scale} ${height * scale}" preserveAspectRatio="xMidYMid meet"><rect width="100%" height="100%" fill="#ffffff"/>${shapes}</svg>`;
   });
 }

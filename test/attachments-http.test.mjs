@@ -41,6 +41,8 @@ test('HTTP attachment flow lets a text-only agent read and modify a file with or
   model.listen(0, '127.0.0.1'); await once(model, 'listening');
   const config = JSON.parse(fs.readFileSync(path.join(root, 'config.example.json'), 'utf8'));
   config.providers[0].protocol = 'openai-chat'; config.providers[0].baseUrl = `http://127.0.0.1:${model.address().port}`;
+  config.agent.quality.enabled = true;
+  config.memory = { enabled: false, autoLearn: false };
   config.models[0].capabilities = { image: false, file: false, pdf: false, audio: false };
   fs.writeFileSync(path.join(directory, 'config.json'), JSON.stringify(config));
   instance = runtime.startRuntime({ executable: process.execPath, runtimeRoot: root, dataRoot: directory });

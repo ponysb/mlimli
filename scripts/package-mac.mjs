@@ -5,6 +5,9 @@ import { ROOT, stageWindowsClient, bundleCompatibility } from './package-win.mjs
 import { installNodeRuntime } from './terminal-package.mjs';
 import { buildTui } from './build-tui.mjs';
 import { verifyInstalledBuildDependencies, verifyRuntimeDependencies } from './runtime-dependencies.mjs';
+import { createRequire } from 'node:module';
+
+const { assertGenOfficePackage } = createRequire(import.meta.url)('../electron/genoffice-package.cjs');
 
 export function macBuildConfig(stage, arch) {
   return {
@@ -17,6 +20,7 @@ export function macBuildConfig(stage, arch) {
       { from: path.join(stage.runtimeDirectory, 'node_modules'), to: 'client/node_modules', filter: ['**/*'] },
       { from: path.join(stage.destination, 'stage', 'node'), to: 'node', filter: ['**/*'] },
       { from: path.join(ROOT, 'cli', 'launchers', 'mli'), to: 'bin/mli' },
+      ...(fs.existsSync(path.join(ROOT, 'resources/genoffice/main/runtime.cjs')) && arch === process.arch ? [{ from: path.join(ROOT, 'resources/genoffice'), to: 'genoffice', filter: ['**/*'] }] : []),
     ],
     mac: { target: ['pkg'], icon: path.join(ROOT, 'electron', 'assets', 'icon-mac.icns'), category: 'public.app-category.productivity', artifactName: `MoliCreation-\${version}-${arch}.\${ext}`,
       extendInfo: { NSMicrophoneUsageDescription: '用于语音输入与会议录音，在本机转写发言。', NSCameraUsageDescription: '用于用户开启的会议视频录制。', NSScreenCaptureUsageDescription: '用于用户选择的会议屏幕或窗口录制。' },
@@ -41,6 +45,7 @@ async function main() {
     else throw new Error('用法：npm run dist:mac -- [--arch x64|arm64]');
   }
   if (!['x64', 'arm64'].includes(arch)) throw new Error('macOS 架构必须是 x64 或 arm64');
+  assertGenOfficePackage(path.join(ROOT, 'resources/genoffice'), { platform: 'darwin', arch });
   const cache = path.join(ROOT, 'node_modules', '.cache', 'mli-mac-packaging');
   fs.mkdirSync(cache, { recursive: true });
   const working = fs.mkdtempSync(path.join(cache, 'build-'));

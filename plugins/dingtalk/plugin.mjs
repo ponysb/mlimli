@@ -20,13 +20,13 @@ async function readAttachments(message) {
   } catch { return []; }
 }
 
-export default async function setup(ctx) {
+export default async function setup(ctx, { loadSdk = () => import('dingtalk-stream') } = {}) {
   ctx.registerChannelAdapter({
     type: 'dingtalk', name: '钉钉',
     async connect(channel, runtime) {
       const { clientId, clientSecret } = channel.credentials || {};
       if (!clientId || !clientSecret) throw new Error('钉钉需要 Client ID 和 Client Secret');
-      const sdk = await import('dingtalk-stream');
+      const sdk = await loadSdk();
       const client = new sdk.DWClient({ clientId, clientSecret, keepAlive: true, autoReconnect: true });
       client.registerCallbackListener(sdk.TOPIC_ROBOT, (downstream) => {
         let message;
@@ -37,23 +37,33 @@ export default async function setup(ctx) {
         const promise = readAttachments(message).then((attachments) => runtime.onMessage({
           id: message.msgId || downstream.headers?.messageId,
           senderId, chatId: message.conversationId || senderId, isGroup,
-          mentionedBot: Array.isArray(message.atUsers) ? message.atUsers.some((item) => item.dingtalkId === message.chatbotUserId || item.staffId === senderId) : !!message.isInAtList,
+          mentionedBot: message.isInAtList === true || (Array.isArray(message.atUsers) && !!message.chatbotUserId && message.atUsers.some((item) => item.dingtalkId === message.chatbotUserId)),
           text, attachments, replyTarget: { sessionWebhook: message.sessionWebhook, messageId: message.msgId },
         }));
         if (downstream.headers?.messageId) client.socketCallBackResponse(downstream.headers.messageId, { status: 'SUCCESS' });
         Promise.resolve(promise).catch((error) => runtime.log('message_error', String(error?.message || error).slice(0, 300)));
       });
       await client.connect();
-      return { client };
+      if (!client.connected) { client.config.autoReconnect = false; client.disconnect(); throw new Error('钉钉连接未建立，请检查应用凭据及 Stream 模式'); }
+      let connected = true;
+      const monitor = setInterval(() => {
+        if (connected === client.connected) return;
+        connected = client.connected;
+        runtime.onStatus?.(connected ? 'connected' : 'disconnected');
+      }, 1000);
+      monitor.unref?.();
+      return { client, monitor };
     },
-    async disconnect(state) { state?.client?.disconnect?.(); },
+    async disconnect(state) { clearInterval(state?.monitor); if (state?.client) state.client.config.autoReconnect = false; state?.client?.disconnect?.(); },
     async send(state, target, text) {
       const endpoint = String(target?.sessionWebhook || '');
       let parsed;
-      try { parsed = new URL(endpoint); } catch { return; }
+      try { parsed = new URL(endpoint); } catch { throw new Error('钉钉回复缺少有效的会话 Webhook'); }
       if (parsed.protocol !== 'https:' || !WEBHOOK_HOSTS.has(parsed.hostname.toLowerCase())) throw new Error('钉钉回复地址无效');
-      const response = await fetch(parsed, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ msgtype: 'text', text: { content: String(text).slice(0, 6000) } }) });
+      const response = await fetch(parsed, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(15000), headers: { 'content-type': 'application/json' }, body: JSON.stringify({ msgtype: 'text', text: { content: String(text).slice(0, 6000) } }) });
       if (!response.ok) throw new Error(`钉钉回复失败（HTTP ${response.status}）`);
+      const result = await response.json();
+      if (result.errcode !== 0) throw new Error(`钉钉回复失败（${result.errcode ?? '无效响应'}）：${String(result.errmsg || '').slice(0, 200)}`);
     },
   });
 }

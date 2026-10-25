@@ -4,6 +4,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { emit } from './events.mjs';
 import { listPlatformPlugins as fetchPlatformPlugins, installPlatformPlugin } from './platform-plugins.mjs';
+import { resolveResourceCover } from './resource-images.mjs';
 
 let config = {};
 let current = null;
@@ -247,14 +248,15 @@ export function publicAccountStatus() {
   };
 }
 export function accountToken() { return current?.token || ''; }
+export function accountUserId() { return current?.user?.id ? String(current.user.id) : ''; }
 export function accountServerUrl() { return accountConfig().baseUrl; }
 export async function listManagedModels() {
   if (!current?.token) return { models: [] };
   return request('/api/v2/models', { token: current.token });
 }
 export async function listPlatformLibrary() {
-  if (!current?.token) return { items: [] };
-  return request('/api/v2/library', { token: current.token });
+  const data = await request('/api/v2/library', { token: current?.token });
+  return { ...data, items: (data.items || []).map(item => ({ ...item, coverUrl: resolveResourceCover(item.coverUrl, accountServerUrl()) })) };
 }
 
 export async function listTeamMemory({ timeoutMs = 15000 } = {}) {

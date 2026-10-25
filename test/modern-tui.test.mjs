@@ -38,7 +38,7 @@ test('events received while fetching a snapshot are merged only past its waterma
 
 test('stale hydration cannot replace a newer session', async context => {
   const a = deferred(), b = deferred();
-  const controller = new TuiController({ request: url => url.endsWith('/a') ? a.promise : b.promise });
+  const controller = new TuiController({ request: url => url.includes('/a?') ? a.promise : b.promise });
   context.after(() => controller.close());
   const first = controller.restore('a');
   const second = controller.restore('b');
@@ -55,7 +55,7 @@ test('double submission creates one session and preserves a draft typed during s
   const controller = new TuiController({ async request(url, body) {
     calls.push({ url, body });
     if (url === '/api/session') return created.promise;
-    if (url === '/api/session/s') return { id: 's', entries: [], running: false };
+    if (url === '/api/session/s?limit=120') return { id: 's', entries: [], running: false };
     return {};
   } });
   context.after(() => controller.close());
@@ -87,4 +87,25 @@ test('failed submission retains the input for retry and completion events do not
   controller.event({ type: 'turn_end', sessionId: 's', turnId: 't', reason: 'error', error: 'failed', seq: 2 });
   assert.equal(controller.session.running, false);
   assert.equal(controller.session.parts[0].status, 'error');
+});
+
+test('modern TUI exposes agent and queue commands', async context => {
+  const calls = [];
+  const controller = new TuiController({ request: async (url, body, options) => {
+    calls.push({ url, body, options });
+    if (url.endsWith('/agents')) return { revision: 2, tasks: [{ agentId: 'a1', title: '检查', profile: 'reviewer', status: 'completed', result: { summary: '完成' } }] };
+    if (url.includes('/queue/') && options?.method === 'DELETE') return { ok: true };
+    if (url.endsWith('/queue')) return { queue: [] };
+    if (url.includes('?limit=')) return { id: 's', entries: [], queue: [{ queueId: 'q1', text: '后续', mode: 'next' }] };
+    return {};
+  } });
+  context.after(() => controller.close());
+  controller.connected = true;
+  controller.session = { ...emptySession('s'), queue: [{ queueId: 'q1', text: '后续', mode: 'next' }] };
+  controller.choose = async (title, choices) => title.startsWith('Agent 任务组') ? null : choices[0]?.value;
+  controller.ask = async () => null;
+  await controller.command('/agents');
+  await controller.command('/queue');
+  assert.ok(calls.some(call => call.url.endsWith('/agents')));
+  assert.ok(calls.some(call => call.options?.method === 'DELETE'));
 });

@@ -149,7 +149,7 @@ test('aborted browser commands disappear from the desktop active set and cannot 
 });
 test('remote browser contents cannot invoke privileged desktop IPC', () => {
   const handlers = new Map(), win = { webContents: {} }; let called = false;
-  registerAppBrowser({ ipcMain: { handle: (name, fn) => handlers.set(name, fn) }, controller: { open() { called = true; } }, getWindow: () => win, serverUrl: 'http://127.0.0.1:3000' });
+  registerAppBrowser({ ipcMain: { on: (name, fn) => handlers.set(name, fn), handle: (name, fn) => handlers.set(name, fn) }, controller: { open() { called = true; } }, getWindow: () => win, serverUrl: 'http://127.0.0.1:3000' });
   assert.throws(() => handlers.get('app-browser-open')({ sender: {}, senderFrame: { url: 'https://evil.example' } }, 'app'), /主窗口/);
   assert.throws(() => handlers.get('app-browser-open')({ sender: win.webContents, senderFrame: { url: 'https://evil.example' } }, 'app'), /主窗口/);
   assert.equal(called, false);

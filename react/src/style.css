@@ -244,6 +244,8 @@ textarea:focus-visible {
   min-width: 960px;
   background: var(--shell-background);
 }
+.workspace-sidebar-toggle { display:none; }
+@media(max-width:800px) { .workspace-tabbar { position:relative; }.workspace-sidebar-toggle { display:flex; position:absolute; z-index:11; left:8px; top:7px; align-items:center; justify-content:center; width:30px; height:30px; padding:0; border:0; border-radius:5px; background:#fff; color:#67727a; } }
 .sidebar {
   --sidebar-hover: #eef2ef;
   --sidebar-active: #e5efe9;
@@ -951,7 +953,7 @@ textarea:focus-visible {
   width: 100%;
   min-width: 0;
   flex: 1;
-  padding: 7px 9px;
+  padding: 7px 34px 7px 9px;
   text-align: left;
 }
 .session-open .session-dot {
@@ -967,29 +969,21 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 .session-status {
-  position: absolute;
-  z-index: 1;
-  top: 50%;
-  right: 34px;
   display: grid;
   width: 20px;
   height: 20px;
+  flex: 0 0 20px;
   place-items: center;
   color: var(--green);
-  pointer-events: none;
-  transform: translateY(-50%);
 }
 .session-status-icon {
   display: block;
   animation: session-loading-spin 1s linear infinite;
 }
-.session-unread {
+.session-completed-icon {
   display: block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #2fbd78;
-  box-shadow: 0 0 0 3px rgba(47, 189, 120, 0.13);
+  color: #2f9d68;
+  stroke-width: 3;
 }
 @keyframes session-loading-spin {
   to { transform: rotate(360deg); }

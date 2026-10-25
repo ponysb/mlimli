@@ -46,13 +46,13 @@
 .browser-zoom-row { display: flex; align-items: center; gap: 5px; min-height: 38px; padding: 0 9px; border-block: 1px solid #eceeef; }
 .browser-zoom-row > span { flex: 1; font-size: 12px; }.browser-zoom-row b { width: 42px; text-align: center; font-size: 11px; }
 .browser-zoom-row button { display: grid; place-items: center; width: 27px; height: 27px; padding: 0; border: 0; border-radius: 5px; background: #f1f3f4; cursor: pointer; }
-.browser-find { position: absolute; z-index: 4; top: 51px; right: 14px; display: flex; align-items: center; gap: 7px; width: min(360px, calc(100% - 28px)); height: 38px; padding: 0 8px 0 11px; border: 1px solid #dfe3e6; border-radius: 7px; background: #fff; box-shadow: 0 8px 24px #20262d1f; }
+.browser-find { position: relative; z-index: 4; align-self: flex-end; flex: none; margin: 5px 14px; display: flex; align-items: center; gap: 7px; width: min(360px, calc(100% - 28px)); height: 38px; padding: 0 8px 0 11px; border: 1px solid #dfe3e6; border-radius: 7px; background: #fff; box-shadow: 0 8px 24px #20262d1f; }
 .browser-find input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 12px; }.browser-find button { border: 0; border-radius: 4px; background: transparent; cursor: pointer; font-size: 11px; }
 .browser-surface { flex: 1; min-height: 100px; background: #fff; }
 .browser-surface[hidden] { display: none; }
 .browser-start-page { flex: 1; min-height: 0; overflow: auto; padding: 34px 32px; background: #fafafa; }
 .browser-start-page h2 { margin: 12px 0 18px; font-size: 15px; font-weight: 600; }
-.browser-start-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 44px; }
+.browser-start-tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 44px; }
 .browser-start-tools button { display: flex; align-items: center; gap: 12px; min-height: 58px; padding: 0 16px; border: 1px solid #eceef0; border-radius: 8px; background: #fff; color: #30383f; font-size: 14px; cursor: pointer; }
 .browser-start-tools button:hover { border-color: #cdd5d1; background: #f8fbf9; }
 .browser-start-apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 16px; }

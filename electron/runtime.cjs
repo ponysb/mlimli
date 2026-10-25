@@ -141,7 +141,7 @@ async function leaseRuntime(record, spawned) {
       released = true;
       clearInterval(heartbeat);
       const response = await request(`${record.url}/api/runtime/lease`, { ...lease, release: true }).catch(() => null);
-      if (response?.remaining === 0) {
+      if (response?.remaining === 0 && !response.background) {
         const deadline = Date.now() + 4000;
         while (alive(record.pid) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 50));
       }

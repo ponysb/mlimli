@@ -5,12 +5,13 @@ import crypto from 'node:crypto';
 import { loadConfig, getConfig, resolveModelSelection } from './llm.mjs';
 import { agentManager } from './agent-manager.mjs';
 import { memoryLearner } from './memory-learning.mjs';
+import { userProfileSnapshot } from './user-profiles.mjs';
 import { shutdownAppCenter } from './app-center.mjs';
 import { createRunContext, getRunContext, withRunContext } from './run-context.mjs';
 import { getSandboxPolicy } from './sandbox-policy.mjs';
-import { agentProfiles } from './agent-profiles.mjs';
+import { resolveTaskAgent } from './agent-profiles.mjs';
 import { setLoopConfig, runTurn, abortRun, Session } from './loop.mjs';
-import { requireAccount, setAccountConfig } from './account.mjs';
+import { accountUserId, requireAccount, setAccountConfig } from './account.mjs';
 import { DATA_ROOT, getWorkspaceRoot, setWorkspaceRoot, resolveInWorkspace } from './paths.mjs';
 import { ensureWorkspace, listWorkspaces, setActiveWorkspace, workspaceRegistryExists } from './workspaces.mjs';
 import { loadAll, cancelUiRequests, disposePlugins } from './plugins.mjs';
@@ -48,6 +49,15 @@ export async function initializeRuntime() {
   await initializeChannels();
   scheduler.setRunner(runScheduledTask);
   scheduler.start();
+  for (const { session, group } of agentManager.recover(getWorkspaceRoot(), cfg)) {
+    const policy = group.runtimePolicy, recovery = taskRecoveryState(session);
+    if (recovery.available && (recovery.unknownActions.some(action => !['agent_wait', 'agent_inspect'].includes(action.name)) || recovery.externalHandles.length)) {
+      group.mission.status = 'blocked'; group.mission.blockedReason = '主任务存在结果未知的操作，请从检查点核对恢复';
+      agentManager.save(group); continue;
+    }
+    const context = createRunContext({ session, config: cfg, executionRoot: policy.executionRoot, modelSelection: resolveModelSelection(policy.modelId), allowedTools: policy.allowedTools, sandboxPolicy: policy.sandboxPolicy, executionEnvironment: policy.executionEnvironment, profileOwnerId: policy.profileOwnerId || 'local', userProfileSnapshot: policy.userProfileSnapshot || { active: null, ownerId: 'local', memoryKey: '' } });
+    runSequence(session, `[蜂群恢复]\n原始目标：${group.mission.goal}\n用 agent_inspect 核对已有成果、下属和阻塞，只接续未完成部分，不重复派发已有任务。`, [], { context, ...(recovery.available ? { resumeCheckpointId: recovery.checkpointId } : {}) }).catch(error => emit('error', { sessionId: session.id, message: error.message }));
+  }
   return cfg;
 }
 
@@ -71,9 +81,12 @@ export function contextForSession(session) {
   const config = getConfig() || runtimeConfig || {};
   const childTask = session.parentSessionId ? agentManager.view(session).tasks.find(task => task.sessionId === session.id) : null;
   if (session.parentSessionId && !childTask) throw new Error('子会话缺少角色记录');
-  const profile = childTask ? agentProfiles(config).find(item => item.id === childTask.profile) : null;
+  const profile = childTask ? resolveTaskAgent(childTask, config) : null;
+  if (profile) profile.tools = childTask.externalAgentId ? ['acp_launch', 'acp_permission'] : childTask.allowedTools || profile.tools;
   let context;
-  context = createRunContext({ session, config, modelSelection: resolveModelSelection(childTask?.modelId), sandboxPolicy: { ...getSandboxPolicy(), ...(profile?.readOnly ? { mode: 'read-only' } : {}) }, ...(profile ? { taskId: childTask.taskId, readOnly: profile.readOnly, allowedTools: profile.tools, maxSteps: profile.maxSteps, maxDurationMs: profile.maxDurationMs, taskInstruction: childTask.instruction } : {}), changedPaths: new Set(), acquireResource: tool => agentManager.acquireResource(agentManager.group(session, context), session.id, tool), assertResource: (tool, args) => agentManager.assertResource(agentManager.group(session, context), session.id, tool, args), recordUsage: metrics => agentManager.recordUsage(context, metrics) });
+  context = createRunContext({ session, config, modelSelection: resolveModelSelection(childTask?.modelId), profileOwnerId: accountUserId() || 'local', sandboxPolicy: { ...getSandboxPolicy(), ...(childTask?.readOnly ? { mode: 'read-only' } : {}) }, ...(profile ? { taskId: childTask.taskId, parentAgentId: childTask.parentSessionId, canDelegate: childTask.canDelegate, readOnly: childTask.readOnly, allowedTools: profile.tools, maxSteps: profile.maxSteps, maxDurationMs: profile.maxDurationMs, taskInstruction: childTask.instruction } : {}), changedPaths: new Set(), acquireResource: tool => agentManager.acquireResource(agentManager.group(session, context), session.id, tool), assertResource: (tool, args) => agentManager.assertResource(agentManager.group(session, context), session.id, tool, args), recordUsage: metrics => agentManager.recordUsage(context, metrics) });
+  if (childTask?.executionRoot) context = Object.freeze({ ...context, executionRoot: childTask.executionRoot, isolatedWorkspace: Boolean(childTask.writablePaths) });
+  if (!context.userProfileSnapshot) context = Object.freeze({ ...context, userProfileSnapshot: withRunContext(context, () => structuredClone(userProfileSnapshot())) });
   return context;
 }
 
@@ -87,6 +100,7 @@ export function assertWorkspaceIdle() {
 
 export async function runSequence(session, text, attachments, options = {}) {
   let context = options.context || contextForSession(session);
+  if (!context.userProfileSnapshot) context = Object.freeze({ ...context, userProfileSnapshot: withRunContext(context, () => structuredClone(userProfileSnapshot())) });
   if (context.taskId) context = Object.freeze({ ...context, recordUsage: metrics => agentManager.recordUsage(context, metrics) });
   return withRunContext(context, () => runBoundSequence(session, text, attachments, options));
 }
@@ -104,7 +118,7 @@ export function prepareTaskResume(session, checkpointId) {
 }
 
 async function runBoundSequence(session, text, attachments, options) {
-  agentManager.begin(session, getRunContext());
+  agentManager.begin(session, getRunContext(), text);
   if (activeSequences.has(session.id)) return;
   activeSequences.add(session.id);
   runningSessions.set(session.id, session);
@@ -120,16 +134,15 @@ async function runBoundSequence(session, text, attachments, options) {
       await runTurn(session, next.text, [], { queuedId: next.queueId, savedAttachments: next.attachments });
     }
   } catch (error) {
-    if (!getRunContext()?.taskId) agentManager.stop(session.id, getRunContext()?.sessionStorageRoot);
+    agentManager.stop(session.id, getRunContext()?.sessionStorageRoot);
     throw error;
   } finally {
-    if (!getRunContext()?.taskId) {
-      while (agentManager.pending(session).length) await agentManager.wait(session, { timeoutMs: 30000, ignoreBlocked: true });
-    }
+    while (agentManager.pending(session).length) await agentManager.wait(session, { timeoutMs: 30000, ignoreBlocked: true });
     activeSequences.delete(session.id);
     runningSessions.delete(session.id);
     runningContexts.delete(session.id);
     const summary = session.entries().slice(initialEntryCount).findLast((entry) => entry.type === 'task_summary');
+    if (!getRunContext()?.taskId && !agentManager.suspending) agentManager.completeMission(session, summary?.reason || 'error');
     emit('session_run_finished', { sessionId: session.id, reason: summary?.reason || 'error', summary });
     if (!getRunContext()?.taskId) {
       for (const completed of session.entries().slice(initialEntryCount).filter(entry => entry.type === 'task_summary')) {
@@ -152,6 +165,7 @@ function stopSingleSession(id) {
 }
 
 export function shutdownRuntime() {
+  agentManager.suspend();
   shutdownAppCenter();
   memoryLearner.dispose();
   for (const id of activeSequences) stopSession(id);
@@ -255,7 +269,7 @@ async function runChannelMessageNow({ channel, message, mappingKey, onSession })
     if (summary?.reason !== 'done') throw new Error(summary?.error || 'Agent 任务尚未完成验收');
     const answer = entries.findLast((entry) => entry.type === 'message' && entry.role === 'assistant');
     const text = Array.isArray(answer?.content) ? answer.content.filter((part) => part.type === 'text').map((part) => part.text).join('\n') : answer?.text || answer?.content || summary?.summaryText || 'Agent 已完成任务。';
-    await sendChannel(channel.id, message.replyTarget, String(text || 'Agent 已完成任务。').slice(0, 12000));
+    if (!await sendChannel(channel.id, message.replyTarget, String(text || 'Agent 已完成任务。'))) throw new Error('任务已完成，但渠道结果发送失败，请在工作台查看会话');
     emit('channel_session_completed', { channelId: channel.id, sessionId: session.id, messageId: message.id });
     return { sessionId: session.id, workspaceId: target.id };
   } catch (error) {

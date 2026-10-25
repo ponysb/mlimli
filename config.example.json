@@ -47,7 +47,10 @@
     "subagents": {
       "enabled": true,
       "delegation": "auto",
-      "maxConcurrent": 2
+      "maxConcurrent": 2,
+      "maxTasks": 512,
+      "adaptiveConcurrency": false,
+      "maxDepth": 3
     }
   },
   "memory": {

@@ -26,7 +26,10 @@ test('HTTP 记忆管理、版本冲突、项目隔离、开关持久化和真实
       const user = entries.find(entry => entry.role === 'user');
       const memories = user.text.includes('始终使用中文回答') ? [{ scope: 'global', kind: 'preference', title: '回答语言', content: '始终使用中文回答。', evidence: [{ entryId: user.entryId, quote: '始终使用中文回答' }] }] : [];
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ memories }) } }], usage: { prompt_tokens: 100, completion_tokens: 40 } }));
+      const profileUpdates = user.text.includes('我叫林舟') ? [{ field: 'displayName', value: '林舟', entryId: user.entryId, quote: '我叫林舟' }]
+        : user.text.includes('我是工程师') ? [{ field: 'role', value: '工程师', entryId: user.entryId, quote: '我是工程师' }]
+        : user.text.includes('我是设计师') ? [{ field: 'role', value: '设计师', entryId: user.entryId, quote: '我是设计师' }] : [];
+      res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ memories, profileUpdates }) } }], usage: { prompt_tokens: 100, completion_tokens: 40 } }));
     }
   });
   await new Promise(resolve => provider.listen(0, '127.0.0.1', resolve));
@@ -94,4 +97,38 @@ test('HTTP 记忆管理、版本冲突、项目隔离、开关持久化和真实
   assert.ok(items.some(item => item.id === global.id)); assert.ok(!items.some(item => item.id === local.id));
   assert.equal((await request(`/api/memories/global/${global.id}`, { expectedRevision: 1 }, 'DELETE')).status, 200);
   assert.equal((await request(`/api/memories/global/${global.id}`)).status, 404);
+  await request('/api/memory/settings', { enabled: true, autoLearn: true });
+  const profileSession = (await request('/api/session', { title: '自动档案链路' })).data;
+  async function profileTurn(text, predicate) {
+    await request(`/api/session/${profileSession.id}/message`, { text });
+    const data = await until('/api/user-profiles', predicate);
+    await until(`/api/session/${profileSession.id}`, data => !data.running);
+    await until('/api/memory/learning', data => !data.jobs.some(job => ['running', 'queued'].includes(job.status)));
+    return data.active;
+  }
+  const automatic = await profileTurn('我叫林舟', data => data.active?.displayName === '林舟');
+  await profileTurn('我是工程师', data => data.active?.role === '工程师');
+  const proposed = await profileTurn('我是设计师', data => data.active?.pending?.length === 1);
+  assert.equal(proposed.role, '工程师');
+  assert.ok(calls.filter(call => call.stream).at(-1).messages.some(message => message.role === 'system' && message.content.includes('当前使用者档案：林舟')));
+  const proposalRoute = `/api/user-profiles/${automatic.id}/proposals/${proposed.pending[0].id}`;
+  assert.equal((await request(proposalRoute, { expectedRevision: 99, approve: true })).status, 409);
+  const confirmed = (await request(proposalRoute, { expectedRevision: proposed.revision, approve: true })).data.profile;
+  assert.equal(confirmed.role, '设计师'); assert.equal(confirmed.pending.length, 0);
+  await request(`/api/user-profiles/${automatic.id}`, { expectedRevision: confirmed.revision }, 'DELETE');
+  await request('/api/memory/settings', { autoLearn: false });
+  assert.equal((await request('/api/user-profiles', { displayName: '' })).status, 400);
+  const first = (await request('/api/user-profiles', { displayName: '甲', preferences: '中文' })).data.profile;
+  const second = (await request('/api/user-profiles', { displayName: '乙' })).data.profile;
+  const privateMemory = (await request('/api/memories', { scope: 'global', content: '只属于甲的偏好' })).data.item;
+  await request('/api/user-profiles/active', { id: second.id });
+  assert.equal((await request(`/api/memories/global/${privateMemory.id}`)).status, 404);
+  assert.equal((await request(`/api/user-profiles/${first.id}`, { expectedRevision: 99, displayName: '过期修改' }, 'PUT')).status, 409);
+  assert.equal((await request('/api/user-profiles/active', { id: 'missing' })).status, 404);
+  await stop(); await start();
+  assert.equal((await request('/api/user-profiles')).data.active.id, second.id);
+  await request('/api/user-profiles/active', { id: first.id });
+  assert.equal((await request(`/api/memories/global/${privateMemory.id}`)).data.item.content, '只属于甲的偏好');
+  assert.equal((await request(`/api/user-profiles/${first.id}`, { expectedRevision: 1 }, 'DELETE')).status, 200);
+  assert.equal((await request('/api/user-profiles')).data.active, null);
 });

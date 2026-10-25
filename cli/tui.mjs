@@ -1,6 +1,9 @@
 import kit from 'terminal-kit';
 import { configureModel, login } from './forms.mjs';
 import { installPasteHandler } from './paste.mjs';
+import { TuiController } from './modern/controller.mjs';
+import { hydrate } from './modern/state.mjs';
+import { ACTION_COMMANDS, pendingAttachments } from './actions.mjs';
 
 export function safeText(value) {
   return String(value ?? '').replace(/\x1b\][\s\S]*?(?:\x07|\x1b\\)/g, '').replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '').replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, '');
@@ -119,7 +122,7 @@ export class TuiView {
       this.editor.userActions.send = () => {
         const text = this.editor.getValue();
         if (this.form) { this.finishForm(text); return; }
-        if (!text.trim()) return;
+        if (!text.trim() && !this.canSendEmpty?.()) return;
         this.history.push(text);
         this.historyIndex = this.history.length;
         this.draft = '';
@@ -206,6 +209,8 @@ const COMMANDS = [
   { label: '权限模式', value: '/mode' }, { label: '选择专家', value: '/expert' },
   { label: 'Skills', value: '/skills' }, { label: '账户登录', value: '/login' },
   { label: '停止任务', value: '/stop' }, { label: '退出', value: '/exit' },
+  { label: 'Agent 任务组', value: '/agents' }, { label: '任务队列', value: '/queue' },
+  ...ACTION_COMMANDS,
 ];
 
 export async function runTui(client, options, { signal, term, onReady } = {}) {
@@ -226,6 +231,19 @@ export async function runTui(client, options, { signal, term, onReady } = {}) {
     if (current && running) await client.request(`/api/session/${current.id}/abort`, {}).catch(error => view.append(`\n${error.message}`));
   };
   const view = new TuiView({ onSend: send, onStop: stop, onExit: exiting, term });
+  const actions = new TuiController(client, options);
+  actions.choose = async (title, choices, extra = {}) => {
+    if (extra.description) view.append(`\n${safeText(extra.description)}`);
+    return view.choose(title, choices.map(item => ({ ...item, label: `${item.label}${item.detail ? ` · ${item.detail}` : ''}` })));
+  };
+  actions.ask = (...args) => view.ask(...args);
+  actions.refresh = async () => { await refresh(); actions.info = info; };
+  actions.restore = async id => { await restore(id); actions.session = hydrate(current); };
+  actions.saveDraft = text => { actions.draft = text; view.draft = text; view.editor?.setContent(text); };
+  actions.changed = () => updateStatus();
+  const sharedCommand = actions.command.bind(actions);
+  actions.command = (text, extra) => text.trim() === '/new' ? command('/new') : sharedCommand(text, extra);
+  view.canSendEmpty = () => { actions.session = current || actions.session; return pendingAttachments(actions).length > 0; };
   const onAbort = () => { stop().finally(exiting); };
   signal?.addEventListener('abort', onAbort, { once: true });
   const updateStatus = () => {
@@ -241,11 +259,12 @@ export async function runTui(client, options, { signal, term, onReady } = {}) {
     if (selecting) return;
     selecting = true;
     try {
-      current = await client.request(`/api/session/${id}`);
+      current = await client.request(`/api/session/${id}?limit=120`);
+      actions.session = hydrate(current);
       running = current.running;
       view.setContent(snapshotText(current));
       updateStatus();
-      if (current.permission) enqueue('permission_request', current.permission);
+      for (const request of current.permissions || (current.permission ? [current.permission] : [])) enqueue('permission_request', request);
       for (const request of current.uiRequests || []) enqueue('ui_request', request);
     } finally { selecting = false; }
   }
@@ -266,10 +285,11 @@ export async function runTui(client, options, { signal, term, onReady } = {}) {
           const preview = request.preview;
           view.append(`\n\n审批 · ${request.levelLabel} · ${request.tool}\n${request.summary}\n${request.sessionScope || ''}`);
           if (preview?.kind === 'diff') view.append(`\n${preview.path}\n${preview.before ? `--- before\n${preview.before}\n` : ''}+++ after\n${preview.after}`);
-          const decision = await view.choose('执行审批', [
+          let decision = await view.choose('执行审批', [
             { label: '拒绝', value: 'deny' }, { label: '允许一次', value: 'allow' },
             { label: '当前会话允许此操作', value: 'allow_session' }, { label: '始终允许此操作', value: 'allow_always' },
           ]);
+          if (decision === 'allow_always' && await view.choose(`保存永久规则 ${safeText(request.rememberPattern || request.summary)}？`, [{ label: '取消', value: false }, { label: '确认', value: true }]) !== true) decision = 'deny';
           await client.request(`/api/session/${sessionId}/permission/${request.reqId}`, { decision: decision || 'deny' }).catch(error => { if (error.status !== 404) throw error; });
         } else {
           let value;
@@ -286,6 +306,19 @@ export async function runTui(client, options, { signal, term, onReady } = {}) {
   }
   async function command(text) {
     const [name, ...args] = text.trim().split(/\s+/);
+    if (ACTION_COMMANDS.some(item => item.value === name) || ['/agents', '/queue'].includes(name)) {
+      actions.session = { ...hydrate(current), ...(actions.session.id === current.id && name === '/older' ? { parts: actions.session.parts, history: actions.session.history } : {}), running };
+      actions.info = info;
+      actions.draft = view.editor?.getValue() || view.draft || '';
+      await actions.command(text);
+      if (name === '/workspace') { current = await client.request(`/api/session/${actions.session.id}?limit=120`); }
+      if (name === '/older') {
+        current.history = actions.session.history;
+        current.entries = [...(current.entries || [])];
+        view.setContent(actions.session.parts.map(part => `${part.name || part.kind}\n${part.text || JSON.stringify(part.summary || '')}`).join('\n\n'));
+      }
+      return true;
+    }
     if (name === '/exit') { exiting(); return true; }
     if (name === '/stop') { await stop(); return true; }
     if (name === '/help' || name === '/') {
@@ -316,7 +349,7 @@ export async function runTui(client, options, { signal, term, onReady } = {}) {
     } else if (name === '/expert') {
       const expertId = await view.choose('专家', [{ label: '无专家', value: '' }, ...info.experts.map(expert => ({ label: expert.name, value: expert.id }))]);
       if (expertId !== null) await client.request(`/api/session/${current.id}/expert`, { expertId });
-    } else if (name === '/skills') view.append(`\n\nSkills\n${info.plugins.skills.map(skill => `${skill.name} · ${skill.description}`).join('\n')}`);
+    } else if (name === '/skills') view.append(`\n\nSkills\n${[...(info.localSkills || []), ...(info.plugins?.skills || [])].map(skill => `${skill.name} · ${skill.description}`).join('\n')}`);
     else if (name === '/compact') { await client.request(`/api/session/${current.id}/compact`, {}); await restore(current.id); }
     else return false;
     return true;
@@ -325,14 +358,17 @@ export async function runTui(client, options, { signal, term, onReady } = {}) {
     if (!connected) throw new Error('运行时未连接');
     try {
       if (await command(text)) return;
-      await client.request(`/api/session/${current.id}/${running ? 'queue' : 'message'}`, { text });
+      actions.session = current;
+      const attachments = pendingAttachments(actions);
+      await client.request(`/api/session/${current.id}/${running ? 'queue' : 'message'}`, { text, attachments });
+      actions.attachments[current.id] = [];
       running = true;
       updateStatus();
     } finally { await processRequests(); }
   }
   const stream = client.events(event => {
     if (event.type === 'workspace_changed' || event.type === 'session_workspace_changed') {
-      if (event.workspace?.path !== options.cwd) { connected = false; view.append('\n\n工作目录已被其他客户端切换。请退出后重新打开此项目。'); updateStatus(); }
+      if (!actions.switchingWorkspace && event.workspace?.path !== options.cwd) { connected = false; view.append('\n\n工作目录已被其他客户端切换。请退出后重新打开此项目。'); updateStatus(); }
     }
     if (event.type === 'settings_updated' || event.type === 'catalog_updated') refresh(true).catch(() => {});
     if (event.sessionId !== current?.id && event.rootSessionId === current?.id && ['permission_request', 'ui_request'].includes(event.type)) { enqueue(event.type, event.request); return; }
@@ -372,6 +408,7 @@ export async function runTui(client, options, { signal, term, onReady } = {}) {
     await finished;
     return 0;
   } finally {
+    actions.close();
     signal?.removeEventListener('abort', onAbort);
     streamAbort.abort();
     view.close();

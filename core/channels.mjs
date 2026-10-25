@@ -22,6 +22,8 @@ const state = {
   runner: null,
   permissionUnsub: null,
   loaded: false,
+  connections: new Map(),
+  lifecycles: new Map(),
 };
 
 function ensureDir() { fs.mkdirSync(privateRoot, { recursive: true, mode: 0o700 }); }
@@ -95,7 +97,7 @@ export function loadChannels() {
   if (state.loaded) { ensurePermissionListener(); return; }
   const store = readStore();
   for (const raw of Array.isArray(store.channels) ? store.channels : []) {
-    try { const item = normalizeConfig(raw, raw); state.channels.set(item.id, item); } catch { /* 忽略损坏的单项配置 */ }
+    try { const item = normalizeConfig(raw, raw); item.status = 'disconnected'; item.connectedAt = null; state.channels.set(item.id, item); } catch { /* 忽略损坏的单项配置 */ }
   }
   state.loaded = true;
   ensurePermissionListener();
@@ -139,6 +141,17 @@ function allowed(channel, message) {
   if (message.isGroup && channel.requireMention && !message.mentionedBot) return false;
   return true;
 }
+function normalizeIncoming(raw = {}) {
+  const text = String(raw.text || '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim().slice(0, 30000);
+  const id = String(raw.id || raw.messageId || '').trim().slice(0, 256);
+  return {
+    ...raw,
+    id: id || crypto.randomUUID(), text,
+    senderId: String(raw.senderId || '').trim().slice(0, 256),
+    chatId: String(raw.chatId || raw.conversationId || '').trim().slice(0, 256),
+    isGroup: !!raw.isGroup, mentionedBot: !!raw.mentionedBot, replyTarget: raw.replyTarget || raw,
+  };
+}
 function command(text) {
   const m = /^\s*\/(new|stop|allow|deny)(?:\s+([\w-]+))?\s*$/i.exec(String(text || ''));
   return m ? { name: m[1].toLowerCase(), id: m[2] || '' } : null;
@@ -146,7 +159,7 @@ function command(text) {
 export async function handleIncoming(id, raw = {}) {
   loadChannels(); const channel = state.channels.get(String(id));
   if (!channel || !channel.enabled) return { accepted: false, reason: 'disabled' };
-  const message = { ...raw, id: String(raw.id || raw.messageId || crypto.randomUUID()), text: String(raw.text || '').trim(), senderId: String(raw.senderId || ''), chatId: String(raw.chatId || raw.conversationId || ''), isGroup: !!raw.isGroup, mentionedBot: !!raw.mentionedBot, replyTarget: raw.replyTarget || raw };
+  const message = normalizeIncoming(raw);
   if (channel.dedupe.includes(message.id)) return { accepted: false, reason: 'duplicate' };
   channel.dedupe.push(message.id); if (channel.dedupe.length > MAX_DEDUPE) channel.dedupe.splice(0, channel.dedupe.length - MAX_DEDUPE);
   persist();
@@ -155,7 +168,7 @@ export async function handleIncoming(id, raw = {}) {
   if (cmd) {
     const binding = state.running.get(`${channel.id}:${message.chatId}:${message.senderId}`);
     if (cmd.name === 'allow' || cmd.name === 'deny') {
-      const ok = resolveRequest(cmd.id, cmd.name === 'allow' ? 'allow' : 'deny', binding?.sessionId);
+      const ok = !!binding?.sessionId && !!cmd.id && resolveRequest(cmd.id, cmd.name === 'allow' ? 'allow' : 'deny', binding.sessionId);
       await send(channel.id, message.replyTarget, ok ? `已${cmd.name === 'allow' ? '允许' : '拒绝'}本次操作` : '权限请求不存在或已处理');
       return { accepted: true, command: cmd.name, resolved: ok };
     }
@@ -166,7 +179,10 @@ export async function handleIncoming(id, raw = {}) {
   const key = keyFor(channel, message);
   let result;
   try {
-    result = await state.runner.run({ channel, message, mappingKey: key, onSession: (sessionId) => state.running.set(key, { sessionId, channelId: channel.id, replyTarget: message.replyTarget }) });
+    result = await state.runner.run({ channel, message, mappingKey: key, onSession: (sessionId) => {
+      state.running.set(key, { sessionId, channelId: channel.id, replyTarget: message.replyTarget });
+      setChannelMapping(channel.id, key, { sessionId, workspaceId: channel.workspaceId || '', updatedAt: Date.now() });
+    } });
     if (result?.sessionId) setChannelMapping(channel.id, key, { sessionId: result.sessionId, workspaceId: result.workspaceId || channel.workspaceId || '', updatedAt: Date.now() });
   } finally { state.running.delete(key); }
   addEvent(channel, 'message_accepted', { messageId: message.id, sessionId: result?.sessionId, chatId: message.chatId });
@@ -175,19 +191,44 @@ export async function handleIncoming(id, raw = {}) {
 function keyFor(channel, message) { return `${channel.id}:${message.chatId}:${message.senderId}`; }
 export async function connectChannel(id) {
   loadChannels(); const channel = state.channels.get(String(id)); if (!channel) throw new Error('渠道不存在');
+  if (state.connections.has(channel.id)) throw new Error('渠道连接正在进行，请稍候');
+  const token = {};
+  state.connections.set(channel.id, token);
+  try { return await connectChannelNow(id, channel, token); }
+  finally { if (state.connections.get(channel.id) === token) state.connections.delete(channel.id); }
+}
+async function connectChannelNow(id, channel, token) {
   const adapter = adapters.get(channel.type); if (!adapter) throw new Error(`未安装 ${channel.type} 渠道适配器`);
-  await disconnectChannel(id);
+  await disconnectChannel(id, { preserveConnection: true });
+  state.lifecycles.set(channel.id, token);
   channel.status = 'connecting'; channel.lastError = ''; persist(); emit('channel_updated', { channelId: id, channel: publicChannel(channel) });
   try {
-    channel.adapterState = await adapter.connect({ ...channel }, { onMessage: (message) => handleIncoming(id, message), log: (...args) => console.log(`[channel:${id}]`, ...args) });
+    const adapterState = await adapter.connect({ ...channel }, {
+      onMessage: (message) => state.lifecycles.get(channel.id) === token ? handleIncoming(id, message) : Promise.resolve({ accepted: false, reason: 'disconnected' }),
+      onStatus: (status, details = {}) => {
+        const current = state.channels.get(String(id));
+        if (!current || current !== channel || state.lifecycles.get(channel.id) !== token) return;
+        if (status === 'connected') { current.status = 'connected'; current.lastError = ''; current.connectedAt ||= Date.now(); }
+        else if (status === 'disconnected') current.status = 'disconnected';
+        else if (status === 'error') { current.status = 'error'; current.lastError = String(details.message || '渠道连接异常').slice(0, 500); }
+        persist(); emit('channel_updated', { channelId: id, channel: publicChannel(current) }); addEvent(current, `adapter_${status}`, details);
+      },
+      log: (...args) => console.log(`[channel:${id}]`, ...args),
+    });
+    if (state.connections.get(channel.id) !== token) { await adapter.disconnect?.(adapterState); throw new Error('渠道连接已取消'); }
+    channel.adapterState = adapterState;
     channel.status = 'connected'; channel.connectedAt = Date.now(); persist(); emit('channel_updated', { channelId: id, channel: publicChannel(channel) });
     addEvent(channel, 'connected'); return publicChannel(channel);
   } catch (error) {
+    if (state.connections.get(channel.id) !== token) throw error;
+    state.lifecycles.delete(channel.id);
     channel.status = 'error'; channel.lastError = String(error?.message || error).slice(0, 500); persist(); emit('channel_updated', { channelId: id, channel: publicChannel(channel) }); addEvent(channel, 'error', { message: channel.lastError }); throw new Error('渠道连接失败，请检查配置和平台应用状态');
   }
 }
-export async function disconnectChannel(id) {
+export async function disconnectChannel(id, { preserveConnection = false } = {}) {
   loadChannels(); const channel = state.channels.get(String(id)); if (!channel) return false;
+  if (!preserveConnection) state.connections.delete(channel.id);
+  state.lifecycles.delete(channel.id);
   const adapter = adapters.get(channel.type);
   try { if (channel.adapterState) await adapter?.disconnect?.(channel.adapterState); } catch (error) { console.error(`[channel:${id}] disconnect failed`, error.message); }
   channel.adapterState = undefined; channel.status = 'disconnected'; channel.connectedAt = null; persist(); emit('channel_updated', { channelId: id, channel: publicChannel(channel) }); return true;
@@ -195,7 +236,11 @@ export async function disconnectChannel(id) {
 export async function send(id, target, text) {
   const channel = getChannel(id); const adapter = channel && adapters.get(channel.type);
   if (!channel || !adapter?.send || !channel.adapterState) return false;
-  try { await adapter.send(channel.adapterState, target, String(text || '').slice(0, 6000)); return true; } catch (error) { addEvent(channel, 'send_error', { message: String(error.message || error).slice(0, 300) }); return false; }
+  try {
+    const characters = Array.from(String(text || ''));
+    for (let offset = 0; offset < characters.length; offset += 1500) await adapter.send(channel.adapterState, target, characters.slice(offset, offset + 1500).join(''));
+    addEvent(channel, 'message_sent'); return true;
+  } catch (error) { addEvent(channel, 'send_error', { message: String(error.message || error).slice(0, 300) }); return false; }
 }
 export async function disconnectAll() { for (const channel of state.channels.values()) await disconnectChannel(channel.id); state.permissionUnsub?.(); state.permissionUnsub = null; }
 export async function initializeChannels() { loadChannels(); for (const channel of state.channels.values()) if (channel.enabled && channel.status !== 'connected') connectChannel(channel.id).catch(() => {}); return listChannels(); }

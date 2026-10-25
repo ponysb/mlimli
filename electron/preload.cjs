@@ -72,6 +72,13 @@ contextBridge.exposeInMainWorld('desktop', {
   importMediaAssets: () => ipcRenderer.invoke('import-media-assets'),
   showItemInFolder: (filePath) => ipcRenderer.invoke('show-item-in-folder', filePath),
   openWorkspaceFile: (relativePath) => ipcRenderer.invoke('open-workspace-file', relativePath),
+  genOfficeStatus: () => ipcRenderer.invoke('genoffice-status'),
+  onGenOfficeAgentRequest: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('genoffice-agent-request', listener); return () => ipcRenderer.removeListener('genoffice-agent-request', listener); },
+  genOfficeAgentResult: data => ipcRenderer.invoke('genoffice-agent-result', data),
+  genOfficeOpen: data => ipcRenderer.invoke('genoffice-open', data),
+  genOfficeBounds: data => ipcRenderer.invoke('genoffice-bounds', data),
+  genOfficeClose: id => ipcRenderer.invoke('genoffice-close', id),
+  onGenOfficeFailed: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('genoffice-failed', listener); return () => ipcRenderer.removeListener('genoffice-failed', listener); },
   notify: (payload) => ipcRenderer.invoke('show-notification', payload),
   getPathForFile: (file) => webUtils?.getPathForFile ? webUtils.getPathForFile(file) : file?.path || '',
 });

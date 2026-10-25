@@ -5,19 +5,21 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { once } = require('node:events');
 const { startRuntime } = require('../electron/runtime.cjs');
 const root = path.resolve(__dirname, '..');
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'mli-memory-ui-'));
 let runtime, window;
 const pause = () => new Promise(resolve => setTimeout(resolve, 40));
-const evaluate = code => window.webContents.executeJavaScript(code);
+const evaluate = async code => { try { return await window.webContents.executeJavaScript(code); } catch (error) { throw new Error(`${error.message}\nScript: ${code}`); } };
 async function until(code) { const end = Date.now() + 7000; while (Date.now() < end) { if (await evaluate(code)) return; await pause(); } throw new Error('UI timeout: ' + code); }
 async function click(text, selector = 'button') {
   await until(`Array.from(document.querySelectorAll(${JSON.stringify(selector)})).some(e => e.textContent.trim() === ${JSON.stringify(text)} && !e.disabled)`);
   await evaluate(`Array.from(document.querySelectorAll(${JSON.stringify(selector)})).find(e => e.textContent.trim() === ${JSON.stringify(text)} && !e.disabled).click()`);
 }
 async function fill(label, value) {
+  await until(`Boolean(document.querySelector('[aria-label=${JSON.stringify(label)}]'))`);
   await evaluate(`(() => { const e=document.querySelector('[aria-label=${JSON.stringify(label)}]'); const setter=Object.getOwnPropertyDescriptor(e.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, 'value').set; setter.call(e, ${JSON.stringify(value)}); e.dispatchEvent(new Event('input', {bubbles:true})); })()`);
 }
 app.whenReady().then(async () => {
@@ -29,8 +31,38 @@ app.whenReady().then(async () => {
     window = new BrowserWindow({ width: 1440, height: 1050, show: false, webPreferences: { offscreen: true, backgroundThrottling: false } });
     window.webContents.on('console-message', (...args) => { const event = args[0]; if (event.level === 'error') errors.push(event.message); });
     await window.loadURL(url);
-    await click('设置', '.sidebar-footer button'); await click('记忆', '[role=tab]');
+    await until('Boolean(document.querySelector(".sidebar-footer"))');
+    await evaluate('window.dispatchEvent(new CustomEvent("mli:open-settings", { detail: { tab: "memory" } }))');
     await until('Boolean(document.querySelector(".memory-settings"))');
+    await click('新增档案');
+    await fill('档案名称', '林舟'); await fill('职责/岗位', '产品负责人'); await fill('工作偏好', '先说明结论和验证结果'); await click('保存档案');
+    await until('document.querySelector(".memory-profile-row")?.textContent.includes("林舟")');
+    await click('新增档案');
+    await fill('档案名称', '陈禾'); await fill('职责/岗位', '工程师'); await fill('工作偏好', '提供测试证据'); await click('保存档案');
+    await until('document.querySelectorAll(".memory-profile-row").length === 2');
+    await evaluate('Array.from(document.querySelectorAll(".memory-profile-row")).find(e => e.textContent.includes("陈禾")).querySelector("button").click()');
+    await until('document.querySelector(".memory-profile-row.selected")?.textContent.includes("陈禾")');
+    assert.equal((await request('/api/user-profiles')).active.displayName, '陈禾');
+    await evaluate('Array.from(document.querySelectorAll(".memory-profile-row")).find(e => e.textContent.includes("林舟")).querySelector("button").click()');
+    await until('document.querySelector(".memory-profile-row.selected")?.textContent.includes("林舟")');
+    const profileFile = path.join(directory, 'user-profiles', crypto.createHash('sha256').update('local').digest('hex'), 'profiles.json');
+    const profileStore = JSON.parse(fs.readFileSync(profileFile, 'utf8'));
+    const profile = profileStore.items.find(item => item.id === profileStore.activeId);
+    profile.pending = [
+      { id: 'ui-approve', field: 'role', value: '技术负责人', previous: profile.role, evidence: { quote: '我现在是技术负责人' } },
+      { id: 'ui-ignore', field: 'team', value: '测试团队', previous: profile.team, evidence: { quote: '我在测试团队' } }
+    ];
+    fs.writeFileSync(profileFile, JSON.stringify(profileStore));
+    await window.reload();
+    await until('Boolean(document.querySelector(".sidebar-footer"))');
+    await evaluate('window.dispatchEvent(new CustomEvent("mli:open-settings", { detail: { tab: "memory" } }))');
+    await until('document.querySelectorAll(".memory-profile-proposal").length === 2');
+    await click('确认更新', '.memory-profile-proposal button');
+    await until('document.querySelectorAll(".memory-profile-proposal").length === 1');
+    await click('忽略建议', '.memory-profile-proposal button');
+    await until('document.querySelectorAll(".memory-profile-proposal").length === 0');
+    const reviewedProfile = (await request('/api/user-profiles')).active;
+    assert.equal(reviewedProfile.role, '技术负责人'); assert.equal(reviewedProfile.team, '');
     await click('新建记忆');
     await fill('记忆标题', '构建与验证方法'); await fill('记忆内容', '修改后运行 npm test 与 npm run check，确认通过后再交付。'); await fill('记忆标签', '验证, 构建');
     await click('保存'); await until('document.querySelector(".memory-notice")?.textContent.includes("记忆已保存")');
@@ -45,7 +77,8 @@ app.whenReady().then(async () => {
     await until('document.querySelector("[aria-label=使用记忆]")?.checked === false && !document.querySelector("[aria-label=使用记忆]").disabled');
     assert.equal((await request('/api/memory/settings')).settings.enabled, false);
     await window.reload();
-    await click('设置', '.sidebar-footer button'); await click('记忆', '[role=tab]');
+    await until('Boolean(document.querySelector(".sidebar-footer"))');
+    await evaluate('window.dispatchEvent(new CustomEvent("mli:open-settings", { detail: { tab: "memory" } }))');
     await until('Boolean(document.querySelector("[aria-label=使用记忆]"))');
     assert.equal(await evaluate('document.querySelector("[aria-label=使用记忆]").checked'), false);
     await evaluate('document.querySelector("[aria-label=使用记忆]").click()');
@@ -64,12 +97,12 @@ app.whenReady().then(async () => {
     await new Promise(resolve => setTimeout(resolve, 500));
     fs.writeFileSync(path.join(root, 'docs/memory-ui-check.png'), (await window.webContents.capturePage()).toPNG());
     window.setSize(390, 844);
-    await evaluate('document.querySelector(".mobile-nav-toggle").click()');
+    await evaluate('document.querySelector(".mobile-nav-toggle")?.click()');
     await new Promise(resolve => setTimeout(resolve, 500));
     assert.ok(await evaluate('document.documentElement.scrollWidth <= innerWidth'), 'mobile horizontal overflow');
     fs.writeFileSync(path.join(root, 'docs/memory-ui-mobile-check.png'), (await window.webContents.capturePage()).toPNG());
     assert.deepEqual(errors, []);
-    console.log('Memory UI passed: create, edit, restore, archive, approve, settings persistence, desktop/mobile layout');
+    console.log('Memory UI passed: profiles create/switch/approve/dismiss, memory create/edit/restore/archive/approve, settings persistence, desktop/mobile layout');
   } catch (error) { console.error(error); process.exitCode = 1; }
   finally {
     window?.destroy();

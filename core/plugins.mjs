@@ -11,6 +11,7 @@ import { appCenterTools } from './app-center-tools.mjs';
 import { getRunContext, assertAgentTool } from './run-context.mjs';
 import { APP_ROOT, DATA_ROOT, USER_PLUGINS_DIR } from './paths.mjs';
 import { coreTools } from './tools.mjs';
+import { filmCanvasTools } from './film-canvas-tools.mjs';
 import { memoryToolEnabled } from './memory-policy.mjs';
 import { mcpTool } from './mcp.mjs';
 import { getConfig } from './llm.mjs';
@@ -40,6 +41,9 @@ export function setPlatformSkills(items) {
     const scopeType = item.scopeType === 'enterprise' ? 'enterprise' : 'official';
     return {
       name: item.name,
+      coverUrl: item.coverUrl || null,
+      category: item.category || '',
+      tags: Array.isArray(item.tags) ? item.tags : [],
       description: item.description || (scopeType === 'enterprise' ? '企业 Skill' : '平台 Skill'),
       content: item.content,
       path: `platform:${item.id}`,
@@ -274,6 +278,7 @@ export async function loadAll({ reload = false } = {}) {
   state.loaded = [];
   registerCore();
   for (const tool of agentTools) state.tools.set(tool.name, { ...tool, plugin: 'core' });
+  for (const tool of filmCanvasTools) state.tools.set(tool.name, { ...tool, plugin: 'core' });
 
   const directories = new Map();
   for (const root of new Set([PLUGINS_DIR, USER_PLUGINS_DIR])) {

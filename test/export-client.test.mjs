@@ -57,6 +57,8 @@ test('客户端发布清单包含完整本地运行代码，不含后台、官�
   }
   for (const relativePath of paths) {
     assert.ok(!relativePath.startsWith('server/'), relativePath);
+    assert.ok(!relativePath.startsWith('enterprise-web/'), relativePath);
+    assert.ok(!relativePath.startsWith('docs/plans/'), relativePath);
     assert.ok(!relativePath.startsWith('website/'), relativePath);
     assert.ok(!relativePath.startsWith('.agent/'), relativePath);
     assert.ok(!relativePath.includes('/node_modules/'), relativePath);
@@ -82,6 +84,12 @@ test('客户端发布清单包含完整本地运行代码，不含后台、官�
   assert.equal(clientPackage.scripts['build:plugins'], undefined);
   assert.equal(clientPackage.scripts.start, 'node server.mjs');
   assert.equal(clientPackage.private, true);
+  for (const script of ['build:office', 'verify:office', 'electron', 'preelectron']) {
+    assert.ok(clientPackage.scripts[script], `缺少客户端构建命令：${script}`);
+    for (const match of clientPackage.scripts[script].matchAll(/(?:^|&&\s*)node\s+(scripts\/\S+)/g)) {
+      assert.ok(paths.has(match[1]), `缺少客户端构建脚本：${match[1]}`);
+    }
+  }
   for (const entry of plan.entries.filter(item => /\.(?:mjs|cjs|jsx|js)$/.test(item.path))) {
     const imports = entry.path.startsWith('test/')
       ? /^import\s+(?:[^;\n]*?\sfrom\s+)?['"](\.[^'"]+)['"]/gm
@@ -119,10 +127,11 @@ test('首次运行 mock 模型可完整结束流式请求，记录日志且不�
 
 test('导出过滤运行数据并为实际发布内容生成匹配的 SHA-256 清单', context => {
   const { root, output } = fixture(context);
-  for (const relativePath of ['server/private.js', 'website/index.html', 'config.json', '.env',
+  for (const relativePath of ['server/private.js', 'server/admin-web/private.js', 'enterprise-web/private.js', 'website/index.html', 'config.json', '.env',
     '.agent/sessions/test.json', 'core/.env', 'core/cache.pem', 'react/node_modules/secret.js', 'plugins/office/logs/call.log',
     'core/.cache/secret.txt', 'core/__pycache__/secret.pyc', 'core/config.json.bak', 'core/session.tmp',
-    'plugins/google-drive/OWNERS', 'electron/Partitions/private.txt', 'core/voice-profiles.json']) {
+    'plugins/google-drive/OWNERS', 'electron/Partitions/private.txt', 'core/voice-profiles.json',
+    'core/.DS_Store', 'core/Thumbs.db', 'core/ui-preferences.json', 'core/.claude/private.txt']) {
     write(root, relativePath, 'private-only-marker');
   }
   write(root, 'core/runtime.mjs', "export const name = 'client';\n");
@@ -136,6 +145,7 @@ test('导出过滤运行数据并为实际发布内容生成匹配的 SHA-256 �
   }
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(output, 'EXPORT-MANIFEST.json'))), result.manifest);
   assert.equal(fs.existsSync(path.join(output, 'server')), false);
+  assert.equal(fs.existsSync(path.join(output, 'enterprise-web')), false);
   assert.equal(fs.existsSync(path.join(output, 'website')), false);
   assert.equal(fs.readFileSync(path.join(output, '.env.example'), 'utf8').includes('APP_SECRET'), false);
 });

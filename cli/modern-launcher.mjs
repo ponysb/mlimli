@@ -17,7 +17,7 @@ export async function modernBinary() {
   if (fs.existsSync(installed)) return installed;
   if (fs.existsSync(path.join(root, 'client-defaults.env'))) throw new Error('安装包缺少新版终端程序，请重新安装');
   const binary = path.join(root, 'node_modules', '.cache', 'mli-tui', `${process.platform}-${process.arch}`, name);
-  const newest = Math.max(modified(path.join(root, 'cli', 'modern')), ...['cli/client.mjs', 'cli/forms.mjs', 'scripts/build-tui.mjs', 'scripts/compile-tui.ts', 'package-lock.json'].map(file => fs.statSync(path.join(root, file)).mtimeMs));
+  const newest = Math.max(modified(path.join(root, 'cli', 'modern')), ...['cli/actions.mjs', 'core/reasoning.mjs', 'cli/client.mjs', 'cli/forms.mjs', 'scripts/build-tui.mjs', 'scripts/compile-tui.ts', 'package-lock.json'].map(file => fs.statSync(path.join(root, file)).mtimeMs));
   if (!fs.existsSync(binary) || fs.statSync(binary).mtimeMs < newest) {
     process.stderr.write('正在构建终端程序…\n');
     const { buildTui } = await import('../scripts/build-tui.mjs');

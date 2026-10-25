@@ -25,12 +25,14 @@ export default async function setup(ctx) {
         work.catch((error) => runtime.log('message_error', String(error?.message || error).slice(0, 300)));
       });
       bot.on('error', (error) => runtime.log('error', String(error?.message || error).slice(0, 300)));
-      await bot.connect();
+      bot.on('reconnecting', () => runtime.onStatus?.('disconnected'));
+      bot.on('reconnected', () => runtime.onStatus?.('connected'));
+      try { await bot.connect(); } catch (error) { unsubscribe(); await bot.disconnect(); throw error; }
       return { bot, unsubscribe };
     },
     async disconnect(state) { state?.unsubscribe?.(); await state?.bot?.disconnect?.(); },
     async send(state, target, text) {
-      if (!state?.bot || !target?.chatId) return;
+      if (!state?.bot || !target?.chatId) throw new Error('飞书回复缺少目标群聊');
       await state.bot.send(target.chatId, { text }, target.messageId ? { replyTo: target.messageId } : undefined);
     },
   });

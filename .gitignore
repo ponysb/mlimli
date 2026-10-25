@@ -44,3 +44,15 @@ __pycache__/
 /server/
 /website/
 /enterprise-web/
+
+# Local build products, diagnostics and personal UI state
+/artifacts/
+/.artifacts/
+/output/
+/resources/
+/vendor/
+/.claude/
+/model-profile-cache.json
+/ui-preferences.json
+.DS_Store
+Thumbs.db

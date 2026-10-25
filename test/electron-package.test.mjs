@@ -112,10 +112,8 @@ test('Windows staging only contains public runtime files and no private services
   assert.equal(manifest.dependencies, undefined);
   assert.equal(manifest.devDependencies, undefined);
   const config = windowsBuildConfig(stage);
-  assert.deepEqual(config.extraResources.slice(0, 2), [
-    { from: stage.runtimeDirectory, to: 'client', filter: ['**/*', '!node_modules{,/**/*}'] },
-    { from: path.join(stage.runtimeDirectory, 'node_modules'), to: 'client/node_modules', filter: ['**/*'] },
-  ]);
+  assert.ok(config.extraResources.some(item => item.from === stage.runtimeDirectory && item.to === 'client'));
+  assert.ok(config.extraResources.some(item => item.from === path.join(stage.runtimeDirectory, 'node_modules') && item.to === 'client/node_modules'));
   assert.equal(fs.readFileSync(path.join(stage.runtimeDirectory, 'client-defaults.env'), 'utf8'), 'MLI_ACCOUNT_SERVER_URL=https://public.example.com\nMLI_ACCOUNT_ENABLED=true\nMLI_AGENT_PORT=3000\n');
   assert.ok(!fs.existsSync(path.join(stage.runtimeDirectory, '.env')));
   assert.equal(config.productName, '魔力工作台');

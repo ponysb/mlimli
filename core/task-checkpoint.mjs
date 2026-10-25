@@ -33,5 +33,10 @@ export function recoveryPrompt(recovery, executionRoot) {
     moved ? '当前工作目录已改变，旧文件版本和验证不能直接沿用。先核对当前文件。' : '先重读当前文件及验证状态，从未完成项继续，已有完整结果不重新执行。',
     recovery.unknownActions.length ? `以下调用没有完整结果，可能已产生副作用：${JSON.stringify(recovery.unknownActions)}。先检查真实状态，禁止仅凭缺少回复就重放。` : '',
     recovery.externalHandles.length ? `已记录外部句柄：${JSON.stringify(recovery.externalHandles)}。先查询状态再决定下一步。` : '',
-    '旧子任务不会自动重放；通过 agent_inspect 核对已交付结果和中断状态，只继续未完成部分。'].filter(Boolean).join('\n');
+    '通过 agent_inspect 核对已交付成果、已恢复任务与恢复阻塞。安全任务可能已自动接续，不要重复派发；未知副作用须先核对，只继续未完成部分。'].filter(Boolean).join('\n');
+}
+
+// Only these built-in observations can be replayed without creating side effects.
+export function recoveryActionIsReadOnly(name) {
+  return ['read_file', 'read_attachment', 'read_tool_output', 'find', 'grep', 'read_skill', 'agent_wait', 'agent_inspect'].includes(name);
 }

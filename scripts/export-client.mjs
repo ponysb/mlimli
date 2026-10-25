@@ -1,9 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 export const CLIENT_FILES = [
+  'test/fixtures/image-preview-smoke.cjs',
+  'docs/GENOFFICE.md', 'scripts/build-genoffice.mjs', 'scripts/verify-genoffice.mjs', 'test/genoffice.test.mjs', 'test/fixtures/genoffice-smoke.cjs',
+  'scripts/start-electron-dev.mjs', 'test/electron-icons.test.mjs',
+  'test/film-canvas.test.mjs', 'test/film-canvas-model.test.mjs', 'test/film-canvas-merge.test.mjs',
+  'test/film-canvas-http.test.mjs', 'test/film-canvas-integration.test.mjs', 'test/film-canvas-acceptance.test.mjs',
+  'test/film-canvas-drafts.test.mjs', 'test/film-canvas-production.test.mjs',
   'docs/MODEL-PROFILES.md', 'docs/model-profile-NOTICE.txt',
   'test/reasoning.test.mjs',
   'test/model-profile-worker.test.mjs',
@@ -28,7 +35,7 @@ export const CLIENT_FILES = [
   'docs/CLIENT-QUALITY.md', 'docs/MEMORY.md', 'docs/SUBAGENTS.md', 'docs/SCHEDULES.md', 'docs/LSP.md', 'scripts/verify-memory-ui.cjs',
   'test/browser-recording.test.mjs', 'test/channels.test.mjs', 'test/composer-capabilities.test.mjs',
   'test/delivery-evidence.test.mjs', 'test/fixtures/document-evidence.mjs', 'test/dictation-draft.test.mjs', 'test/dictation-microphone.test.mjs',
-  'test/meeting-mini.test.mjs', 'test/meeting-workspace.test.mjs', 'test/memory-http.test.mjs', 'test/memory.test.mjs',
+  'test/meeting-mini.test.mjs', 'test/meeting-workspace.test.mjs', 'test/memory-http.test.mjs', 'test/memory.test.mjs', 'test/user-profiles.test.mjs',
   'test/run-control.test.mjs', 'test/sandbox-setup.test.mjs', 'test/scheduler.test.mjs',
   'test/session-deletion.test.mjs', 'test/session-pagination.test.mjs', 'test/speech-worker-cache.test.mjs',
   'test/subagents-http.test.mjs', 'test/subagents.test.mjs', 'test/task-continuity.test.mjs',
@@ -42,14 +49,15 @@ export const CLIENT_TREES = [
   ...['computer-use', 'office', 'ffmpeg', 'local-speech', 'remotion', 'notion', 'build-web-apps',
     'build-web-data-visualization', 'linear', 'google-drive', 'github', 'feishu', 'dingtalk', 'lsp'].map(name => `plugins/${name}`),
 ];
-const CLIENT_SCRIPTS = ['start', 'tui', 'cli', 'build:tui', 'test:tui', 'check', 'test', 'dev:web', 'build:web', 'build:web:legacy', 'preelectron', 'electron', 'export:client', 'pack:win', 'dist:win', 'dist:win:modern', 'dist:win:legacy', 'dist:win:all', 'verify:win', 'dist:mac', 'dist:linux'];
-const EXCLUDED_DIRECTORIES = new Set(['node_modules', '.git', '.agent', '.agents', '.security', 'logs', 'dist', 'dist-legacy', 'release', 'storage', 'media-secrets', 'meetings', '__pycache__', '.cache', '.pytest_cache', '.venv', 'Partitions']);
+const CLIENT_SCRIPTS = ['start', 'tui', 'cli', 'build:tui', 'test:tui', 'check', 'test', 'dev:web', 'build:web', 'build:web:legacy', 'build:office', 'verify:office', 'preelectron', 'electron', 'export:client', 'pack:win', 'dist:win', 'dist:win:modern', 'dist:win:legacy', 'dist:win:all', 'verify:win', 'dist:mac', 'dist:linux'];
+const EXCLUDED_DIRECTORIES = new Set(['node_modules', '.git', '.agent', '.agents', '.claude', '.security', 'logs', 'dist', 'dist-legacy', 'release', 'storage', 'media-secrets', 'meetings', '__pycache__', '.cache', '.pytest_cache', '.venv', 'Partitions']);
 const SOURCE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function excluded(relativePath) {
   const parts = relativePath.split('/');
   const name = parts.at(-1);
   return parts.some(part => EXCLUDED_DIRECTORIES.has(part)) ||
+    name === '.DS_Store' || name === 'Thumbs.db' || name === 'ui-preferences.json' ||
     name === 'config.json' || name === 'account-session.json' || name === 'model-profile-cache.json' || name === 'OWNERS' || name === 'voice-profiles.json' ||
     (name.startsWith('.env') && name !== '.env.example') ||
     /\.(?:log|pem|key|p12|pfx|sqlite|sqlite3|db|zip|pyc|pyo|bak|tmp|old)$/i.test(name);
@@ -120,16 +128,25 @@ export function planClientExport(sourceRoot = SOURCE_ROOT) {
 }
 
 function validateDestination(root, output) {
-  const relative = path.relative(root, output);
+  const canonical = value => fs.existsSync(value) ? fs.realpathSync(value) : path.join(canonical(path.dirname(value)), path.basename(value));
+  const canonicalOutput = canonical(output);
+  const relative = path.relative(fs.realpathSync(root), canonicalOutput);
   if (!relative) throw new Error('导出目录不能是源项目目录');
   if (!relative.startsWith('..' + path.sep) && relative !== '..' && !path.isAbsolute(relative)) {
     const first = relative.split(path.sep)[0];
     if (first !== 'release') throw new Error('项目内部导出仅允许 release/ 下的独立目录');
   }
   let current = path.parse(output).root;
+  const systemTemp = fs.realpathSync(os.tmpdir());
   for (const part of output.slice(current.length).split(path.sep).filter(Boolean)) {
     current = path.join(current, part);
-    if (fs.existsSync(current) && fs.lstatSync(current).isSymbolicLink()) throw new Error('导出目标不能经过符号链接');
+    if (fs.existsSync(current) && fs.lstatSync(current).isSymbolicLink()) {
+      const resolved = fs.realpathSync(current);
+      const relativeTemp = path.relative(resolved, systemTemp);
+      // macOS exposes its system temp through /var. Only trust ancestors of
+      // the OS-provided temp root; user-controlled destination links stay denied.
+      if (process.platform !== 'darwin' || !['/var', '/tmp'].includes(current) || relativeTemp.startsWith('..') || path.isAbsolute(relativeTemp)) throw new Error('导出目标不能经过符号链接');
+    }
   }
   if (fs.existsSync(output) && (!fs.statSync(output).isDirectory() || fs.readdirSync(output).length)) {
     throw new Error('导出目录已存在且非空，请选择新的空目录；不会覆盖或删除原文件');

@@ -1,7 +1,7 @@
 export class RuntimeClient {
   constructor(url) { this.url = url; this.workspace = null; }
 
-  async request(resource, body, { signal, scoped = true } = {}) {
+  async request(resource, body, { signal, scoped = true, method } = {}) {
     const controller = new AbortController();
     const onAbort = () => controller.abort();
     signal?.addEventListener('abort', onAbort, { once: true });
@@ -9,9 +9,9 @@ export class RuntimeClient {
     const timeout = setTimeout(onAbort, 15000);
     try {
       const response = await fetch(`${this.url}${resource}`, {
-        method: body === undefined ? 'GET' : 'POST', signal: controller.signal,
+        method: method || (body === undefined ? 'GET' : 'POST'), signal: controller.signal,
         headers: { 'content-type': 'application/json', ...(scoped && this.workspace ? { 'x-mli-workspace': this.workspace } : {}) },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: body === undefined || method === 'DELETE' ? undefined : JSON.stringify(body),
       });
       const payload = await response.json();
       if (!response.ok) {

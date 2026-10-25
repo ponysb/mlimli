@@ -59,6 +59,7 @@ test('client HTTP displays published backend apps, merges URL-only user apps and
     assert.equal(req.headers.authorization, undefined);
     res.writeHead(200, { 'content-type': 'application/json' });
     if (req.url === '/api/v2/client-analytics/session') res.end(JSON.stringify({ success: true }));
+    else if (req.url === '/api/v2/model-profiles') res.end(JSON.stringify({ success: true, data: { profiles: [], revision: 'fixture' } }));
     else {
       assert.equal(req.url, '/api/v2/apps');
       res.end(JSON.stringify({ success: true, data: { items } }));

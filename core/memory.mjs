@@ -5,6 +5,7 @@ import { DATA_ROOT, getWorkspaceRoot, canonicalPath, isInside } from './paths.mj
 import { getRunContext } from './run-context.mjs';
 import { memorySettings } from './memory-policy.mjs';
 import { emit } from './events.mjs';
+import { userProfileSnapshot } from './user-profiles.mjs';
 
 const SCOPES = ['global', 'project'];
 const KINDS = ['preference', 'fact', 'lesson', 'workflow'];
@@ -22,7 +23,8 @@ export function redactMemoryText(value) {
 const safe = (value, limit) => clean(redactMemoryText(value), limit);
 export function memoryLocations() {
   const context = getRunContext();
-  return { global: path.join(context?.memoryDataRoot || DATA_ROOT, 'memories', 'memory.json'), project: path.join(context?.sessionStorageRoot || getWorkspaceRoot(), '.agent', 'memory.json') };
+  const key = userProfileSnapshot().memoryKey;
+  return { global: path.join(context?.memoryDataRoot || DATA_ROOT, 'memories', ...(key ? ['profiles', ...key.split('/')] : []), 'memory.json'), project: path.join(context?.sessionStorageRoot || getWorkspaceRoot(), '.agent', 'memory.json') };
 }
 function scopeFile(scope) {
   if (!SCOPES.includes(scope)) throw memoryError('无效记忆范围');
@@ -155,9 +157,55 @@ export function matchScore(text, query) {
   const tokens = [...words].flatMap(word => /[\u4e00-\u9fff]/.test(word) ? [...Array(Math.min(60, word.length - 1))].map((_, index) => word.slice(index, index + 2)) : [word]).slice(0, 100);
   return tokens.reduce((score, token) => score + (haystack.includes(token) ? 1 : 0), 0);
 }
+function queryTerms(query) {
+  const raw = String(query ?? '').toLowerCase().slice(0, 2000);
+  const words = new Set(raw.match(/[a-z0-9_./-]{2,}|[\u4e00-\u9fff]{2,}/g) || []);
+  return [...new Set([...words].flatMap(word => /[\u4e00-\u9fff]/.test(word)
+    ? [...Array(Math.min(60, word.length - 1))].map((_, index) => word.slice(index, index + 2))
+    : [word]))].slice(0, 100);
+}
+function termFrequency(text, term) {
+  let count = 0, position = 0;
+  while ((position = text.indexOf(term, position)) !== -1 && count < 8) { count++; position += term.length; }
+  return count;
+}
+function memoryRanker(query, corpus) {
+  const terms = queryTerms(query);
+  const fields = item => [item.title.toLowerCase(), item.tags.join(' ').toLowerCase(), item.content.toLowerCase()];
+  const documents = corpus.map(fields);
+  const averages = [0, 1, 2].map(index => documents.reduce((sum, document) => sum + document[index].length, 0) / (documents.length || 1) || 1);
+  const weights = [3.5, 2.5, 1];
+  const idfs = terms.map(term => {
+    const frequency = documents.filter(document => document.some(field => field.includes(term))).length;
+    return Math.log(1 + (corpus.length - frequency + 0.5) / (frequency + 0.5));
+  });
+  const phrase = String(query ?? '').toLowerCase().trim();
+  return item => {
+    const document = fields(item); let score = 0;
+    for (let index = 0; index < terms.length; index++) {
+      for (let field = 0; field < document.length; field++) {
+        const frequency = termFrequency(document[field], terms[index]);
+        if (frequency) score += idfs[index] * weights[field] * frequency * 2.2 / (frequency + 1.2 * (0.25 + 0.75 * document[field].length / averages[field]));
+      }
+    }
+    if (terms.length && phrase && document.some(field => field.includes(phrase))) score += 2;
+    return score;
+  };
+}
+function memoryUtility(item, now = Date.now()) {
+  const ageDays = Math.max(0, (now - (item.updated || item.created || now)) / 86400000);
+  const recency = 1 / (1 + ageDays / 180);
+  const usage = Math.min(1.5, Math.log1p(Math.max(0, item.useCount || 0)) * 0.25);
+  const confidence = item.confidence === 'user_confirmed' ? 1.5 : item.confidence === 'inferred' ? -0.5 : 0;
+  return recency + usage + confidence;
+}
 export function searchMemories(query, { scope = 'all', limit = 12 } = {}) {
   if (!String(query).trim()) throw memoryError('搜索词不能为空');
-  return listMemories({ scope, status: 'active', query: String(query).slice(0, 2000) }).slice(0, Math.max(1, Math.min(30, Number(limit) || 12)));
+  const items = listMemories({ scope, status: 'active' }), relevance = memoryRanker(query, items);
+  return items.map(item => ({ item, relevance: relevance(item) })).filter(row => row.relevance > 0)
+    .map(({ item, relevance }) => ({ ...item, score: relevance * 3 + memoryUtility(item) }))
+    .sort((a, b) => b.score - a.score || b.updated - a.updated)
+    .slice(0, Math.max(1, Math.min(30, Number(limit) || 12)));
 }
 export function memoryCatalog({ scope = 'all', query = '' } = {}) {
   const items = listMemories({ scope, status: 'active', query }).slice(0, 50);
@@ -166,7 +214,11 @@ export function memoryCatalog({ scope = 'all', query = '' } = {}) {
 export function createMemorySnapshot(query = '') {
   if (!memorySettings().enabled) return { body: '', ids: [] };
   const items = listMemories({ scope: 'all', status: 'active' });
-  const ranked = items.map(item => ({ item, rank: (item.pinned ? 100 : 0) + (item.scope === 'global' && item.kind === 'preference' ? 50 : 0) + matchScore(`${item.title} ${item.tags.join(' ')} ${item.content}`, query) * 3 })).filter(row => row.rank > 0).sort((a, b) => b.rank - a.rank || b.item.updated - a.item.updated);
+  const relevance = memoryRanker(query, items);
+  const ranked = items.map(item => ({ item, relevance: relevance(item), core: (item.pinned ? 100 : 0) + (item.scope === 'global' && item.kind === 'preference' ? 50 : 0) }))
+    .filter(row => row.core > 0 || row.relevance > 0)
+    .map(row => ({ ...row, rank: row.core + row.relevance * 3 + memoryUtility(row.item) }))
+    .sort((a, b) => b.rank - a.rank || b.item.updated - a.item.updated);
   const blocks = [], ids = []; let budget = 4400;
   for (const { item } of ranked.slice(0, 8)) {
     const block = `[${item.scope}/${item.id} · ${item.title} · ${item.kind} · v${item.revision}]\n${item.content.slice(0, 1100)}`;
