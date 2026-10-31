@@ -17,3 +17,4 @@
 #workbench-agent .preview-agent-composer { pointer-events:auto;bottom:48px;color:#35433b; }
 #workbench-agent .annotation-error { pointer-events:auto; }
 .office-agent-save-hint { position:absolute;right:36px;bottom:145px;color:#87928c;font-size:10px; }
+.office-agent-selection{position:absolute;right:36px;bottom:145px;display:flex;align-items:center;gap:8px;max-width:calc(100vw - 72px);font-size:11px;color:#52665a;pointer-events:auto;background:#fffffff2;border:1px solid #dce6df;border-radius:10px;padding:6px 10px;flex-wrap:wrap}.office-agent-selection>span{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.office-agent-selection label{display:flex;align-items:center;gap:3px}.office-agent-selection small{color:#78867c}.office-agent-selection button{border:0;background:transparent;color:#287453;cursor:pointer;font:inherit}

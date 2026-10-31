@@ -28,6 +28,11 @@ export function mediaKind(data = {}) {
   if (String(data.mime).startsWith('audio/') || /\.(mp3|wav|ogg|m4a)$/i.test(data.path || '')) return 'audio';
   return 'image';
 }
+export function replacementMediaData(current = {}, asset = {}) {
+  const data = { ...current };
+  for (const key of ['assetId', 'path', 'mime', 'kind', 'model', 'params', 'runId', 'sessionId', 'error', 'status']) delete data[key];
+  return { ...data, title: current.title || asset.title || '未命名素材', assetId: asset.id, mime: asset.mime, kind: asset.kind, status: 'completed' };
+}
 export function validReferenceRole(node, role) {
   if (['首帧', '尾帧'].includes(role)) return node.type !== 'prompt' && mediaKind(node.data) === 'image' && Boolean(node.data.assetId || node.data.path);
   if (role === '音频') return node.type !== 'prompt' && mediaKind(node.data) === 'audio' && Boolean(node.data.assetId || node.data.path);

@@ -64,9 +64,9 @@ export function stageWindowsClient({ root = ROOT, output, legacy = false } = {})
   }
   for (const entry of plan.entries) {
     if (entry.path.startsWith('electron/')) write(appDirectory, entry.path, entry.data);
-    else if (['server.mjs', 'config.example.json', 'LICENSE', 'scripts/setup-windows-sandbox.mjs', 'scripts/build-sandbox-image.mjs', 'scripts/sandbox/Dockerfile', 'docs/SANDBOX.md', 'docs/APP-CENTER.md'].includes(entry.path) || /^(core|plugins|cli)\//.test(entry.path)) write(runtimeDirectory, entry.path, entry.data);
+    else if (['server.mjs', 'config.example.json', 'LICENSE', 'scripts/setup-windows-sandbox.mjs', 'scripts/build-sandbox-image.mjs', 'scripts/sandbox/Dockerfile', 'docs/SANDBOX.md', 'docs/APP-CENTER.md'].includes(entry.path) || /^(core|plugins|cli|shared)\//.test(entry.path)) write(runtimeDirectory, entry.path, entry.data);
   }
-  for (const name of ['user-data.cjs', 'runtime-host.cjs', 'app-center-policy.cjs']) write(appDirectory, `core/${name}`, fs.readFileSync(path.join(root, 'core', name)));
+  for (const name of ['user-data.cjs', 'runtime-host.cjs', 'app-center-policy.cjs', 'browser-scripts.cjs']) write(appDirectory, `core/${name}`, fs.readFileSync(path.join(root, 'core', name)));
   write(runtimeDirectory, 'electron/compat.cjs', plan.entries.find(entry => entry.path === 'electron/compat.cjs').data);
   write(runtimeDirectory, 'electron/runtime.cjs', plan.entries.find(entry => entry.path === 'electron/runtime.cjs').data);
   write(runtimeDirectory, 'client-defaults.env', Buffer.from(publicEnvironment));
@@ -92,7 +92,7 @@ export function stageWindowsClient({ root = ROOT, output, legacy = false } = {})
     if (!fs.existsSync(path.join(runtimeDirectory, relative))) throw new Error(`Windows 发布包缺少关键沙箱文件：${relative}`);
   }
   verifyRuntimeDependencies(runtimeDirectory);
-  for (const dependency of ['core-js', 'undici', '@fastify/busboy', 'dotenv']) {
+  for (const dependency of ['core-js', 'undici', '@fastify/busboy', 'dotenv', 'ssh2', 'asn1', 'bcrypt-pbkdf']) {
     write(runtimeDirectory, `licenses/${dependency.replace('/', '-')}.txt`, fs.readFileSync(path.join(ROOT, 'node_modules', dependency, 'LICENSE')));
   }
   fs.writeFileSync(path.join(destination, 'PACKAGE-MANIFEST.json'), JSON.stringify({ scope: 'client-only', variant: legacy ? 'legacy-ia32' : 'modern-x64', version: manifest.version, terminalDependencies, files: records, warnings: plan.warnings }, null, 2));

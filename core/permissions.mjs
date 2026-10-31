@@ -154,25 +154,28 @@ export async function authorize({ session, tool, args, timeoutMs, allowRemember 
   const level = tool.permission ?? 'L0';
   const argsStr = argsSummary(tool.name, args);
 
+  if (tool.capability === 'desktop' && !session.desktopEnabled) {
+    return { ok: false, reason: '宿主桌面能力未启用；网页及应用台任务请使用内置浏览器 app_* 工具。只有桌面任务需要开启「桌面会话」。', decision: 'blocked' };
+  }
+
   if (level === 'L0') return { ok: true, decision: 'auto' };
 
-  if (level === 'L3' && tool.capability === 'desktop' && !session.desktopEnabled) {
-    return { ok: false, reason: 'L3 敏感操作（桌面控制）未启用：请在侧边栏开启「桌面会话」后再试。', decision: 'blocked' };
+  const cloudAuthorize = getRunContext()?.cloudAuthorize;
+  if (typeof cloudAuthorize === 'function') {
+    try {
+      const approved = await cloudAuthorize({ tool: tool.name, args, level });
+      return approved === true ? { ok: true, decision: 'allow' } : { ok: false, decision: 'blocked', reason: 'Cloud approval denied or expired' };
+    } catch { return { ok: false, decision: 'blocked', reason: 'Cloud approval unavailable' }; }
   }
 
   if (tool.name === 'bash' && isReadOnlyCommand(args?.command)) return { ok: true, decision: 'auto' };
 
   const mode = session.mode;
-  // 完全访问用于无人值守执行常规工作。L3 默认仍需确认，只有工具明确声明
-  // 可在该模式下自动执行时才放行（例如只读的网页抓取）；桌面等敏感能力
-  // 不会因为切换到完全访问而被隐式开启。
-  if (mode === 'auto-all' && (
-    level === 'L1' ||
-    level === 'L2' ||
-    (level === 'L3' && tool.autoApproveInAutoAll === true)
-  )) return { ok: true, decision: 'auto' };
+  // Fully trusted means wildcard approval for tools already exposed to this
+  // run. Explicit capability gates and external-agent confirmation remain.
+  if (mode === 'auto-all' && tool.requiresExplicitApproval !== true) return { ok: true, decision: 'auto' };
 
-  if (allowRemember && checkRules(session, tool.name, args, argsStr)) return { ok: true, decision: 'rule' };
+  if (allowRemember && tool.requiresExplicitApproval !== true && checkRules(session, tool.name, args, argsStr)) return { ok: true, decision: 'rule' };
 
   const reqId = crypto.randomUUID().slice(0, 12);
   const request = {
@@ -188,7 +191,7 @@ export async function authorize({ session, tool, args, timeoutMs, allowRemember 
       pending.delete(reqId);
       resolve('timeout');
     }, timeoutMs ?? 120000);
-    pending.set(reqId, { resolve, timer, request });
+    pending.set(reqId, { resolve, timer, request, session, tool });
   });
   emit('permission_request', {
     sessionId: session.id,
@@ -196,6 +199,8 @@ export async function authorize({ session, tool, args, timeoutMs, allowRemember 
   });
   const decision = await decisionP;
   emit('permission_resolved', { sessionId: session.id, reqId, decision });
+
+  if (decision === 'auto_all') return { ok: true, decision: 'auto' };
 
   const pattern = rememberPattern(tool, args);
   if (!allowRemember && ['allow_session', 'allow_always'].includes(decision)) return { ok: true, decision: 'allow' };
@@ -222,6 +227,19 @@ export function resolveRequest(reqId, decision, sessionId) {
   pending.delete(reqId);
   p.resolve(decision);
   return true;
+}
+
+export function setPermissionMode(session, mode) {
+  session.setMode(mode);
+  if (mode !== 'auto-all') return mode;
+  for (const [reqId, item] of pending) {
+    if (item.request.sessionId !== session.id || item.tool.requiresExplicitApproval === true) continue;
+    if (item.tool.capability === 'desktop' && !session.desktopEnabled) continue;
+    clearTimeout(item.timer);
+    pending.delete(reqId);
+    item.resolve('auto_all');
+  }
+  return mode;
 }
 
 export function pendingCount() { return pending.size; }

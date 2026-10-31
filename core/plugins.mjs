@@ -5,7 +5,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import crypto from 'node:crypto';
 import * as moduleRuntime from 'node:module';
-import { emit } from './events.mjs';
+import { emit, onEvent } from './events.mjs';
 import { agentTools } from './agent-tools.mjs';
 import { appCenterTools } from './app-center-tools.mjs';
 import { getRunContext, assertAgentTool } from './run-context.mjs';
@@ -13,6 +13,8 @@ import { APP_ROOT, DATA_ROOT, USER_PLUGINS_DIR } from './paths.mjs';
 import { coreTools } from './tools.mjs';
 import { filmCanvasTools } from './film-canvas-tools.mjs';
 import { memoryToolEnabled } from './memory-policy.mjs';
+import { authorize } from './permissions.mjs';
+import { pluginMcpServers } from './mcp.mjs';
 import { mcpTool } from './mcp.mjs';
 import { getConfig } from './llm.mjs';
 import { getWorkspaceRoot } from './paths.mjs';
@@ -31,6 +33,7 @@ const state = {
   cleanups: new Set(),
   skills: [],
   loaded: [],
+  errors: [],
 };
 
 const uiPending = new Map();
@@ -63,17 +66,27 @@ const UI_DEFAULTS = {
 };
 
 /** 插件在工具执行中向用户提问（走 ui_request 事件 → UI 弹窗 → POST /ui/:reqId） */
-export async function uiRequest(session, kind, payload, timeoutMs = 120000) {
+export async function uiRequest(session, kind, payload, timeoutMs = 120000, signal) {
+  signal?.throwIfAborted();
   if (!session?.id) return UI_DEFAULTS[kind] ?? null;
   const reqId = crypto.randomUUID().slice(0, 12);
   return new Promise((resolve) => {
+    const finish = value => { signal?.removeEventListener('abort', abort); resolve(value); };
+    const abort = () => {
+      const pending = uiPending.get(reqId);
+      if (!pending) return;
+      clearTimeout(pending.timer); uiPending.delete(reqId);
+      emit('ui_resolved', { sessionId: session.id, reqId });
+      finish(UI_DEFAULTS[kind] ?? null);
+    };
     const timer = setTimeout(() => {
       uiPending.delete(reqId);
       emit('ui_resolved', { sessionId: session.id, reqId });
-      resolve(UI_DEFAULTS[kind] ?? null);
+      finish(UI_DEFAULTS[kind] ?? null);
     }, timeoutMs);
     const request = { ...payload, reqId, kind, sessionId: session.id, rootSessionId: getRunContext()?.rootSessionId };
-    uiPending.set(reqId, { resolve, timer, sessionId: session.id, request });
+    uiPending.set(reqId, { resolve: finish, timer, sessionId: session.id, request });
+    signal?.addEventListener('abort', abort, { once: true });
     emit('ui_request', { sessionId: session.id, request });
   });
 }
@@ -121,12 +134,7 @@ function makeUi(session) {
 function parseFrontmatter(md) {
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(md);
   const meta = {};
-  if (m) {
-    for (const line of m[1].split('\n')) {
-      const kv = /^(\w[\w-]*):\s*(.+)$/.exec(line.trim());
-      if (kv) meta[kv[1]] = kv[2].trim();
-    }
-  }
+  if (m) for (const line of m[1].split('\n')) { const pair = /^(\w[\w-]*):\s*(.+)$/.exec(line.trim()); if (pair) meta[pair[1]] = pair[2].trim(); }
   return { meta, body: m ? md.slice(m[0].length) : md };
 }
 
@@ -189,7 +197,7 @@ function registerToolDef(def, pluginName, manifest) {
     throw new Error(`L3 工具 ${def.name} 需要 manifest 声明 capabilities:["desktop"]`);
   }
   const previous = state.tools.get(def.name);
-  if (previous?.plugin === 'core' && pluginName !== 'core') throw new Error(`插件不能替换核心安全工具 ${def.name}`);
+  if (previous) throw new Error(`工具名称冲突 ${def.name}（已有 ${previous.plugin}，新插件 ${pluginName}）`);
   state.tools.set(def.name, {
     ...def,
     run,
@@ -215,21 +223,23 @@ function makeSetupCtx(manifest) {
     },
     registerCommand(name, spec) {
       const key = name.startsWith('/') ? name : `/${name}`;
+      if (state.commands.has(key)) throw new Error(`命令名称冲突 ${key}`);
       state.commands.set(key, { ...spec, plugin: manifest.name, name: key });
     },
     on(hook, fn) {
       if (!state.hooks[hook]) throw new Error(`未知钩子：${hook}`);
       state.hooks[hook].push(fn);
+      if (hook === 'on_event') state.cleanups.add(onEvent(event => { Promise.resolve().then(() => fn(event)).catch(error => console.error(`[plugins] event hook: ${error.message}`)); }));
     },
     APP_ROOT,
   };
 }
 
-export function disposePlugins() {
-  const cleanups = [...state.cleanups];
+export async function disposePlugins() {
+  const cleanups = [...state.cleanups].reverse();
   state.cleanups.clear();
   for (const cleanup of cleanups) {
-    try { cleanup(); } catch (error) { console.error(`[plugins] 清理失败：${error.message}`); }
+    try { await cleanup(); } catch (error) { console.error(`[plugins] 清理失败：${error.message}`); }
   }
   resetLanguageServers();
 }
@@ -268,7 +278,7 @@ function registerCore() {
 
 /** 加载（或热重载）全部插件 */
 export async function loadAll({ reload = false } = {}) {
-  disposePlugins();
+  await disposePlugins();
   const bust = reload ? Date.now() : null;
   state.tools.clear();
   state.commands.clear();
@@ -276,6 +286,7 @@ export async function loadAll({ reload = false } = {}) {
   state.cleanups = new Set();
   state.skills = [];
   state.loaded = [];
+  state.errors = [];
   registerCore();
   for (const tool of agentTools) state.tools.set(tool.name, { ...tool, plugin: 'core' });
   for (const tool of filmCanvasTools) state.tools.set(tool.name, { ...tool, plugin: 'core' });
@@ -292,6 +303,7 @@ export async function loadAll({ reload = false } = {}) {
     const manifestFile = pluginManifestFile(dir);
     const entryFile = path.join(dir, 'plugin.mjs');
     if (!manifestFile) continue;
+    const before = { tools: new Map(state.tools), commands: new Map(state.commands), hooks: Object.fromEntries(Object.entries(state.hooks).map(([key, list]) => [key, [...list]])), cleanups: new Set(state.cleanups), skills: [...state.skills] };
     try {
       const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
       if (process.platform !== 'win32' && manifest.permissions?.includes('desktop')) continue;
@@ -301,6 +313,7 @@ export async function loadAll({ reload = false } = {}) {
         if (typeof setup !== 'function') throw new Error('插件需默认导出 setup(ctx) 或 { setup }');
         await setup(makeSetupCtx(manifest));
       }
+      state.cleanups.add(pluginMcpServers(dir, manifest.name));
       state.skills.push(...scanSkills(dir, manifest.name));
       state.loaded.push({
         name: manifest.name,
@@ -311,7 +324,33 @@ export async function loadAll({ reload = false } = {}) {
       });
       console.log(`[plugins] 已加载 ${manifest.name}${reload ? '（热重载）' : ''}：${state.loaded.at(-1).tools.join(', ') || '无工具'}`);
     } catch (err) {
+      for (const cleanup of [...state.cleanups].filter(fn => !before.cleanups.has(fn)).reverse()) { try { await cleanup(); } catch {} }
+      Object.assign(state, before);
+      state.errors.push({ name, status: 'failed', error: err.message });
       console.error(`[plugins] 加载 ${name} 失败：${err.message}`);
+    }
+  }
+  const piRoot = path.join(DATA_ROOT, 'pi-packages');
+  if (fs.existsSync(piRoot)) for (const entry of fs.readdirSync(piRoot)) {
+    const dir = path.join(piRoot, entry);
+    if (entry.startsWith('.') || !fs.existsSync(path.join(dir, 'mli-pi.json'))) continue;
+    const before = { tools: new Map(state.tools), commands: new Map(state.commands), hooks: Object.fromEntries(Object.entries(state.hooks).map(([key, list]) => [key, [...list]])), cleanups: new Set(state.cleanups), skills: [...state.skills] };
+    try {
+      const record = JSON.parse(fs.readFileSync(path.join(dir, 'mli-pi.json'), 'utf8'));
+      const packageRoot = path.resolve(dir, record.packageRoot);
+      if (!packageRoot.startsWith(dir + path.sep)) throw new Error('pi 包入口越界');
+      const manifest = { name: `pi:${record.name}`, capabilities: [] };
+      const ctx = makeSetupCtx(manifest), diagnostics = [];
+      const { loadPiPackage } = await import('./pi-adapter.mjs');
+      const details = await loadPiPackage(packageRoot, { ...ctx, name: manifest.name, diagnostics, getTools,
+        makeUi, addSkills: skills => state.skills.push(...skills),
+        callTool: (name, args, context) => invokeTool(name, args, context),
+      });
+      state.loaded.push({ name: manifest.name, version: record.version, source: record.source, adapter: 'pi', status: 'active', extensions: details.extensions, toolsCount: details.tools, skillsCount: details.skills, diagnostics, tools: [...state.tools.values()].filter(t => t.plugin === manifest.name).map(t => t.name) });
+    } catch (error) {
+      for (const cleanup of [...state.cleanups].filter(fn => !before.cleanups.has(fn)).reverse()) { try { await cleanup(); } catch {} }
+      Object.assign(state, before);
+      state.errors.push({ name: entry, adapter: 'pi', status: 'failed', error: error.message });
     }
   }
   return summary();
@@ -323,6 +362,7 @@ function summary() {
     skills: getSkills().map((s) => ({ name: s.name, description: s.description, path: s.path, content: s.source === 'platform' ? s.content : undefined, source: s.source || 'plugin', plugin: s.plugin })),
     commands: [...state.commands.values()].map((c) => ({ name: c.name, description: c.description ?? '', plugin: c.plugin })),
     plugins: state.loaded,
+    errors: state.errors,
   };
 }
 
@@ -334,6 +374,7 @@ export function getTools(session) {
     const context = getRunContext();
     if (context?.config?.agent?.subagents?.enabled === false && t.name.startsWith('agent_')) return false;
     if (context?.allowedTools && !context.allowedTools.includes(t.name)) return false;
+    if (t.capability === 'desktop' && context?.desktopTaskExplicit === false) return false;
     if (t.capability === 'desktop' && !session.desktopEnabled) return false;
     return true;
   });
@@ -362,17 +403,25 @@ export function expandSlash(text) {
     const lines = getCommands().map((c) => `${c.name}  ${c.description || ''}`).join('\n');
     return { kind: 'help', text: `可用斜杠命令：\n${lines}` };
   }
+  if (typeof cmd.handler === 'function') return { kind: 'handler', command: cmd.name, args };
   const tpl = typeof cmd.template === 'function' ? cmd.template(args) : String(cmd.template ?? cmd.prompt ?? '');
   return { kind: 'expand', text: tpl.replace(/\{\{args\}\}/g, args), command: cmd.name };
 }
 
 /** 执行工具的统一入口（含超时与信号） */
-export async function executeTool(tool, args, { session, signal, timeoutMs }) {
+export async function executeTool(tool, args, { session, signal, timeoutMs, depth = 0, callId }) {
   if (signal?.aborted) throw new Error('任务已停止');
+  const executionLease = getRunContext()?.assertExecutionLease;
+  if (executionLease) {
+    await executionLease();
+    if (signal?.aborted) throw new Error('任务已停止');
+  }
   assertAgentTool(tool, args);
   const sandboxPolicy = getSandboxPolicy();
+  if (sandboxPolicy.mode === 'read-only' && (tool.pi || tool.name === 'mcp')) throw new SandboxError('只读沙箱禁止通用插件或 MCP 执行');
   if (sandboxPolicy.mode === 'read-only' && tool.permission === 'L1') throw new SandboxError('只读沙箱禁止工作区写入；审批允许不会扩大沙箱权限');
   const ctx = {
+    depth, callId,
     signal,
     session,
     timeoutMs,
@@ -403,7 +452,7 @@ export async function executeTool(tool, args, { session, signal, timeoutMs }) {
         timer = setTimeout(() => {
           ac.abort();
           rej(new Error(`工具 ${tool.name} 超时（${timeoutMs}ms）`));
-        }, (timeoutMs ?? 60000) + 5000);
+        }, (tool.name === 'mcp' ? Math.max(timeoutMs ?? 60000, 240000) : (timeoutMs ?? 60000)) + 5000);
       }),
     ]);
     if (tool.permission === 'L1' && args?.path && result?.status !== 'error') getRunContext()?.changedPaths?.add(String(args.path).replaceAll('\\', '/'));
@@ -414,4 +463,26 @@ export async function executeTool(tool, args, { session, signal, timeoutMs }) {
     if (!resourceDeferred) releaseResource();
     signal?.removeEventListener('abort', onAbort);
   }
+}
+
+/** A nested/management caller must never dispatch a plugin tool directly. */
+export async function invokeTool(name, args, options = {}) {
+  const tool = getTool(name);
+  if (!tool) throw new Error(`未知工具 ${name}`);
+  const depth = options.depth || 0;
+  if (depth > 8) throw new Error('插件工具嵌套超过上限');
+  for (const hook of getHooks().authorize_tool_call) if (await hook({ session: options.session, tool, args, name }) === false) throw new Error('被插件授权钩子拒绝');
+  const decision = await authorize({ session: options.session, tool, args, timeoutMs: options.timeoutMs });
+  if (!decision.ok) { const error = new Error(decision.reason || '工具权限拒绝'); error.code = 'PLUGIN_PERMISSION_DENIED'; throw error; }
+  let result = await executeTool(tool, args, { ...options, depth: depth + 1 });
+  for (const hook of getHooks().process_tool_result) result = (await hook({ session: options.session, tool, args, result, signal: options.signal })) ?? result;
+  return result;
+}
+export async function executeSlashCommand(slash, session) {
+  const cmd = getCommand(slash.command);
+  if (!cmd?.handler) throw new Error('命令不存在');
+  const tool = { name: `command:${cmd.name}`, plugin: cmd.plugin, permission: cmd.permission || 'L2', run: async (_args, ctx) => ({ content: (await cmd.handler(slash.args, ctx)) || '命令已执行' }) };
+  const decision = await authorize({ session, tool, args: { arguments: slash.args } });
+  if (!decision.ok) throw new Error(decision.reason || '命令权限拒绝');
+  return executeTool(tool, {}, { session, timeoutMs: 60000 });
 }

@@ -217,7 +217,7 @@ export async function runExternalAgent(session, prompt) {
   let updates = 0;
   const record = entry => { if (updates++ < 2000) session.append(entry); };
   try {
-    const permission = await authorize({ session: { ...session, mode: 'default' }, tool: { name: 'acp_launch', permission: 'L3' }, args: { warning: '外部 Agent 不受 MLI 沙箱限制，可能访问宿主文件、网络及其自身凭据', agent: definition.id, command: definition.command, args: definition.args, cwd: context.executionRoot }, timeoutMs, allowRemember: false });
+    const permission = await authorize({ session: { ...session, mode: 'default' }, tool: { name: 'acp_launch', permission: 'L3', requiresExplicitApproval: true }, args: { warning: '外部 Agent 不受 MLI 沙箱限制，可能访问宿主文件、网络及其自身凭据', agent: definition.id, command: definition.command, args: definition.args, cwd: context.executionRoot }, timeoutMs, allowRemember: false });
     if (!permission.ok || controller.signal.aborted) throw new Error('外部 ACP Agent 启动已拒绝或取消');
     session.append({ type: 'message', role: 'user', content: prompt, source: 'acp' });
     const result = await callExternalAgent(definition, {
@@ -232,7 +232,7 @@ export async function runExternalAgent(session, prompt) {
       async onPermission(params) {
         const allow = params.options.find(option => option.kind === 'allow_once');
         if (!allow) return { outcome: { outcome: 'cancelled' } };
-        const decision = await authorize({ session: { ...session, mode: 'default' }, tool: { name: 'acp_permission', permission: 'L3' }, args: { warning: '外部 Agent 请求；允许仅对本次操作生效', agent: definition.id, toolCall: params.toolCall }, timeoutMs, allowRemember: false });
+        const decision = await authorize({ session: { ...session, mode: 'default' }, tool: { name: 'acp_permission', permission: 'L3', requiresExplicitApproval: true }, args: { warning: '外部 Agent 请求；允许仅对本次操作生效', agent: definition.id, toolCall: params.toolCall }, timeoutMs, allowRemember: false });
         return controller.signal.aborted || !decision.ok ? { outcome: { outcome: 'cancelled' } } : { outcome: { outcome: 'selected', optionId: allow.optionId } };
       },
     });

@@ -56,3 +56,6 @@ __pycache__/
 /ui-preferences.json
 .DS_Store
 Thumbs.db
+
+# Compiled cloud backend (source remains under server/cloud).
+/server/dist-cloud/

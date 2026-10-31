@@ -52,3 +52,45 @@ test('GenOffice development resources do not depend on Electron app.isPackaged',
   assert.equal(resolveGenOfficeRoot({ developmentMode: true, electronDirectory, resourcesPath }), path.resolve(electronDirectory, '../resources/genoffice'));
   assert.equal(resolveGenOfficeRoot({ developmentMode: false, electronDirectory, resourcesPath }), path.resolve(resourcesPath, 'genoffice'));
 });
+
+const { EventEmitter } = require('node:events');
+const { saveOfficeEntry } = require('../electron/genoffice.cjs');
+function saveFixture(type) {
+  const ipc = new EventEmitter();
+  const contents = new EventEmitter();
+  contents.mainFrame = {};
+  contents.isDestroyed = () => false;
+  contents.sent = [];
+  contents.send = channel => contents.sent.push(channel);
+  return { ipc, contents, entry: { type, view: { webContents: contents } } };
+}
+
+test('Office save awaits the correct renderer and deduplicates concurrent requests for every format', async () => {
+  for (const type of ['docs', 'sheets', 'slides', 'pdf']) {
+    const { ipc, contents, entry } = saveFixture(type);
+    const prefix = type === 'sheets' ? 'workbook' : type;
+    const channel = `${prefix}:close-save-result`;
+    const pending = saveOfficeEntry(entry, ipc);
+    assert.equal(saveOfficeEntry(entry, ipc), pending);
+    assert.deepEqual(contents.sent, [`${prefix}:close-save-request`]);
+    ipc.emit(channel, { sender: {}, senderFrame: contents.mainFrame }, true);
+    ipc.emit(channel, { sender: contents, senderFrame: {} }, true);
+    assert.equal(ipc.listenerCount(channel), 1);
+    ipc.emit(channel, { sender: contents, senderFrame: contents.mainFrame }, true);
+    assert.equal(await pending, true);
+    assert.equal(ipc.listenerCount(channel), 0);
+    assert.equal(contents.listenerCount('destroyed'), 0);
+  }
+});
+
+test('Office save reports failure, allows retry and cleans up if the editor closes', async () => {
+  const { ipc, contents, entry } = saveFixture('docs');
+  const failed = saveOfficeEntry(entry, ipc);
+  ipc.emit('docs:close-save-result', { sender: contents, senderFrame: contents.mainFrame }, false);
+  assert.equal(await failed, false);
+  const retry = saveOfficeEntry(entry, ipc);
+  contents.emit('destroyed');
+  await assert.rejects(retry, /保存期间编辑器已关闭/);
+  assert.equal(ipc.listenerCount('docs:close-save-result'), 0);
+  await assert.rejects(saveOfficeEntry(undefined, ipc), /编辑器已关闭/);
+});

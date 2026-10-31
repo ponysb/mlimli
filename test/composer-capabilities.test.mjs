@@ -57,3 +57,14 @@ test('explicit references resolve registered skills and tools without inlining f
   assert.ok(result.length < 1200);
   assert.equal(expandComposerReferences('普通消息'), '普通消息');
 });
+
+test('MCP selection roundtrips as a reference and resolves only enabled configured servers', () => {
+ const items=capabilityItems({mcpServers:[{name:'design',url:'https://example.com/mcp'},{name:'off',enabled:false}]});
+ assert.equal(items.length,1);assert.equal(items[0].group,'MCP 服务');
+ const serialized=joinComposerReferences('读取设计',[items[0]]);
+ assert.equal(serialized,'@mcp("design")\n读取设计');
+ assert.equal(splitComposerReferences(serialized).references[0].kind,'mcp');
+ const expanded=expandComposerReferences(serialized,{mcpServers:[{name:'design'}]});
+ assert.match(expanded,/search.*server/);assert.match(expanded,/design\/工具名/);
+ assert.match(expandComposerReferences(serialized,{mcpServers:[{name:'design',enabled:false}]}),/未配置或已停用/);
+});

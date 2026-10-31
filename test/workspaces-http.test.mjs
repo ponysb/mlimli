@@ -7,6 +7,44 @@ import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import runtime from '../electron/runtime.cjs';
 
+test('repository API saves a readable address when Git is absent from the runtime environment', { timeout: 30000 }, async context => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'mli-workspace-no-git-'));
+  const environment = Object.fromEntries(Object.keys(process.env).filter(key => key.toUpperCase() === 'PATH').map(key => [key, '']));
+  const start = () => runtime.startRuntime({ executable: process.execPath, runtimeRoot: root, dataRoot: directory, environment: { ...environment, MLI_ACCOUNT_ENABLED: 'false' } });
+  let instance = start();
+  context.after(async () => {
+    if (instance.child.exitCode === null) { const exited = once(instance.child, 'exit'); instance.child.kill(); await exited; }
+    fs.rmSync(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+  });
+  let { url } = await instance.ready;
+  const { workspaces } = await (await fetch(`${url}/api/workspaces`)).json();
+  const workspace = workspaces.find(item => item.active);
+  const remote = 'https://github.com/ponysb/91Writing';
+  const repositoriesRoute = `/api/workspaces/repositories?workspaceId=${workspace.id}`;
+  assert.deepEqual(await (await fetch(url + repositoriesRoute)).json(), { repositories: [] });
+  const response = await fetch(`${url}/api/workspaces/clone`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: remote, workspaceId: workspace.id }) });
+  const result = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(result));
+  assert.equal(result.mode, 'reference');
+  assert.equal(result.path, path.join(workspace.path, '91Writing.repository.md'));
+  assert.ok(fs.readFileSync(result.path, 'utf8').includes(remote));
+  assert.equal(fs.existsSync(path.join(workspace.path, '91Writing')), false);
+  const saved = await (await fetch(url + repositoriesRoute)).json();
+  assert.equal(saved.repositories.length, 1);
+  assert.equal(saved.repositories[0].url, remote);
+  assert.equal(saved.repositories[0].mode, 'reference');
+  assert.equal(saved.repositories[0].source, 'github');
+  const exited = once(instance.child, 'exit'); instance.child.kill(); await exited;
+  instance = start();
+  ({ url } = await instance.ready);
+  assert.deepEqual(await (await fetch(url + repositoriesRoute)).json(), saved);
+  const switchResponse = await fetch(`${url}/api/workspaces`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: path.join(directory, 'other-workspace') }) });
+  assert.equal(switchResponse.status, 200);
+  assert.equal((await fetch(url + repositoriesRoute)).status, 409);
+  assert.deepEqual(await (await fetch(`${url}/api/workspaces/repositories`)).json(), { repositories: [] });
+});
+
 test('removing workspace entries switches the runtime and preserves files and sessions across restart', { timeout: 30000 }, async context => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'mli-workspace-http-'));

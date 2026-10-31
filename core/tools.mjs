@@ -14,6 +14,7 @@ import { verificationTools } from './verification.mjs';
 import { isVerificationCommand, sourceEvidence } from './task-quality.mjs';
 import { readAttachedDocument } from './attachment-content.mjs';
 import { outputTools } from './tool-output.mjs';
+import { execSshCommand, findSshWorkspaceFiles, readSshWorkspaceFile, searchSshWorkspaceFiles, writeSshWorkspaceFile } from './ssh-workspace-provider.mjs';
 
 const IS_WIN = process.platform === 'win32';
 
@@ -186,6 +187,15 @@ export const coreTools = [
     },
     permission: 'L0',
     async run({ path: p, offset, limit }) {
+      const remote = getRunContext()?.remoteWorkspace;
+      if (remote?.kind === 'ssh') {
+        const file = await readSshWorkspaceFile(remote.connectionId, p);
+        const lines = file.content.split('\n');
+        const start = Math.max(1, offset ?? 1);
+        const end = Math.min(lines.length, start - 1 + (limit ?? 2000));
+        const body = lines.slice(start - 1, end).map((line, index) => `${start + index}\t${line}`).join('\n');
+        return { content: `[${remote.remotePath}/${p}] 共 ${lines.length} 行，显示 ${start}-${end} 行\n${body}` };
+      }
       const abs = resolveReadable(p);
       const st = fs.statSync(abs);
       if (st.size > 512 * 1024) throw new Error(`文件过大（${st.size} 字节），请用 grep/分段读取`);
@@ -210,6 +220,11 @@ export const coreTools = [
     },
     permission: 'L1',
     async run({ path: p, content }) {
+      const remote = getRunContext()?.remoteWorkspace;
+      if (remote?.kind === 'ssh') {
+        const result = await writeSshWorkspaceFile(remote.connectionId, p, content);
+        return { content: `已写入 SSH 工作区 ${remote.name}/${p}（${result.size} 字节）` };
+      }
       const abs = resolveInWorkspace(p, { write: true });
       fs.mkdirSync(path.dirname(abs), { recursive: true });
       fs.writeFileSync(abs, content ?? '', 'utf8');
@@ -231,6 +246,16 @@ export const coreTools = [
     },
     permission: 'L1',
     async run({ path: p, old_string: oldS, new_string: newS, replace_all: all }) {
+      const remote = getRunContext()?.remoteWorkspace;
+      if (remote?.kind === 'ssh') {
+        const file = await readSshWorkspaceFile(remote.connectionId, p);
+        const n = file.content.split(oldS).length - 1;
+        if (n === 0) throw new Error('old_string 未在远程文件中找到（需与文件内容逐字符一致）');
+        if (n > 1 && !all) throw new Error(`old_string 在远程文件中出现 ${n} 次，不唯一；请扩大上下文或设 replace_all=true`);
+        const content = all ? file.content.replaceAll(oldS, newS) : file.content.replace(oldS, newS);
+        await writeSshWorkspaceFile(remote.connectionId, p, content);
+        return { content: `已编辑 SSH 工作区 ${remote.name}/${p}：替换了 ${all ? n : 1} 处` };
+      }
       const abs = resolveInWorkspace(p, { write: true });
       const src = fs.readFileSync(abs, 'utf8');
       const n = src.split(oldS).length - 1;
@@ -244,6 +269,7 @@ export const coreTools = [
   {
     name: 'bash',
     get description() {
+      if (getRunContext()?.remoteWorkspace?.kind === 'ssh') return '在已连接的 SSH 服务器上，以当前 SSH 用户权限执行命令，工作目录为远程项目根目录。命令不受本机沙箱限制。超时或断线后结果可能未知，请先检查服务器状态，不要自动重放可能有副作用的命令。';
       const backend = selectedBackend();
       return backend === 'docker'
         ? '在隔离的 Linux /bin/sh 中执行命令，工作目录为 /workspace，对应当前工作区。请使用相对路径，不使用宿主 Windows 命令或盘符。'
@@ -267,6 +293,18 @@ export const coreTools = [
       const requested = timeout_ms ?? ctx.bashTimeoutMs ?? 60000;
       if (!Number.isFinite(requested) || requested <= 0 || requested > 600000) throw new Error('命令超时必须在 1 到 600000 毫秒之间');
       const timeout = Math.min(requested, ctx.bashTimeoutMs ?? 600000);
+      const remote = getRunContext()?.remoteWorkspace;
+      if (remote?.kind === 'ssh') {
+        const result = await execSshCommand(remote.connectionId, command, {
+          signal: ctx.signal,
+          timeoutMs: timeout,
+          onOutput: (stream, text) => ctx.emit?.('tool_output', { name: 'bash', stream, text }),
+        });
+        const status = result.status === 'exited' ? result.code === 0 ? 'ok' : 'error' : 'error';
+        const unknown = ['timeout', 'interrupted'].includes(result.status) || result.code === null;
+        const content = `${unknown ? `[远程执行状态未知：${result.status}；请检查实际状态，不要自动重放命令]` : `exit=${result.code}`}\n${result.stdout || ''}${result.stderr ? `\n[stderr]\n${result.stderr}` : ''}${result.signal ? `\n[进程终止信号] ${result.signal}` : ''}`;
+        return { content: content.trim(), status, exitCode: result.code, command, structuredContent: { exit_code: result.code, signal: result.signal || null, truncated: Boolean(result.truncated), outcome_unknown: unknown }, ...(unknown ? { errorDetails: { stage: 'remote_command', name: 'UnknownOutcome', code: 'REMOTE_COMMAND_OUTCOME_UNKNOWN', message: 'SSH 命令中断后不能证明远端副作用是否发生，禁止自动重试。' } } : {}) };
+      }
       const testSource = isVerificationCommand(command) ? sourceEvidence() : null;
       const child = await spawnSandboxedCommand(command, { signal: ctx.signal });
       ctx.emit?.('sandbox_execution', { name: 'bash', ...child.sandbox });
@@ -332,6 +370,11 @@ export const coreTools = [
     async run({ pattern, path: base, ignore_case }) {
       let re;
       try { re = new RegExp(pattern, ignore_case ? 'i' : ''); } catch { re = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), ignore_case ? 'i' : ''); }
+      const remote = getRunContext()?.remoteWorkspace;
+      if (remote?.kind === 'ssh') {
+        const hits = await searchSshWorkspaceFiles(remote.connectionId, { pattern: re.source, base: base || '', ignoreCase: Boolean(ignore_case), limit: 100 });
+        return { content: hits.length ? hits.join('\n') : '(无匹配)' };
+      }
       const root = base ? resolveInWorkspace(base) : getWorkspaceRoot();
       const hits = [];
       walk(root, (p) => {
@@ -361,6 +404,11 @@ export const coreTools = [
     },
     permission: 'L0',
     async run({ pattern, path: base }) {
+      const remote = getRunContext()?.remoteWorkspace;
+      if (remote?.kind === 'ssh') {
+        const matches = await findSshWorkspaceFiles(remote.connectionId, { pattern, base: base || '', limit: 200 });
+        return { content: matches.length ? matches.join('\n') : '(无匹配)' };
+      }
       const re = new RegExp('^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$', 'i');
       const root = base ? resolveInWorkspace(base) : getWorkspaceRoot();
       const out = [];
@@ -381,7 +429,6 @@ export const coreTools = [
     },
     permission: 'L3',
     capability: 'network',
-    autoApproveInAutoAll: true,
     async run({ url }, ctx) {
       if (!/^https?:\/\//i.test(url)) throw new Error('仅支持 http/https');
       const res = await fetch(url, { signal: ctx.signal, headers: { 'user-agent': 'mli-agent/1.0' }, redirect: 'follow' });

@@ -10,12 +10,48 @@ import setup from '../plugins/computer-use/plugin.mjs';
 import { setWorkspaceRoot } from '../core/paths.mjs';
 import { expandComposerReferences } from '../core/composer-references.mjs';
 import { authorize } from '../core/permissions.mjs';
+import { withRunContext } from '../core/run-context.mjs';
+import { isExplicitDesktopTask } from '../core/desktop-policy.mjs';
+import { appCenterTools } from '../core/app-center-tools.mjs';
+import { buildSystemPrompt } from '../core/prompts.mjs';
 
 test('computer use keeps old references compatible and requires desktop permission', async () => {
   const prompt = expandComposerReferences('@plugin("desktop")', { plugins: [{ name: 'computer-use', tools: ['screenshot'] }] });
   assert.match(prompt, /computer-use/); assert.doesNotMatch(prompt, /未加载/);
   const result = await authorize({ session: { id: 'test', desktopEnabled: false, mode: 'auto-all' }, tool: { name: 'screenshot', permission: 'L3', capability: 'desktop' }, args: {} });
   assert.equal(result.ok, false); assert.equal(result.decision, 'blocked');
+});
+
+test('普通网页任务在完全访问模式下也不能进入宿主桌面工具', async () => {
+  const session = { id: 'web-task', desktopEnabled: true, mode: 'auto-all' };
+  const screenshot = { name: 'screenshot', permission: 'L3', capability: 'desktop' };
+  assert.equal(isExplicitDesktopTask('请在已登录网站里完成归档确认'), false);
+  assert.equal(isExplicitDesktopTask('请操作 Windows 系统设置'), true);
+  assert.match(buildSystemPrompt({ desktopEnabled: true, desktopTaskExplicit: false }), /网页及应用台操作必须使用内置浏览器/);
+  const result = await withRunContext({ desktopTaskExplicit: false }, () => authorize({ session, tool: screenshot, args: {} }));
+  assert.equal(result.ok, false);
+  assert.equal(result.decision, 'blocked');
+  assert.match(result.reason, /内置浏览器/);
+  const desktopResult = await withRunContext({ desktopTaskExplicit: true }, () => authorize({ session, tool: screenshot, args: {} }));
+  assert.deepEqual(desktopResult, { ok: true, decision: 'auto' });
+});
+
+test('只读窗口枚举也受桌面开关限制，内置浏览器不依赖桌面会话', { skip: process.platform !== 'win32' }, async () => {
+  const tools = new Map();
+  await setup({ registerTool: tool => tools.set(tool.name, tool), registerCommand() {}, log() {} });
+  const windows = tools.get('list_windows');
+  assert.equal(windows.capability, 'desktop');
+  const session = { id: 'browser-only', mode: 'auto-all', desktopEnabled: false };
+  const denied = await authorize({ session, tool: windows, args: {} });
+  assert.equal(denied.decision, 'blocked');
+  assert.match(denied.reason, /内置浏览器/);
+  for (const name of ['app_list', 'app_open', 'app_snapshot', 'app_action']) {
+    const tool = appCenterTools.find(tool => tool.name === name);
+    assert.equal((await authorize({ session, tool, args: { app_id: 'fixture' } })).ok, true, name);
+  }
+  session.desktopEnabled = true;
+  assert.equal((await authorize({ session, tool: windows, args: {} })).decision, 'auto');
+  assert.deepEqual(await authorize({ session, tool: tools.get('screenshot'), args: {} }), { ok: true, decision: 'auto' });
 });
 
 // Set MLI_TEST_COMPUTER_USE=1 to run against an interactive Windows desktop.

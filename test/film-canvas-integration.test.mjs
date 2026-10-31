@@ -10,7 +10,7 @@ test('AI 影视画布从新标签页工具区打开，并复用当前会话发�
   assert.ok(browser.includes('<button onClick={onFilmCanvas}><Film size={20}/><span>AI 画布</span></button>'));
   assert.ok(app.includes("item.id === tab.id ? { ...item, kind: 'film-canvas', title: 'AI 画布', url: '' } : item"));
   assert.ok(app.includes("browserTabs.filter(tab => tab.kind !== 'film-canvas')"));
-  assert.ok(app.includes('{terminalTabOpen &&'));
+  assert.match(app, /className="workspace-tab-pane" hidden=\{view !== 'terminal'\}><TerminalWorkspace/);
   assert.ok(!app.includes('filmCanvasOpen'));
   assert.match(app, /<FilmCanvas workspace=\{activeWorkspace\} current=\{current\} running=\{running\} entries=\{entries\} onSend=\{send\}/);
   assert.match(app, /const keepFilmCanvasOpen = direct && \(view === "film-canvas" \|\| view === "file"\)/);

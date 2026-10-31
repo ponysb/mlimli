@@ -151,15 +151,15 @@ export default async function setup(ctx) {
   }
 
   const command = {
-    description: '进入桌面操作循环（截图→决策→点击/输入→再截图）',
-    template: '请按桌面操作技能执行：先 screenshot 与 read_screen，能走 API/office_* 就不要点 GUI。用户目标：{{args}}。每步动作后必须再截图验证。',
+    description: '操作系统界面或原生桌面软件；网页任务使用内置浏览器',
+    template: '先核对用户目标：网页及应用台中的网页应用使用内置浏览器 app_* 工具，不进入桌面循环；只有用户明确要求操作系统界面、桌面软件或外部浏览器时，才按桌面操作技能执行，先 screenshot 与 read_screen，能走 API/office_* 就不要点 GUI。用户目标：{{args}}。每步桌面动作后截图验证。',
   };
   ctx.registerCommand('/computer-use', command);
   ctx.registerCommand('/desktop', { ...command, description: 'computer use 桌面操作（兼容旧命令）' });
 
   ctx.registerTool({
     name: 'screenshot',
-    description: '截取整个屏幕为 PNG。返回图片（多模态模型可直接看图）。坐标体系与 mouse_click 一致（物理像素）。',
+    description: '截取宿主整个屏幕为 PNG，用于用户明确要求的桌面任务。网页及应用台任务使用内置浏览器 app_*，不以本工具作为网页操作失败的自动替代路径。坐标体系与 mouse_click 一致（物理像素）。',
     parameters: { type: 'object', properties: {} },
     permission: 'L3',
     capability: 'desktop',
@@ -176,9 +176,10 @@ export default async function setup(ctx) {
 
   ctx.registerTool({
     name: 'list_windows',
-    description: '列出当前所有可见顶层窗口：PID、进程名、窗口标题（只读）。',
+    description: '列出宿主可见顶层窗口：PID、进程名、窗口标题（只读）。仅用于已开启桌面会话的桌面任务；内置浏览器页面用 app_list/app_snapshot 查询，不需要枚举桌面窗口。',
     parameters: { type: 'object', properties: {} },
     permission: 'L0',
+    capability: 'desktop',
     async run() {
       const out = await powershell(SCRIPTS.list_windows());
       return { content: out || '(没有可见窗口)' };

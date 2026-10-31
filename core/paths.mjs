@@ -11,6 +11,7 @@ export const DATA_ROOT = process.env.MLI_AGENT_DATA_DIR ? path.resolve(process.e
 export const USER_PLUGINS_DIR = path.join(DATA_ROOT, 'plugins');
 
 let workspaceRoot = APP_ROOT;
+let sessionStorageRoot;
 let ownedWorkspaceLock;
 
 function releaseWorkspaceLock() {
@@ -58,6 +59,11 @@ export function setWorkspaceRoot(root) {
 
 export function getWorkspaceRoot() {
   return getRunContext()?.executionRoot || workspaceRoot;
+}
+
+export function setSessionStorageRoot(root) {
+  sessionStorageRoot = root ? path.resolve(root) : undefined;
+  return sessionStorageRoot;
 }
 
 export function isWorkspaceRoot(root) { return norm(root) === norm(getWorkspaceRoot()); }
@@ -158,7 +164,7 @@ export function agentDataDir() {
 }
 
 export function sessionsDir() {
-  const dir = path.join(agentDataDir(), 'sessions');
+  const dir = path.join(sessionStorageRoot || getRunContext()?.sessionStorageRoot || getWorkspaceRoot(), '.agent', 'sessions');
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }

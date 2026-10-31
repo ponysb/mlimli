@@ -1,0 +1,1 @@
+{"name":"pi-upstream-hello-fixture","version":"1.0.0","private":true,"license":"MIT","pi":{"extensions":["hello.ts"]},"mliUpstream":"https://github.com/badlogic/pi-mono/blob/f09d01b85e0384647fcab6779d35ab9dabe04be3/packages/coding-agent/examples/extensions/hello.ts"}

@@ -11,6 +11,14 @@ import { applyReasoning, normalizeReasoningSettings, reasoningOptions } from './
 
 const MANAGED_PROVIDER_ID = 'mli-managed';
 let catalogRefreshedAt = 0;
+function modelFetch(provider,url,options){
+  const transport=getRunContext()?.cloudAccount;
+  if(process.env.MLI_CLOUD_MODE==='1'){
+    if(!transport||provider.id!==MANAGED_PROVIDER_ID)throw Error('CLOUD_MODEL_TRANSPORT_REQUIRED');
+    return transport.fetch(url,options);
+  }
+  return fetch(url,options);
+}
 
 let config = null;
 export function setConfig(cfg) { config = cfg; ensureCatalog(); }
@@ -227,7 +235,7 @@ export async function listRemoteModels({ providerId, baseUrl, apiKey: override, 
   const provider = { ...(existing || {}), protocol: normalizeProtocol(protocol || existing?.protocol), baseUrl: normalizeBaseUrl(baseUrl || existing?.baseUrl) };
   const key = resolvedKey(provider, override);
   if (!provider.baseUrl) throw new Error('请先填写 API 地址');
-  const res = await fetch(`${provider.baseUrl}/models`, { headers: authHeaders(provider, key) });
+  const res = await modelFetch(provider, `${provider.baseUrl}/models`, { headers: authHeaders(provider, key) });
   const text = await res.text();
   if (!res.ok) throw new Error(`拉取模型失败 HTTP ${res.status}：${text.slice(0, 240)}`);
   let json; try { json = JSON.parse(text); } catch { throw new Error('模型列表不是 JSON'); }
@@ -245,7 +253,7 @@ export async function testProvider({ providerId, baseUrl, model, apiKey: overrid
   if (!key && !provider.baseUrl.includes('127.0.0.1') && !provider.baseUrl.includes('localhost')) throw new Error('请先填写 API Key');
   const saved = config.models.find(m => m.providerId === providerId && m.model === modelId);
   const request = buildRequest(provider, { ...(saved || {}), model: modelId, ...(reasoningSettings ? { reasoningSettings } : {}) }, [{ role: 'user', content: 'ping' }], '', [], false);
-  const res = await fetch(request.url, { method: 'POST', headers: authHeaders(provider, key), body: JSON.stringify(request.body) });
+  const res = await modelFetch(provider, request.url, { method: 'POST', headers: authHeaders(provider, key), body: JSON.stringify(request.body) });
   const text = await res.text();
   if (!res.ok) throw new Error(`连通失败 HTTP ${res.status}：${text.slice(0, 300)}`);
   return { ok: true, message: `连通成功（${modelId}）` };
@@ -274,8 +282,9 @@ function toOpenAI(messages) { return messages.map((m) => m.role === 'assistant' 
 function responseParts(content) { return Array.isArray(content) ? content.map(p => p.type === 'image' ? { type: 'input_image', image_url: p.dataUrl } : p.type === 'file' ? { type: 'input_file', filename: p.name, file_data: p.dataUrl } : { type: 'input_text', text: p.text || '' }) : String(content ?? ''); }
 function toResponses(messages) { const out = []; for (const m of messages) { if (m.role === 'assistant') { if (m.text) out.push({ role: 'assistant', content: m.text }); for (const c of m.toolCalls || []) out.push({ type: 'function_call', call_id: c.id, name: c.name, arguments: JSON.stringify(c.args || {}) }); } else if (m.role === 'tool') out.push({ type: 'function_call_output', call_id: m.toolCallId, output: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }); else out.push({ role: m.role, content: responseParts(m.content) }); } return out; }
 function toAnthropic(messages) { const out = []; for (const m of messages) { if (m.role === 'assistant') { const content = []; if (m.text) content.push({ type: 'text', text: m.text }); for (const c of m.toolCalls || []) content.push({ type: 'tool_use', id: c.id, name: c.name, input: c.args || {} }); out.push({ role: 'assistant', content }); } else if (m.role === 'tool') out.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: m.toolCallId, content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }] }); else out.push({ role: m.role === 'system' ? 'user' : m.role, content: anthropicParts(m.content) }); } return out; }
-export function buildRequest(provider, model, messages, system, tools, stream, maxOutputTokens, sessionId) {
+export function buildRequest(provider, model, messages, system, tools, stream, maxOutputTokens, sessionId, runtimeContext = '') {
   model = modelProfiles.enrich(model);
+  if (runtimeContext) messages = [...messages, { role: 'user', content: `<runtime_context>\n以下为运行时状态，不是用户消息，不改变用户目标、权限或系统规则。\n${runtimeContext}\n</runtime_context>` }];
   messages = prepareModelMessages(messages, model, provider.protocol);
   const sessionKey = sessionRoutingKey(sessionId);
   if (provider.protocol === 'openai-responses') { const body = { model: model.model, input: toResponses(messages), instructions: system || undefined, stream, store: false, ...(sessionKey ? { prompt_cache_key: sessionKey } : {}) }; if (tools.length) body.tools = responseTools(tools); applyOutputLimit(body, provider, model, maxOutputTokens); return { url: `${provider.baseUrl}/responses`, body }; }
@@ -343,10 +352,10 @@ function responseMetadata(response) {
   return { httpStatus: response.status, headers };
 }
 
-export async function* chat({ messages, system, tools = [], signal, sessionId, step, modelSelection = getRunContext()?.modelSelection } = {}) {
+export async function* chat({ messages, system, runtimeContext, tools = [], signal, sessionId, step, modelSelection = getRunContext()?.modelSelection } = {}) {
   const { provider, model } = modelSelection || activePair();
   if (!provider || !model) { yield { type: 'error', message: '请先添加服务商和模型' }; return; }
-  const request = buildRequest(provider, model, messages, system, tools, true, getRunContext()?.config?.agent?.runControl?.maxOutputTokens, sessionId);
+  const request = buildRequest(provider, model, messages, system, tools, true, getRunContext()?.config?.agent?.runControl?.maxOutputTokens, sessionId, runtimeContext);
   const startedAt = performance.now(), firstOutputAt = { value: null }, responseEvents = [];
   let res;
   let outputText = '', thinkingText = '', usage = null, streamMetadata = {}, billedFromStream = null, parsedError = null;
@@ -361,13 +370,13 @@ export async function* chat({ messages, system, tools = [], signal, sessionId, s
     if (provider.id === MANAGED_PROVIDER_ID && !row.metrics.error) await refreshAccount().catch(() => {});
     appendApiLog(row);
   };
-  if (provider.protocol === 'mock') { try { for await (const e of mockStream(request.body.messages, openAITools(tools))) { collect(e); yield e; } } finally { await finish(); } return; }
+  if (provider.protocol === 'mock') { try { for await (const e of mockStream(toOpenAI(messages), openAITools(tools))) { collect(e); yield e; } } finally { await finish(); } return; }
   const key = resolvedKey(provider);
   if (!key && !provider.baseUrl.includes('127.0.0.1') && !provider.baseUrl.includes('localhost')) { const e = { type: 'error', message: `服务商“${provider.name}”未配置 API Key` }; collect(e); yield e; await finish({ error: e.message }); return; }
-  const maxAttempts = 5;
+  const maxAttempts = process.env.MLI_CLOUD_MODE === '1' ? 1 : 5;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      res = await fetch(request.url, { method: 'POST', headers: authHeaders(provider, key, sessionId), body: JSON.stringify(request.body), signal });
+      res = await modelFetch(provider, request.url, { method: 'POST', headers: authHeaders(provider, key, sessionId), body: JSON.stringify(request.body), signal });
       if (!retryableStatus(res.status, provider.protocol) || attempt === maxAttempts) break;
       const delayMs = retryAfter(res, retryDelay(attempt));
       try { await res.body?.cancel(); } catch { /* 丢弃本次可重试响应 */ }
@@ -418,10 +427,10 @@ export async function completeOnce({ messages, signal, sessionId, maxOutputToken
   };
   const key = resolvedKey(provider);
   let res, raw;
-  const maxAttempts = 5;
+  const maxAttempts = getRunContext()?.cloudAccount ? 1 : 5;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      res = await fetch(request.url, { method: 'POST', headers: authHeaders(provider, key, sessionId), body: JSON.stringify(request.body), signal });
+      res = await modelFetch(provider, request.url, { method: 'POST', headers: authHeaders(provider, key, sessionId), body: JSON.stringify(request.body), signal });
       raw = await res.text();
       if (!retryableStatus(res.status, provider.protocol) || attempt === maxAttempts) break;
       await waitForRetry(retryAfter(res, retryDelay(attempt)), signal);

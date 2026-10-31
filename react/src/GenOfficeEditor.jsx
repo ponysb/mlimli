@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { LoaderCircle } from 'lucide-react';
+import { LoaderCircle, Save } from 'lucide-react';
 import './genoffice.css';
 
 export default function GenOfficeEditor({ file, workspace, active, onPreview, onError, onCollaborate }) {
@@ -7,10 +7,13 @@ export default function GenOfficeEditor({ file, workspace, active, onPreview, on
   const id = useRef(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('');
+  const savePending = useRef(false);
   useEffect(() => window.desktop.onGenOfficeAgentRequest?.(async request => {
     if (request.path !== file.path || request.workspace !== workspace.path || !active) return;
     let accepted = false;
-    try { accepted = await onCollaborate?.(request.message) === true; }
+    try { accepted = await onCollaborate?.(request.message, request.attachments || []) === true; }
     catch (err) { onError(err); }
     finally { window.desktop.genOfficeAgentResult({ requestId: request.requestId, accepted }).catch(() => {}); }
   }), [file.path, workspace.path, active, onCollaborate, onError]);
@@ -42,8 +45,19 @@ export default function GenOfficeEditor({ file, workspace, active, onPreview, on
   async function preview() {
     try { if (!id.current || await window.desktop.genOfficeClose(id.current)) onPreview(); } catch (err) { onError(err); }
   }
+  async function save() {
+    if (!id.current || savePending.current) return;
+    savePending.current = true;
+    setSaving(true); setSaveStatus('');
+    try {
+      const saved = await window.desktop.genOfficeSave(id.current);
+      setSaveStatus(saved ? '已保存' : '未保存，请重试');
+      if (!saved) onError(new Error('文档未保存，请检查编辑器后重试'));
+    } catch (err) { setSaveStatus('保存失败'); onError(err); }
+    finally { savePending.current = false; setSaving(false); }
+  }
   return <div className="genoffice-editor">
-    <div className="genoffice-bar"><span><i />文档编辑 <small>本地文件</small></span><button onClick={preview}>返回预览</button></div>
+    <div className="genoffice-bar"><span><i />文档编辑 <small>本地文件</small></span><div className="genoffice-actions"><small role="status">{saveStatus}</small><button className="genoffice-save" onClick={save} disabled={loading || !!error || saving}>{saving ? <LoaderCircle className="spin" size={14}/> : <Save size={14}/>} {saving ? '保存中…' : '保存'}</button><button onClick={preview} disabled={saving}>返回预览</button></div></div>
     <div className="genoffice-canvas" ref={container}>{loading ? <div className="file-empty"><LoaderCircle className="spin" size={22} />正在打开编辑器…</div> : error ? <div className="file-empty"><b>编辑器暂不可用</b><span>{error}</span><button onClick={preview}>返回预览</button></div> : null}</div>
   </div>;
 }

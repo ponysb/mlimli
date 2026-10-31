@@ -1,12 +1,12 @@
 export class RuntimeClient {
   constructor(url) { this.url = url; this.workspace = null; }
 
-  async request(resource, body, { signal, scoped = true, method } = {}) {
+  async request(resource, body, { signal, scoped = true, method, timeoutMs = 15000 } = {}) {
     const controller = new AbortController();
     const onAbort = () => controller.abort();
     signal?.addEventListener('abort', onAbort, { once: true });
     if (signal?.aborted) onAbort();
-    const timeout = setTimeout(onAbort, 15000);
+    const timeout = setTimeout(onAbort, timeoutMs);
     try {
       const response = await fetch(`${this.url}${resource}`, {
         method: method || (body === undefined ? 'GET' : 'POST'), signal: controller.signal,

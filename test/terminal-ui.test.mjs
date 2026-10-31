@@ -60,7 +60,7 @@ test('terminal workspace uses xterm panes, supports split view, and closes back 
   const css = fs.readFileSync(path.join(root, 'react/src/style.css'), 'utf8');
   assert.match(component, /from '@xterm\/xterm'/);
   assert.match(component, /aria-label="添加终端"/);
-  assert.match(component, /panes\.map\(\(pane, index\)/);
+  assert.match(component, /\.map\(\(pane, index\)/);
   assert.match(component, /const layoutFallback = \{/);
   assert.match(component, /style=\{layoutFallback\.paneHead\}/);
   assert.match(main, /terminalReturnView\.current = \{ view, activeWorkspaceTab \}/);
@@ -70,6 +70,20 @@ test('terminal workspace uses xterm panes, supports split view, and closes back 
   assert.match(css, /grid-auto-rows:\s*minmax\(240px, 1fr\)/);
   assert.match(css, /\.terminal-panes\.is-split\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) !important/);
   assert.match(css, /\.terminal-pane\s*\{[^}]*height:\s*100%/);
+});
+
+test('SSH desktop keeps the terminal header and defaults to terminal with a persistent desktop toggle', () => {
+  const component = fs.readFileSync(path.join(root, 'react/src/TerminalWorkspace.jsx'), 'utf8');
+  const desktop = fs.readFileSync(path.join(root, 'react/src/SshDesktop.jsx'), 'utf8');
+  assert.match(component, /\[desktopMode, setDesktopMode\] = useState\(false\)/);
+  assert.match(component, /ssh-view-switch/);
+  assert.match(component, /hidden=\{desktopMode && connected\}/);
+  assert.match(component, /hidden=\{!desktopMode\}/);
+  assert.doesNotMatch(component, /mac-mode-picker|terminal-mode/);
+  assert.match(desktop, /sd-menubar/);
+  assert.match(desktop, /sd-dock/);
+  assert.match(desktop, /sd-traffic/);
+  assert.match(desktop, /action: 'restore'/);
 });
 
 test('default workspace is created automatically and terminal commands run there with ANSI output intact', async context => {

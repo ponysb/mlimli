@@ -2,7 +2,35 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { inspectGenOfficePackage } = require('./genoffice-package.cjs');
 
+const { sanitizeOfficeContext, captureOfficeSelection } = require('./office-selection.cjs');
+
 const TYPES = { '.docx': 'docs', '.xlsx': 'sheets', '.pptx': 'slides', '.pdf': 'pdf' };
+const pendingSaves = new WeakMap();
+function saveOfficeEntry(entry, ipcMain) {
+  const contents = entry?.view.webContents;
+  if (!contents || contents.isDestroyed()) return Promise.reject(new Error('编辑器已关闭，请重新打开文件'));
+  if (pendingSaves.has(contents)) return pendingSaves.get(contents);
+  const prefix = entry.type === 'sheets' ? 'workbook' : entry.type;
+  const pending = new Promise((resolve, reject) => {
+    const finish = (error, ok) => {
+      clearTimeout(timer);
+      ipcMain.removeListener(`${prefix}:close-save-result`, result);
+      contents.removeListener('destroyed', destroyed);
+      error ? reject(error) : resolve(ok);
+    };
+    const result = (event, ok) => {
+      if (event.sender === contents && event.senderFrame === contents.mainFrame) finish(null, ok === true);
+    };
+    const destroyed = () => finish(new Error('保存期间编辑器已关闭'));
+    const timer = setTimeout(() => finish(new Error('保存超时，请检查编辑器后重试')), 120000);
+    ipcMain.on(`${prefix}:close-save-result`, result);
+    contents.once('destroyed', destroyed);
+    try { contents.send(`${prefix}:close-save-request`); }
+    catch (error) { finish(error); }
+  }).finally(() => pendingSaves.delete(contents));
+  pendingSaves.set(contents, pending);
+  return pending;
+}
 function resolveOfficeFile(root, relative) {
   if (typeof relative !== 'string' || !relative || path.isAbsolute(relative) || relative.includes('\0')) throw new Error('无效文件路径');
   const base = fs.realpathSync(root);
@@ -29,19 +57,34 @@ function registerGenOffice({ app, protocol, ipcMain, getWindow, getServerUrl, re
   }
   ipcMain.handle('genoffice-agent-context', (event, live = {}) => {
     const entry = editorEntry(event);
-    const safeLive = Object.fromEntries(['location', 'selection'].flatMap(key =>
-      typeof live?.[key] === 'string' && live[key].trim() ? [[key, live[key].replace(/\0/g, '').slice(0, 5000)]] : []));
+    const safeLive = sanitizeOfficeContext(live);
     return { path: entry.relative, live: safeLive };
   });
-  ipcMain.handle('genoffice-agent-send', (event, message) => {
+  ipcMain.handle('genoffice-agent-capture', async (event, rect) => {
+    const entry = editorEntry(event);
+    const attachment = await captureOfficeSelection(event.sender, rect);
+    const token = require('node:crypto').randomUUID();
+    entry.capture = { token, attachment, expires: Date.now() + 30000 };
+    return token;
+  });
+  ipcMain.handle('genoffice-agent-send', async (event, request) => {
     const entry = editorEntry(event);
     const win = getWindow();
+    const message = typeof request === 'string' ? request : request?.message;
     if (!win || typeof message !== 'string' || !message.trim() || message.length > 100000) return false;
+    const attachments = [];
+    if (request?.captureToken) {
+      const capture = entry.capture;
+      entry.capture = null;
+      if (!capture || capture.token !== request.captureToken || capture.expires < Date.now()) throw new Error('选区截图已失效，请重新发送');
+      attachments.push(capture.attachment);
+    }
+    if (event.sender.isDestroyed() || win.isDestroyed()) return false;
     const requestId = ++requestSequence;
     return new Promise(resolve => {
       const timer = setTimeout(() => { agentRequests.delete(requestId); resolve(false); }, 30000);
       agentRequests.set(requestId, accepted => { clearTimeout(timer); agentRequests.delete(requestId); resolve(accepted === true); });
-      win.webContents.send('genoffice-agent-request', { requestId, message, path: entry.relative, workspace: entry.workspace });
+      win.webContents.send('genoffice-agent-request', { requestId, message, attachments, path: entry.relative, workspace: entry.workspace });
     });
   });
   ipcMain.handle('genoffice-agent-result', (event, { requestId, accepted } = {}) => {
@@ -87,6 +130,8 @@ function registerGenOffice({ app, protocol, ipcMain, getWindow, getServerUrl, re
     return mod;
   }
   async function close(entry, win) {
+    const pending = pendingSaves.get(entry.view.webContents);
+    if (pending && !await pending) return false;
     if (entry.view.webContents.isDestroyed()) { views.delete(entry.id); return true; }
     const title = entry.type[0].toUpperCase() + entry.type.slice(1);
     if (!await entry.mod[`request${title}Close`](entry.view.webContents, win)) return false;
@@ -96,6 +141,10 @@ function registerGenOffice({ app, protocol, ipcMain, getWindow, getServerUrl, re
     return true;
   }
   ipcMain.handle('genoffice-status', event => { authorize(event); return status(); });
+  ipcMain.handle('genoffice-save', (event, id) => {
+    authorize(event);
+    return saveOfficeEntry(views.get(id), ipcMain);
+  });
   ipcMain.handle('genoffice-open', async (event, { path: relative, workspace } = {}) => {
     const win = authorize(event);
     const response = await fetch(`${getServerUrl()}/api/info`);
@@ -151,4 +200,4 @@ function registerGenOffice({ app, protocol, ipcMain, getWindow, getServerUrl, re
   }
   return { status, closeAll, hasViews: () => views.size > 0 };
 }
-module.exports = { registerGenOffice, resolveOfficeFile, TYPES };
+module.exports = { registerGenOffice, resolveOfficeFile, saveOfficeEntry, TYPES };

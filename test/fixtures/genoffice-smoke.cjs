@@ -16,7 +16,7 @@ fs.cpSync(fixture, path.join(directory, 'workspace'), { recursive: true });
 const workspace = path.join(directory, 'workspace');
 let win, url;
 const handlers = new Map();
-const bridge = require('../../electron/genoffice.cjs').registerGenOffice({ app, protocol, ipcMain: { handle(name, fn) { handlers.set(name, fn); ipcMain.handle(name, fn); } }, getWindow: () => win, getServerUrl: () => url, resourceRoot: path.join(root, 'resources/genoffice') });
+const bridge = require('../../electron/genoffice.cjs').registerGenOffice({ app, protocol, ipcMain: { on: ipcMain.on.bind(ipcMain), removeListener: ipcMain.removeListener.bind(ipcMain), handle(name, fn) { handlers.set(name, fn); ipcMain.handle(name, fn); } }, getWindow: () => win, getServerUrl: () => url, resourceRoot: path.join(root, 'resources/genoffice') });
 const server = http.createServer(async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   res.end(JSON.stringify({ workspace }));
@@ -60,17 +60,55 @@ app.whenReady().then(async () => {
     const pending = handlers.get('genoffice-agent-send')(editorEvent, '修改当前文档');
     await handlers.get('genoffice-agent-result')(event, {requestId: ++agentRequestId, accepted:true});
     if (!await pending) throw new Error(name + ': Agent routing failed');
+    if (name === 'workbook.xlsx') {
+      const selected = await wc.executeJavaScript(`(() => {const detail={value:null};window.dispatchEvent(new CustomEvent('workbench-office-context',{detail}));return detail.value;})()`);
+      if (selected?.kind !== 'spreadsheet' || !selected.sheetId || !selected.range || !Array.isArray(selected.cells)) throw new Error('Spreadsheet selection structure missing');
+      console.log('SELECTION Excel worksheet + range + cell data passed');
+    }
+    if (name === 'slides.pptx') {
+      const selected = await wc.executeJavaScript(`(() => {const detail={value:null};window.dispatchEvent(new CustomEvent('workbench-office-context',{detail}));return detail.value;})()`);
+      if (selected?.kind !== 'slides' || selected.page !== 1 || !Array.isArray(selected.objectIds)) throw new Error('Slide selection structure missing');
+      console.log('SELECTION PPT page + object IDs passed');
+    }
+    if (name === 'document.docx') {
+      await wc.executeJavaScript(`(() => {
+        const el = document.querySelector('.ProseMirror'); el.focus();
+        const text = document.createTreeWalker(el, NodeFilter.SHOW_TEXT).nextNode();
+        if (!text) throw new Error('No document text to select');
+        const range = document.createRange(); range.selectNodeContents(text);
+        const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+        document.dispatchEvent(new Event('selectionchange'));
+      })()`);
+      await wait(150);
+      await wc.executeJavaScript(`document.querySelector('#workbench-agent textarea').focus()`);
+      const retained = await wc.executeJavaScript(`document.querySelector('.office-agent-selection').innerText`);
+      if (!retained.includes('文档选区')) throw new Error('Word selection lost on composer focus: ' + retained);
+    }
+    if (name === 'slides.pptx') wc.capturePage = async () => { throw new Error('Smoke: compositor unavailable'); };
     routedRequest = null;
     await wc.executeJavaScript(`(() => { const input=document.querySelector('#workbench-agent textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'检查当前内容'); input.dispatchEvent(new Event('input',{bubbles:true})); })()`);
     await wc.executeJavaScript(`document.querySelector('#workbench-agent form').requestSubmit()`);
     for (let n=0; n<50 && !routedRequest; n++) await wait(100);
-    if (!routedRequest?.message.includes('按需使用文件工具读取') || !routedRequest.message.includes(name) || routedRequest.message.includes('must not be forwarded') || routedRequest.message.includes('document_context')) throw new Error(name + ': routed Agent prompt has incorrect context: ' + JSON.stringify(routedRequest));
+    if (!routedRequest?.message.includes('按需使用文件工具读取') || !routedRequest.message.includes(name) || routedRequest.message.includes('must not be forwarded') || routedRequest.message.includes('document_context')) throw new Error(name + ': routed Agent prompt has incorrect context: ' + JSON.stringify(routedRequest) + ' UI: ' + await wc.executeJavaScript('document.querySelector("#workbench-agent").innerText'));
+    if (name === 'slides.pptx') {
+      const attachment = routedRequest.attachments?.[0];
+      if (attachment?.mime !== 'image/png') throw new Error('PPT screenshot attachment missing');
+      const bytes = Buffer.from(attachment.dataUrl.split(',')[1], 'base64');
+      fs.writeFileSync(path.join(directory, 'slides-selection.png'), bytes);
+      console.log('SELECTION PPT canvas fallback PNG passed', bytes.length, 'bytes');
+    }
+    if (name === 'document.docx') {
+      if (!routedRequest.message.includes('选区结构与定位') || !routedRequest.message.includes('fragment')) throw new Error('Word structure was not forwarded');
+      if (routedRequest.attachments?.[0]?.mime !== 'image/png' || !routedRequest.attachments[0].dataUrl.startsWith('data:image/png;base64,')) throw new Error('Selection screenshot missing');
+      if (await wc.executeJavaScript(`document.querySelector('#workbench-agent').style.visibility === 'hidden'`)) throw new Error('Composer remained hidden while waiting for Agent');
+      console.log('SELECTION Word retained structure + screenshot attachment passed');
+    }
     await handlers.get('genoffice-agent-result')(event, {requestId: ++agentRequestId, accepted:true});
     if (!state.elements && !state.text) console.log('HTML', await wc.executeJavaScript('document.documentElement.outerHTML.slice(0,2500)'));
     const before = fs.statSync(result.id).mtimeMs;
     if (name === 'document.docx') {
       await wc.executeJavaScript(`document.querySelector('.ProseMirror').focus(); document.execCommand('insertText', false, 'GenOffice smoke edit '); void 0`);
-      wc.send('menu:command', 'save');
+      if (!await handlers.get('genoffice-save')(event, result.id)) throw new Error('Standalone save failed');
     } else if (name === 'slides.pptx') {
       await wc.executeJavaScript(`window.slidesApi.setNotes({slideIndex:0, text:'GenOffice smoke note'})`);
       dialogResponse = 2;

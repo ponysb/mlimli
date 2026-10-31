@@ -1,7 +1,8 @@
 import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Background, BackgroundVariant, BaseEdge, EdgeLabelRenderer, getBezierPath, getNodesBounds, Controls, Handle, MiniMap, Position, ReactFlow, ReactFlowProvider, addEdge, useEdgesState, useNodesState, useReactFlow, useStore } from '@xyflow/react';
-import { ArrowUp, Bot, Check, ChevronLeft, Copy, Download, Expand, Film, Focus, GitBranch, Hand, Image as ImageIcon, Images, LayoutGrid, LoaderCircle, Map as MapIcon, MessageSquare, MousePointer2, Music2, PanelRightClose, Plus, Redo2, Search, Sparkles, Trash2, Type, Undo2, Upload, Video, X } from 'lucide-react';
-import { duplicateGraph, generationContext, mediaKind, validReferenceRole, snapshot, selectionToolbarPosition } from './film-canvas-model.mjs';
+import { ArrowUp, Bot, Check, ChevronDown, ChevronLeft, Copy, Download, Expand, ExternalLink, FolderOpen, Film, Focus, GitBranch, Hand, Image as ImageIcon, Images, LayoutGrid, LoaderCircle, Map as MapIcon, MessageSquare, MousePointer2, Music2, PanelRightClose, Plus, Redo2, Search, Sparkles, Trash2, Type, Undo2, Upload, Video, X } from 'lucide-react';
+import { duplicateGraph, generationContext, mediaKind, replacementMediaData, validReferenceRole, snapshot, selectionToolbarPosition } from './film-canvas-model.mjs';
 import FilmCanvasCompare from './FilmCanvasCompare.jsx';
 import FilmCanvasReferences from './FilmCanvasReferences.jsx';
 import FilmCanvasProduction from './FilmCanvasProduction.jsx';
@@ -17,7 +18,63 @@ const mediaUrl = data => data.assetId ? `/api/assets/${encodeURIComponent(data.a
 const kindOf = mediaKind;
 const statusLabels = { ready: '待生成', queued: '等待中', running: '生成中', error: '失败', completed: '已完成', cancelled: '已取消' };
 const statusText = data => ['queued', 'running', 'error', 'cancelled'].includes(data.status) ? statusLabels[data.status] : mediaUrl(data) ? '已就绪' : statusLabels[data.status] || '待生成';
-function Tool({ title, children, ...props }) { return <button type="button" title={title} aria-label={title} {...props}>{children}</button>; }
+function Tool({ title, children, ...props }) {
+  const [anchor, setAnchor] = useState(null);
+  const show = event => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    setAnchor({ left: Math.min(window.innerWidth - 140, Math.max(140, bounds.left + bounds.width / 2)), top: bounds.bottom + 8, above: bounds.bottom + 48 > window.innerHeight, bottom: window.innerHeight - bounds.top + 8 });
+  };
+  return <><button type="button" aria-label={title} {...props} onMouseEnter={show} onMouseLeave={() => setAnchor(null)} onFocus={show} onBlur={() => setAnchor(null)} onPointerDown={() => setAnchor(null)}>{children}</button>{anchor && createPortal(<span className="fc-tooltip" role="tooltip" style={{ left: anchor.left, top: anchor.above ? undefined : anchor.top, bottom: anchor.above ? anchor.bottom : undefined }}>{title}</span>, document.body)}</>;
+}
+function MaterialMenu({ children }) {
+  const [position, setPosition] = useState(null);
+  const trigger = useRef(null), menu = useRef(null);
+  const close = () => setPosition(null);
+  useLayoutEffect(() => {
+    if (!position) return;
+    const bounds = trigger.current.getBoundingClientRect();
+    const height = menu.current.getBoundingClientRect().height;
+    const availableBelow = window.innerHeight - bounds.bottom - 14;
+    const availableAbove = bounds.top - 14;
+    const below = availableBelow >= height || availableBelow >= availableAbove;
+    const maxHeight = Math.max(0, below ? availableBelow : availableAbove);
+    const next = {
+      left: Math.max(8, Math.min(bounds.right - 170, window.innerWidth - 178)),
+      top: below ? bounds.bottom + 6 : Math.max(8, bounds.top - Math.min(height, maxHeight) - 6),
+      maxHeight,
+    };
+    setPosition(previous => Object.keys(next).every(key => previous[key] === next[key]) ? previous : next);
+  }, [position]);
+  useEffect(() => {
+    if (!position) return;
+    const dismiss = event => { if (!trigger.current?.contains(event.target) && !menu.current?.contains(event.target)) close(); };
+    const scroll = event => { if (!menu.current?.contains(event.target)) close(); };
+    const escape = event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); trigger.current?.focus(); } };
+    document.addEventListener('pointerdown', dismiss, true);
+    document.addEventListener('focusin', dismiss);
+    document.addEventListener('keydown', escape, true);
+    window.addEventListener('resize', close);
+    document.addEventListener('scroll', scroll, true);
+    return () => {
+      document.removeEventListener('pointerdown', dismiss, true);
+      document.removeEventListener('focusin', dismiss);
+      document.removeEventListener('keydown', escape, true);
+      window.removeEventListener('resize', close);
+      document.removeEventListener('scroll', scroll, true);
+    };
+  }, [Boolean(position)]);
+  return <>
+    <button ref={trigger} type="button" aria-expanded={Boolean(position)} aria-haspopup="true" onClick={() => setPosition(previous => previous ? null : { left: 0, top: 0, maxHeight: window.innerHeight - 16 })} onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); setPosition({ left: 0, top: 0, maxHeight: window.innerHeight - 16 }); requestAnimationFrame(() => menu.current?.querySelector('button:not(:disabled)')?.focus()); } }}>素材<ChevronDown size={12}/></button>
+    {position && createPortal(<div ref={menu} className="fc-material-options" aria-label="素材操作" style={position} onPointerDown={event => event.stopPropagation()} onKeyDown={event => {
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault(); event.stopPropagation();
+      const buttons = [...event.currentTarget.querySelectorAll('button:not(:disabled)')];
+      const index = buttons.indexOf(document.activeElement);
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+      buttons[next]?.focus();
+    }} onClick={event => { if (event.target.closest('button:not(:disabled)')) { close(); trigger.current?.focus(); } }}>{children}</div>, document.body)}
+  </>;
+}
 const toolbarGeometry = state => {
   const selected = [...state.nodeLookup.values()].filter(node => node.selected && !node.hidden && node.measured?.width && node.measured?.height);
   const bounds = selected.length ? getNodesBounds(selected, { nodeLookup: state.nodeLookup }) : null;
@@ -46,6 +103,111 @@ function SelectionToolbar({ children }) {
   );
   return <div ref={bar} className="fc-selection-bar nodrag nopan nowheel" role="toolbar" aria-label="选中节点操作" style={{ left: position?.left ?? 0, top: position?.top ?? 0, visibility: position && size.height ? 'visible' : 'hidden' }} onPointerDown={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}>{children}</div>;
 }
+function inspectorGeometry(state, nodeId) {
+  const node = nodeId && state.nodeLookup.get(nodeId);
+  if (!node || node.hidden) return { ready: false };
+  const bounds = getNodesBounds([node], { nodeLookup: state.nodeLookup });
+  return {
+    ready: true,
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+    panX: state.transform[0],
+    panY: state.transform[1],
+    zoom: state.transform[2],
+    canvasWidth: state.width,
+    canvasHeight: state.height,
+  };
+}
+function NodeInspector({ node, workspacePath, onClose, onUpdate, onCheckpoint, onGenerate, onReplace, onPreview }) {
+  const [file, setFile] = useState(null), [technical, setTechnical] = useState({});
+  const [mediaError, setMediaError] = useState(''), [actionError, setActionError] = useState(''), [opening, setOpening] = useState(false);
+  const source = mediaUrl(node.data), kind = kindOf(node.data);
+  const headers = workspacePath ? { 'x-mli-workspace-encoded': encodeURIComponent(workspacePath) } : {};
+  useEffect(() => {
+    setFile(null); setTechnical({}); setMediaError(''); setActionError('');
+    if (!source || node.type === 'prompt') return;
+    const controller = new AbortController();
+    const query = new URLSearchParams(node.data.assetId ? { assetId: node.data.assetId } : { path: node.data.path });
+    fetch(`/api/film-canvas/media/info?${query}`, { headers, signal: controller.signal }).then(async response => {
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || '读取文件信息失败');
+      if (!controller.signal.aborted) setFile(result);
+    }).catch(error => { if (!controller.signal.aborted) setMediaError(error.message); });
+    const element = kind === 'image' ? new Image() : document.createElement(kind === 'audio' ? 'audio' : 'video');
+    let timeout;
+    const read = () => { clearTimeout(timeout); if (!controller.signal.aborted) setTechnical({ width: element.naturalWidth || element.videoWidth, height: element.naturalHeight || element.videoHeight, duration: Number.isFinite(element.duration) ? element.duration : null, loaded: true }); };
+    const failed = () => { clearTimeout(timeout); if (!controller.signal.aborted) setTechnical({ failed: true }); };
+    element.onload = read; element.onloadedmetadata = read; element.onerror = failed;
+    if (kind !== 'image') element.preload = 'metadata';
+    timeout = setTimeout(failed, 15000);
+    element.src = source;
+    return () => {
+      controller.abort(); clearTimeout(timeout);
+      element.onload = element.onloadedmetadata = element.onerror = null;
+      if (kind !== 'image') { element.pause(); element.removeAttribute('src'); element.load(); }
+      else element.removeAttribute('src');
+    };
+  }, [source, kind, workspacePath, node.type]);
+  async function openFile(action) {
+    setOpening(true); setActionError('');
+    try {
+      const response = await fetch('/api/film-canvas/media/open', { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ assetId: node.data.assetId, path: node.data.path, action }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || '打开失败');
+    } catch (error) { setActionError(error.message); }
+    finally { setOpening(false); }
+  }
+  const unknown = technical.failed || technical.loaded ? '无法读取' : '读取中…';
+  const sizeText = file ? file.size < 1024 ? `${file.size} B` : file.size < 1048576 ? `${(file.size / 1024).toFixed(1)} KB` : `${(file.size / 1048576).toFixed(1)} MB` : mediaError ? '无法读取' : '读取中…';
+  const durationText = technical.duration != null ? `${Math.floor(technical.duration / 60)}:${(technical.duration % 60).toFixed(1).padStart(4, '0')}` : unknown;
+  const format = (file?.mime || node.data.mime || '').split('/')[1]?.toUpperCase() || '未知';
+  const geometry = useStore(state => inspectorGeometry(state, node.id), (a, b) => Object.keys(a).every(key => a[key] === b[key]));
+  const panel = useRef(null);
+  const [height, setHeight] = useState(0);
+  useLayoutEffect(() => {
+    const element = panel.current;
+    const measure = () => setHeight(element.getBoundingClientRect().height);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [node.id]);
+  const preferredWidth = node.type === 'prompt' ? 300 : 480;
+  const width = Math.min(preferredWidth, Math.max(0, geometry.canvasWidth - 24));
+  const nodeCenterX = geometry.panX + (geometry.x + geometry.width / 2) * geometry.zoom;
+  const x = geometry.ready ? Math.min(Math.max(12, nodeCenterX - width / 2), geometry.canvasWidth - width - 12) : 0;
+  const nodeTop = geometry.panY + geometry.y * geometry.zoom;
+  const nodeBottom = nodeTop + geometry.height * geometry.zoom;
+  const below = nodeBottom + 10;
+  const top = Math.max(12, Math.min(below, geometry.canvasHeight - 92));
+  return <section ref={panel} className="fc-inspector" aria-label="节点属性" style={{ left: x, top, width, maxHeight: Math.max(80, geometry.canvasHeight - top - 12), visibility: geometry.ready && height ? 'visible' : 'hidden' }} onPointerDown={event => event.stopPropagation()}>
+    <header><input className="fc-inspector-title" aria-label="节点名称" title="编辑节点名称" value={node.data.title || ''} onFocus={onCheckpoint} maxLength={160} onChange={event => onUpdate(node.id, { title: event.target.value })}/><span className="fc-inspector-state">{statusText(node.data)}</span>
+      {node.type !== 'prompt' && <div className="fc-media-actions">
+        <MaterialMenu>
+            <button type="button" onClick={() => onReplace(node.id)}><Upload size={13}/>{source ? '替换素材' : '上传素材'}</button>
+            {source && <>
+              <button type="button" onClick={() => onPreview(node.id)}><Expand size={13}/>预览素材</button>
+              <button type="button" disabled={!file} onClick={() => navigator.clipboard.writeText(file.path).catch(() => setActionError('复制失败，请检查剪贴板权限'))}><Copy size={13}/>复制文件路径</button>
+              <button type="button" disabled={opening || !file} onClick={() => openFile('open')}><ExternalLink size={13}/>默认应用打开</button>
+              <button type="button" disabled={opening || !file} onClick={() => openFile('reveal')}><FolderOpen size={13}/>在文件夹中显示</button>
+            </>}
+        </MaterialMenu>
+        <Tool title={source ? '交给 Agent 准备变体' : '交给 Agent 生成'} className="fc-inspector-agent" onClick={() => onGenerate(node.id)}><Sparkles size={12}/></Tool>
+      </div>}
+      {node.type === 'prompt' && <Tool title="交给 Agent 生成" className="fc-primary fc-inspector-generate" onClick={() => onGenerate(node.id)}><Sparkles size={12}/>生成</Tool>}
+      <Tool title="关闭属性" onClick={onClose}><X size={15}/></Tool>
+    </header>
+    {node.type !== 'prompt' && <>
+      <label className="fc-inspector-prompt"><span className="fc-prompt-meta"><span>提示词 / 备注</span><span className="fc-file-summary" title={file?.path || node.data.path || undefined}>
+        {source ? [({ image: '图片', video: '视频', audio: '音频' })[kind], format, sizeText, kind !== 'audio' ? technical.width && technical.height ? `${technical.width} × ${technical.height}` : unknown : null, kind !== 'image' ? durationText : null].filter(Boolean).join(' · ') : '未关联素材 · 从「素材」上传文件'}
+      </span></span><textarea aria-label="提示词 / 备注" value={node.data.text || ''} onFocus={onCheckpoint} maxLength={12000} onChange={event => onUpdate(node.id, { text: event.target.value })} placeholder="描述主体、场景、镜头与风格…"/></label>
+      {(mediaError || actionError) && <p className="fc-inspector-error" role="status">{actionError || mediaError}</p>}
+    </>}
+    {(node.data.model || node.data.runId || node.data.sessionId || node.data.params) && <details className="fc-inspector-details"><summary>生成详情</summary><div className="fc-properties">{node.data.model && <><span>模型</span><b>{node.data.model}</b></>}{node.data.runId && <><span>运行 ID</span><code>{node.data.runId}</code></>}{node.data.sessionId && <><span>会话 ID</span><code>{node.data.sessionId}</code></>}{node.data.params && <><span>参数</span><pre>{JSON.stringify(node.data.params, null, 2)}</pre></>}</div></details>}
+  </section>;
+}
 function Media({ data, large = false }) {
   const src = mediaUrl(data), kind = kindOf(data);
   if (!src) return <div className="fc-media-placeholder">{kind === 'video' ? <Video/> : kind === 'audio' ? <Music2/> : <ImageIcon/>}<span>{data.status === 'running' ? '正在创作' : '等待生成结果'}</span></div>;
@@ -55,10 +217,10 @@ const CanvasNode = memo(({ id, type, data, selected }) => {
   const Icon = type === 'prompt' ? Type : kindOf(data) === 'video' ? Video : kindOf(data) === 'audio' ? Music2 : ImageIcon;
   return <article className={`fc-node ${selected ? 'is-selected' : ''} ${type === 'prompt' ? 'is-prompt' : ''}`}>
     <header><span className="fc-node-kind"><Icon size={14}/>{type === 'prompt' ? '提示词' : type === 'result' ? '生成结果' : '素材'}</span><span className={`fc-state ${data.status || 'ready'}`}>{data.status === 'running' && <LoaderCircle size={11} className="spin"/>}{statusText(data)}</span></header>
-    {type === 'prompt' ? <div className="fc-prompt-body">{data.text || '写下画面、镜头或声音的构想…'}</div> : <div className="fc-node-media" onDoubleClick={() => data.actions.preview(id)}><Media data={data}/></div>}
+    {type === 'prompt' ? <textarea className="fc-prompt-body nodrag nopan nowheel" aria-label="提示词内容" value={data.text || ''} maxLength={12000} placeholder="写下画面、镜头或声音的构想…" onFocus={data.actions.checkpoint} onChange={event => data.actions.update(id, { text: event.target.value })} onDoubleClick={event => event.stopPropagation()}/> : <div className="fc-node-media" title="双击替换素材" onDoubleClick={event => { event.preventDefault(); event.stopPropagation(); data.actions.replace(id); }}><Media data={data}/></div>}
     <div className="fc-node-caption"><strong>{data.favorite && <Check size={12} aria-label="优选"/>}{data.title || '未命名节点'}</strong>{data.model && <small>{data.model}</small>}</div>
     {data.error && <p className="fc-error">{data.error}</p>}
-    <footer className="nodrag"><Tool title="编辑节点" onClick={() => data.actions.edit(id)}><Type size={13}/></Tool><Tool title="加入发送区" onClick={() => data.actions.reference(id)}><MessageSquare size={13}/></Tool>{mediaUrl(data) && <Tool title="预览素材" onClick={() => data.actions.preview(id)}><Expand size={13}/></Tool>}<button className="fc-node-generate" onClick={() => data.actions.generate(id)}><Sparkles size={12}/>{mediaUrl(data) ? '准备变体' : '交给 Agent'}</button></footer>
+    <footer className="nodrag"><Tool title="编辑节点属性" onClick={() => data.actions.edit(id)}><Type size={12}/></Tool><Tool title="加入发送区供 Agent 引用" onClick={() => data.actions.reference(id)}><MessageSquare size={12}/></Tool>{mediaUrl(data) && <Tool title="预览素材" onClick={() => data.actions.preview(id)}><Expand size={12}/></Tool>}<Tool title={mediaUrl(data) ? '以此素材准备变体' : '将节点内容交给 Agent 生成'} className="fc-node-generate" onClick={() => data.actions.generate(id)}><Sparkles size={11}/>{mediaUrl(data) ? '准备变体' : '交给 Agent'}</Tool></footer>
     <Handle type="target" position={Position.Left} title="参考输入"/><Handle type="source" position={Position.Right} title="连接输出"/>
   </article>;
 });
@@ -96,7 +258,7 @@ function FilmCanvasContent({ workspace, current, running, entries = [], onSend, 
   const fitted = useRef(false);
   const workspacePath = workspace?.path;
   const canvasFetch = (url, options = {}) => fetch(url, { ...options, headers: { ...options.headers, ...(workspacePath ? { 'x-mli-workspace-encoded': encodeURIComponent(workspacePath) } : {}) } });
-  const flow = useReactFlow(), fileInput = useRef(null);
+  const flow = useReactFlow(), fileInput = useRef(null), replaceInput = useRef(null), replacementTarget = useRef(null);
   graph.current = { nodes, edges };
   const selection = useMemo(() => nodes.filter(node => node.selected), [nodes]);
   const contextNodes = references.map(id => nodes.find(node => node.id === id)).filter(Boolean);
@@ -278,7 +440,7 @@ function FilmCanvasContent({ workspace, current, running, entries = [], onSend, 
     const columns = Math.ceil(Math.sqrt(selected.length)), x = Math.min(...selected.map(node => node.position.x)), y = Math.min(...selected.map(node => node.position.y));
     setNodes(items => items.map(node => { const index = selected.findIndex(item => item.id === node.id); return index < 0 ? node : { ...node, position: { x: x + index % columns * width, y: y + Math.floor(index / columns) * height } }; }));
   }
-  function updateNode(patch) { setNodes(items => items.map(node => node.id === inspector ? { ...node, data: { ...node.data, ...patch } } : node)); }
+  function updateNode(id, patch) { setNodes(items => items.map(node => node.id === id ? { ...node, data: { ...node.data, ...patch } } : node)); }
   function prepareGeneration(id) {
     const node = nodes.find(item => item.id === id); if (!node) return;
     addReference([id]); setIncludeUpstream(true);
@@ -313,6 +475,27 @@ function FilmCanvasContent({ workspace, current, running, entries = [], onSend, 
       } catch (reason) { if (requestEpoch === epoch.current) setError(`${file.name}：${reason.message}`); }
     }
   }
+  function chooseReplacement(nodeId) {
+    replacementTarget.current = nodeId;
+    replaceInput.current?.click();
+  }
+  async function replaceMedia(nodeId, file) {
+    if (!nodeId || !file) return;
+    const requestEpoch = epoch.current;
+    setError('');
+    try {
+      if (!/^(image|video|audio)\//.test(file.type)) throw new Error('仅支持图片、视频和音频');
+      if (file.size > 100 * 1024 * 1024) throw new Error('文件超过 100 MB');
+      const dataUrl = await readFile(file); if (requestEpoch !== epoch.current) return;
+      const response = await canvasFetch('/api/assets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: file.name, dataUrl, source: 'film-canvas' }) });
+      const result = await response.json(); if (!response.ok) throw new Error(result.error || '替换失败');
+      if (requestEpoch !== epoch.current) return;
+      if (!graph.current.nodes.some(node => node.id === nodeId && node.type !== 'prompt')) throw new Error('画布节点已不存在');
+      checkpoint();
+      setAssets(items => [result.asset, ...items]);
+      setNodes(items => items.map(node => node.id === nodeId ? { ...node, data: replacementMediaData(node.data, result.asset) } : node));
+    } catch (reason) { if (requestEpoch === epoch.current) setError(`${file.name}：${reason.message}`); }
+  }
   async function send() {
     if (busy || (!draft.trim() && !contextNodes.length)) return;
     const requestEpoch = epoch.current;
@@ -342,7 +525,7 @@ function FilmCanvasContent({ workspace, current, running, entries = [], onSend, 
       if (accepted && requestEpoch === epoch.current) { setDraft(''); setReferences([]); setRoles({}); setEditRequest(null); }
     } catch (reason) { if (requestEpoch === epoch.current) setError(reason.message || '发送失败'); } finally { if (requestEpoch === epoch.current) setBusy(false); }
   }
-  const actions = { edit: setInspector, preview: setPreview, reference: id => addReference([id]), generate: prepareGeneration };
+  const actions = { edit: setInspector, preview: setPreview, replace: chooseReplacement, reference: id => addReference([id]), generate: prepareGeneration, update: updateNode, checkpoint };
   const displayNodes = nodes.map(node => ({ ...node, data: { ...node.data, actions } }));
   const connect = connection => { if (connection.source === connection.target) { setError('不能连接节点自身'); return; } checkpoint(); setEdges(items => addEdge({ ...connection, label: '参考', type: 'creative' }, items)); };
   function keyboard(event) {
@@ -363,10 +546,10 @@ function FilmCanvasContent({ workspace, current, running, entries = [], onSend, 
   return <div tabIndex={0} onKeyDown={keyboard} onKeyUp={event => { if (event.key === ' ') setSpacePan(false); }} onBlur={() => setSpacePan(false)} onPointerDownCapture={event => { if (!event.target.closest('input, textarea, select, button, a, [contenteditable]')) event.currentTarget.focus({ preventScroll: true }); }} className={`film-canvas-workspace ${agentOpen ? '' : 'fc-agent-collapsed'}`}>
     <div className="fc-stage" ref={stage} aria-busy={actionBusy}>
       {recoveredDraft && <section className="fc-draft-recovery" role="status"><span>发现此项目的未发送内容或未保存画布</span><button onClick={recoverDraft}>恢复草稿</button><button onClick={() => { setRecoveredDraft(null); setDraft(''); localStorage.removeItem(canvasDraftKey(workspace)); }}>放弃草稿</button></section>}
-      <label className="fc-node-search"><Search size={14}/><input aria-label="搜索画布节点" placeholder="搜索节点…" value={nodeQuery} onChange={event => setNodeQuery(event.target.value)}/>{nodeQuery && <div>{nodes.filter(node => `${node.data.title || ''} ${node.data.text || ''}`.toLowerCase().includes(nodeQuery.toLowerCase())).slice(0, 20).map(node => <button key={node.id} onClick={() => { selectNodes([node.id]); locate(node.id); setNodeQuery(''); }}>{node.data.title || node.id}</button>)}</div>}</label>
-      <header className="fc-topbar"><div className="fc-project"><span className="fc-project-icon"><Film size={17}/></span><div><strong>影视画布</strong><small>{workspace?.name || '当前项目'}<i/> {saveState}</small></div></div><div className="fc-top-actions"><span>{nodes.length} 节点</span><Tool title="撤销" disabled={!history.past.length || running} onClick={() => restore('past')}><Undo2 size={16}/></Tool><Tool title="重做" disabled={!history.future.length || running} onClick={() => restore('future')}><Redo2 size={16}/></Tool><span className="fc-divider"/><Tool title="整理节点" onClick={arrange}><LayoutGrid size={16}/></Tool><Tool title={agentOpen ? '收起 Agent' : '展开 Agent'} aria-pressed={agentOpen} onClick={() => setAgentOpen(value => !value)}><MessageSquare size={16}/></Tool></div></header>
+
+      <header className="fc-topbar"><div className="fc-project"><span className="fc-project-icon"><Film size={17}/></span><div><strong>影视画布</strong><small>{workspace?.name || '当前项目'}<i/> {saveState}</small></div></div><label className="fc-node-search"><Search size={14}/><input aria-label="搜索画布节点" placeholder="搜索节点…" value={nodeQuery} onChange={event => setNodeQuery(event.target.value)}/>{nodeQuery && <div>{nodes.filter(node => `${node.data.title || ''} ${node.data.text || ''}`.toLowerCase().includes(nodeQuery.toLowerCase())).slice(0, 20).map(node => <button key={node.id} onClick={() => { selectNodes([node.id]); locate(node.id); setNodeQuery(''); }}>{node.data.title || node.id}</button>)}</div>}</label><div className="fc-top-actions"><span>{nodes.length} 节点</span><Tool title="撤销" disabled={!history.past.length || running} onClick={() => restore('past')}><Undo2 size={16}/></Tool><Tool title="重做" disabled={!history.future.length || running} onClick={() => restore('future')}><Redo2 size={16}/></Tool><span className="fc-divider"/><Tool title="整理节点" onClick={arrange}><LayoutGrid size={16}/></Tool><Tool title={agentOpen ? '收起 Agent' : '展开 Agent'} aria-pressed={agentOpen} onClick={() => setAgentOpen(value => !value)}><MessageSquare size={16}/></Tool></div></header>
       <div className="fc-flow" onDragOver={event => { if (event.dataTransfer.types.includes('Files') || event.dataTransfer.types.includes('application/x-mli-asset')) event.preventDefault(); }} onDrop={event => { if (dropAsset(event)) return; if (event.dataTransfer.files.length) { event.preventDefault(); importFiles([...event.dataTransfer.files], flow.screenToFlowPosition({ x: event.clientX, y: event.clientY })); } }}>
-        {!loaded ? <div className="fc-loading"><LoaderCircle size={22} className="spin"/></div> : <ReactFlow nodes={displayNodes} edges={edges.map(edge => ({ ...edge, type: 'creative' }))} edgeTypes={edgeTypes} nodeTypes={nodeTypes} nodesDraggable={!actionBusy} nodesConnectable={!actionBusy} onNodesChange={changes => { if (actionBusy) return; if (changes.some(change => change.type === 'remove')) checkpoint(); onNodesChange(changes); }} onEdgesChange={onEdgesChange} onConnect={connect} onNodeDragStart={checkpoint} onNodeContextMenu={(event, node) => { event.preventDefault(); selectNodes([node.id]); setMenu({ x: Math.min(event.clientX, window.innerWidth - 180), y: Math.min(event.clientY, window.innerHeight - 240), id: node.id }); }} onPaneClick={() => setMenu(null)} onNodeDoubleClick={(_, node) => setInspector(node.id)} onEdgeClick={(_, edge) => setEdgeEditor(edge.id)} selectionOnDrag={mode === 'select' && !spacePan} panOnDrag={mode === 'hand' || spacePan ? true : [1, 2]} panOnScroll selectionKeyCode="Shift" multiSelectionKeyCode="Shift" deleteKeyCode={null} fitView minZoom={0.2} maxZoom={2} proOptions={{ hideAttribution: true }} defaultEdgeOptions={{ type: 'creative', style: { stroke: '#8b949f', strokeWidth: 1.4 }, labelStyle: { fill: '#66717e', fontSize: 11 }, labelBgStyle: { fill: '#f8fafb' } }}>
+        {!loaded ? <div className="fc-loading"><LoaderCircle size={22} className="spin"/></div> : <ReactFlow nodes={displayNodes} edges={edges.map(edge => ({ ...edge, type: 'creative' }))} edgeTypes={edgeTypes} nodeTypes={nodeTypes} nodesDraggable={!actionBusy} nodesConnectable={!actionBusy} onNodesChange={changes => { if (actionBusy) return; if (changes.some(change => change.type === 'remove')) checkpoint(); onNodesChange(changes); }} onEdgesChange={onEdgesChange} onConnect={connect} onNodeDragStart={checkpoint} onNodeClick={(_, node) => setInspector(node.id)} onNodeContextMenu={(event, node) => { event.preventDefault(); selectNodes([node.id]); setInspector(node.id); setMenu({ x: Math.min(event.clientX, window.innerWidth - 180), y: Math.min(event.clientY, window.innerHeight - 240), id: node.id }); }} onPaneClick={() => { setMenu(null); setInspector(null); }} onNodeDoubleClick={(_, node) => setInspector(node.id)} onEdgeClick={(_, edge) => { setInspector(null); setEdgeEditor(edge.id); }} selectionOnDrag={mode === 'select' && !spacePan} panOnDrag={mode === 'hand' || spacePan ? true : [1, 2]} panOnScroll selectionKeyCode="Shift" multiSelectionKeyCode="Shift" deleteKeyCode={null} fitView minZoom={0.2} maxZoom={2} proOptions={{ hideAttribution: true }} defaultEdgeOptions={{ type: 'creative', style: { stroke: '#8b949f', strokeWidth: 1.4 }, labelStyle: { fill: '#66717e', fontSize: 11 }, labelBgStyle: { fill: '#f8fafb' } }}>
           <Background variant={BackgroundVariant.Lines} color="#edf0f3" gap={24} lineWidth={0.6}/><Controls showInteractive={false}/>{minimap && <MiniMap pannable zoomable nodeColor="#a6b9b0" maskColor="#ffffffbb"/>}
         </ReactFlow>}
         <nav className="fc-toolrail" aria-label="画布工具"><Tool title="选择节点 (V)" aria-pressed={mode === 'select'} onClick={() => setMode('select')}><MousePointer2 size={18}/></Tool><Tool title="移动画布 (H / 空格)" aria-pressed={mode === 'hand'} onClick={() => setMode('hand')}><Hand size={18}/></Tool><span/><Tool title="资源库" onClick={() => setLibrary(value => !value)}><Images size={18}/></Tool><Tool title="导入素材" onClick={() => fileInput.current?.click()}><Upload size={18}/></Tool><Tool title="添加提示词" onClick={() => addNode('prompt')}><Type size={18}/></Tool><Tool title="添加图像生成节点" onClick={() => addNode('result', { title: '图像创作', kind: 'image' })}><ImageIcon size={18}/></Tool><Tool title="添加视频生成节点" onClick={() => addNode('result', { title: '视频镜头', kind: 'video' })}><Video size={18}/></Tool><Tool title="添加音频生成节点" onClick={() => addNode('result', { title: '声音创作', kind: 'audio' })}><Music2 size={18}/></Tool><span/><Tool title="插入镜头模板" onClick={template}><Film size={18}/></Tool><span/><Tool title="制作面板" aria-pressed={production} onClick={() => setProduction(value => !value)}><LayoutGrid size={18}/></Tool></nav>
@@ -374,13 +557,14 @@ function FilmCanvasContent({ workspace, current, running, entries = [], onSend, 
         {!nodes.length && loaded && <div className="fc-start"><div className="fc-start-mark"><Film size={27}/></div><h2>从一个镜头开始</h2><div className="fc-start-actions"><button onClick={() => fileInput.current?.click()}><Upload size={16}/>导入素材</button><button onClick={template}><Plus size={16}/>镜头模板</button></div></div>}
         <div className="fc-view-tools"><Tool title="适配画布" onClick={() => flow.fitView({ padding: 0.25, duration: 200 })}><Focus size={16}/></Tool><Tool title="缩略图" aria-pressed={minimap} onClick={() => setMinimap(value => !value)}><MapIcon size={16}/></Tool></div>
         {library && <section className="fc-library"><header><strong>项目素材</strong><Tool title="关闭资源库" onClick={() => setLibrary(false)}><X size={16}/></Tool></header><label className="fc-search"><Search size={14}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索素材"/></label><button className="fc-import" onClick={() => fileInput.current?.click()}><Upload size={14}/>上传到资源库</button><div className="fc-library-grid">{assets.filter(asset => `${asset.title} ${asset.kind}`.toLowerCase().includes(query.toLowerCase())).map(asset => <button key={asset.id} draggable onDragStart={event => { event.dataTransfer.setData('application/x-mli-asset', asset.id); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addNode('media', { assetId: asset.id, title: asset.title, mime: asset.mime, kind: asset.kind })}><Media data={{ ...asset, assetId: asset.id }}/><strong>{asset.title}</strong><small>{asset.kind} · {Math.ceil(asset.size / 1024)} KB</small></button>)}</div>{!assets.length && <p className="fc-muted">暂无素材</p>}</section>}
-        {inspected && <section className="fc-inspector"><header><strong>节点属性</strong><Tool title="关闭属性" onClick={() => setInspector(null)}><X size={16}/></Tool></header><label>名称<input value={inspected.data.title || ''} onFocus={checkpoint} maxLength={160} onChange={event => updateNode({ title: event.target.value })}/></label><label>提示词 / 备注<textarea value={inspected.data.text || ''} onFocus={checkpoint} maxLength={12000} onChange={event => updateNode({ text: event.target.value })} placeholder="描述主体、场景、镜头与风格…"/></label><div className="fc-properties"><span>状态</span><b>{statusText(inspected.data)}</b>{inspected.data.model && <><span>模型</span><b>{inspected.data.model}</b></>}{inspected.data.runId && <><span>运行 ID</span><code>{inspected.data.runId}</code></>}{inspected.data.sessionId && <><span>会话 ID</span><code>{inspected.data.sessionId}</code></>}{inspected.data.params && <><span>生成参数</span><pre>{JSON.stringify(inspected.data.params, null, 2)}</pre></>}{inspected.data.path && <><span>文件</span><code>{inspected.data.path}</code></>}</div><button className="fc-primary" onClick={() => prepareGeneration(inspected.id)}><Sparkles size={14}/>交给 Agent 生成</button></section>}
+        {inspected && <NodeInspector key={`${workspacePath}:${inspected.id}:${mediaUrl(inspected.data)}`} node={inspected} workspacePath={workspacePath} onReplace={chooseReplacement} onPreview={setPreview} onClose={() => setInspector(null)} onUpdate={updateNode} onCheckpoint={checkpoint} onGenerate={prepareGeneration}/>}
         {edgeEditor && (() => { const edge = edges.find(item => item.id === edgeEditor); if (!edge) return null; return <section className="fc-edge-editor"><header><strong>连线用途</strong><Tool title="关闭连线设置" onClick={() => setEdgeEditor(null)}><X size={14}/></Tool></header><select value={edge.label || '参考'} onChange={event => { checkpoint(); setEdges(items => items.map(item => item.id === edge.id ? { ...item, label: event.target.value } : item)); }}>{['参考', '主体参考', '场景参考', '风格参考', '首帧', '尾帧', '提示词', '音频'].map(label => <option key={label}>{label}</option>)}</select><button onClick={() => { checkpoint(); setEdges(items => items.filter(item => item.id !== edge.id)); setEdgeEditor(null); }}><Trash2 size={13}/>删除连线</button></section>; })()}
       </div>
       {saveFailure ? <section className="fc-save-recovery" role="alert"><strong>画布尚未保存</strong><p>{error}</p><div><button disabled={recovering} onClick={() => resolveSave()}>重新合并</button><button disabled={recovering} onClick={() => resolveSave('local')}>冲突采用本地</button><button disabled={recovering} onClick={() => resolveSave('remote')}>冲突采用远端</button><Tool title="导出未保存内容" onClick={exportEdits}><Download size={15}/></Tool></div></section> : error && <div className="fc-notice" role="alert">{error}{loading.current && <button onClick={load}>重新读取画布</button>}<Tool title="关闭提示" onClick={() => setError('')}><X size={14}/></Tool></div>}
     </div>
     {agentOpen && <aside className="fc-agent"><header><div><span className="fc-agent-icon"><Bot size={17}/></span><strong>创作助手</strong><small className={running ? 'is-active' : ''}>{running ? '执行中' : 'Agent'}</small><span className="fc-session-inline" title={current?.title || '新会话'}>{current?.title || '新会话'}</span></div><Tool title="收起创作助手" onClick={() => setAgentOpen(false)}><PanelRightClose size={17}/></Tool></header><div className="fc-messages">{conversation}{!conversation && messages.map(entry => { const text = Array.isArray(entry.content) ? entry.content.filter(part => part.type === 'text').map(part => part.text).join('\n') : entry.text || entry.content || ''; return <article className={`fc-message ${entry.role}`} key={entry.id}><b>{entry.role === 'user' ? '你' : '创作助手'}</b><p>{String(text)}</p></article>; })}{!messages.length && <div className="fc-agent-welcome"><span><Sparkles size={22}/></span><h3>你的下一幕，是什么？</h3><div><button onClick={() => setDraft('为当前项目设计三个不同景别的镜头，先整理提示词并放入画布。')}>构思分镜<ChevronLeft size={13}/></button><button onClick={() => setDraft('读取画布素材，保持人物与风格一致，提出下一镜头并生成。')}>延续画面<ChevronLeft size={13}/></button><button onClick={() => setDraft('根据画布的关键帧与连线，调用视频生成 skill 创作动态镜头。')}>让画面动起来<ChevronLeft size={13}/></button></div></div>}</div><div className="fc-composer-wrap" onDragOver={event => { if (event.dataTransfer.types.includes('application/x-mli-asset')) event.preventDefault(); }} onDrop={event => dropAsset(event, true)}>{sessionControls}{editRequest && <div className="fc-edit-tag">{editRequest.mode === 'mask' ? '局部重绘' : editRequest.mode === 'crop' ? '裁剪' : '片段编辑'}<Tool title="移除编辑参数" onClick={() => setEditRequest(null)}><X size={12}/></Tool></div>}{contextNodes.length > 0 && <FilmCanvasReferences nodes={contextNodes} roles={roles} setRoles={setRoles} includeUpstream={includeUpstream} setIncludeUpstream={setIncludeUpstream} total={context.length} mediaUrl={mediaUrl} kindOf={kindOf} onLocate={locate} onRemove={id => setReferences(ids => ids.filter(value => value !== id))} onClear={() => { setReferences([]); setRoles({}); }}/>}<div className="fc-composer"><ComposerInput value={draft} onChange={setDraft} onSend={send} info={info} workspace={workspace} running={running} disabled={busy} placeholder="描述你的创作想法，@ 引用能力…" onExpert={onExpert} onUpload={() => fileInput.current?.click()} onBoard={() => setProduction(true)} onCompact={onCompact} onGoal={onGoal} canCompact={canCompact} compacting={compacting}/><footer><Tool title="引用当前选区" disabled={!selection.length} onClick={() => addReference(selection.map(node => node.id))}><Plus size={17}/></Tool><span>{running ? '请求将加入会话队列' : '当前会话'}</span>{running && <button type="button" onClick={onStop} title="停止当前会话">停止</button>}<Tool title="发送创作需求" className="fc-send" disabled={busy || (!draft.trim() && !contextNodes.length)} onClick={send}>{busy ? <LoaderCircle size={16} className="spin"/> : <ArrowUp size={17}/>}</Tool></footer></div></div></aside>}
     <input ref={fileInput} type="file" hidden multiple accept="image/*,video/*,audio/*" onChange={event => { importFiles([...event.target.files]); event.target.value = ''; }}/>
+    <input ref={replaceInput} type="file" hidden accept="image/*,video/*,audio/*" onChange={event => { const nodeId = replacementTarget.current; replacementTarget.current = null; replaceMedia(nodeId, event.target.files[0]); event.target.value = ''; }}/>
     {menu && <nav className="fc-context-menu" aria-label="节点操作" style={{ left: menu.x, top: menu.y }}><button onClick={() => { addReference([menu.id]); setMenu(null); }}>加入发送区</button><button onClick={() => { duplicateSelection(); setMenu(null); }}>复制节点</button><button onClick={() => { groupSelection(); setMenu(null); }}>建立分镜</button><button onClick={() => { favorite(menu.id); setMenu(null); }}>切换优选</button><button onClick={() => { setProduction(true); setMenu(null); }}>查看版本与元素</button><button onClick={() => { removeSelection(); setMenu(null); }}>删除节点</button></nav>}
     {production && <FilmCanvasProduction nodes={nodes} edges={edges} selectedIds={selection.map(node => node.id)} onSelect={selectNodes} onLocate={locate} onReference={addReference} onCompare={setCompareIds} onPatchNodes={patchNodes} onArchive={nodeId => canvasAction('archive', { nodeId })} onRestoreVersion={(nodeId, versionId) => canvasAction('restore-version', { nodeId, versionId })} onClose={() => setProduction(false)}/>}
     {editNode && <FilmCanvasEdit node={editNode} url={mediaUrl(editNode.data)} onClose={() => setEditId(null)} onPrepare={request => { setEditRequest({ ...request, nodeId: editNode.id }); setReferences([editNode.id]); setDraft(request.description || '根据素材编辑参数处理引用素材，保留原素材并创建新结果。'); setEditId(null); setAgentOpen(true); }}/ >}

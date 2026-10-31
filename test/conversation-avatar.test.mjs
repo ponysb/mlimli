@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import * as icons from 'lucide-react';
 import { primaryTaskArtifact } from '../core/task-artifacts.mjs';
 import { splitComposerReferences } from '../react/src/composer-capabilities.mjs';
+import { groupRunActivities, summarizeToolActivity, toolNeedsAttention } from '../react/src/run-activity.mjs';
 import { transformWithOxc } from 'vite';
 
 const avatarSource = readFileSync(new URL('../react/src/ConversationAvatar.jsx', import.meta.url), 'utf8').replace(/^import .*;$/gm, '').replace('export default function', 'function');
@@ -16,20 +17,21 @@ function componentSource(name) {
   assert.ok(start >= 0 && end > start);
   return applicationSource.slice(start, end);
 }
-const transformed = await transformWithOxc([avatarSource, ...['Message', 'RunStep', 'TaskSummary', 'WorkbenchState', 'buildConversationTimeline', 'LazyRunRecord', 'compactUsageNumber', 'compactBillingValue', 'currencyValue', 'TaskUsageSummary'].map(componentSource)].join('\n'), 'conversation-fixture.jsx', { jsx: { runtime: 'classic' } });
+const transformed = await transformWithOxc([avatarSource, ...['Message', 'RunStep', 'ToolActivityGroup', 'TaskSummary', 'WorkbenchState', 'buildConversationTimeline', 'LazyRunRecord', 'compactUsageNumber', 'compactBillingValue', 'currencyValue', 'TaskUsageSummary'].map(componentSource)].join('\n'), 'conversation-fixture.jsx', { jsx: { runtime: 'classic' } });
 const iconNames = ['UserRound', 'SquareTerminal', 'LoaderCircle', 'ChevronLeft', 'ChevronRight', 'ChevronDown', 'Eye', 'ExternalLink', 'RefreshCw', 'ShieldAlert', 'Check', 'LayoutDashboard', 'FolderOpen', 'FileText', 'Code2', 'BookOpen', 'FolderPlus', 'Sparkles'];
-const components = new Function('React', 'icons', 'primaryTaskArtifact', 'splitComposerReferences', `
+const components = new Function('React', 'icons', 'primaryTaskArtifact', 'splitComposerReferences', 'groupRunActivities', 'summarizeToolActivity', 'toolNeedsAttention', `
   const { useState, useEffect, useRef } = React;
   const { ${iconNames.join(', ')} } = icons;
   const Markdown = ({ text }) => React.createElement('p', null, text);
   const MessageMedia = () => null;
   const ComposerReferences = () => null;
   const FileIcon = () => React.createElement('span', null, 'file');
+  const Tool = ({ item }) => React.createElement('div', { className: 'tool-fixture' }, item.name, item.content);
   const formatContent = (text) => text;
   const formatDuration = () => '1 秒';
   ${transformed.code}
-  return { ConversationAvatar, Message, RunStep, TaskSummary, WorkbenchState, buildConversationTimeline, LazyRunRecord };
-`)(React, icons, primaryTaskArtifact, splitComposerReferences);
+  return { ConversationAvatar, Message, RunStep, ToolActivityGroup, TaskSummary, WorkbenchState, buildConversationTimeline, LazyRunRecord };
+`)(React, icons, primaryTaskArtifact, splitComposerReferences, groupRunActivities, summarizeToolActivity, toolNeedsAttention);
 const render = (name, props = {}) => renderToStaticMarkup(React.createElement(components[name], props));
 
 test('workbench branding and task entry points cover work beyond writing', () => {
@@ -87,13 +89,33 @@ test('completed empty agent steps do not render blank avatars while active steps
   assert.match(render('RunStep', { item: { status: 'interrupted' } }), /运行已中断/);
 });
 
-test('final task cards have an agent avatar without replacing success or failure status icons', () => {
+test('routine and failed tools stay collapsed while successful media stays visible', () => {
+  const markup = render('RunStep', { item: { status: 'running', tools: [
+    { id: 'read', name: 'read_file', status: 'ok', args: { path: 'private-path' } },
+    { id: 'error', name: 'bash', status: 'error', content: '需要修复沙箱' },
+    { id: 'media', name: 'image', status: 'ok', media: [{ path: 'image.png' }] },
+  ] }, live: true });
+  assert.match(markup, /aria-expanded="false"/);
+  assert.match(markup, /3 项活动 · 1 项异常/);
+  assert.match(markup, /正在分析结果/);
+  assert.doesNotMatch(markup, /需要修复沙箱/);
+  assert.equal((markup.match(/class="tool-fixture"/g) || []).length, 1);
+  assert.doesNotMatch(markup, /private-path|branding\/logo/);
+  const progress = render('RunStep', { item: { text: '已定位配置问题。', status: 'ok', tools: [{ id: '1', name: 'read_file', status: 'ok' }] } });
+  assertAgentAvatar(progress);
+  assert.ok(progress.indexOf('已定位配置问题。') < progress.indexOf('tool-activity-group'));
+});
+
+test('final task cards place one avatar in the summary and retain failure warnings', () => {
   const completed = render('TaskSummary', { item: { summaryText: '最终回复', reason: 'done', files: [] } });
-  assertAgentAvatar(completed);
-  assert.match(completed, /lucide-check/);
+  assert.match(completed, /aria-label="魔力工作台头像"/);
+  assert.match(completed, /class="summary-icon"><span class="message-avatar agent-avatar"/);
+  assert.equal((completed.match(/branding\/logo.png/g) || []).length, 1);
+  assert.doesNotMatch(completed, /agent-response-header|<b>魔力工作台<\/b>|lucide-check/);
   assert.match(completed, /最终回复/);
   const failed = render('TaskSummary', { item: { reason: 'error', title: '任务运行失败', error: '连接失败', files: [] } });
-  assertAgentAvatar(failed);
+  assert.match(failed, /src="\/branding\/logo.png"/);
+  assert.doesNotMatch(failed, /agent-response-header|<b>魔力工作台<\/b>/);
   assert.match(failed, /lucide-shield-alert/);
   assert.match(failed, /连接失败/);
 });

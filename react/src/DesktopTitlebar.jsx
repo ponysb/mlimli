@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Copy, LoaderCircle, Minus, PanelLeft, Square, X } from "lucide-react";
+import { Copy, LoaderCircle, Minus, PanelLeft, Sparkles, Square, X } from "lucide-react";
 import FollowMe from "./FollowMe.jsx";
 import { DesktopUpdateStatus } from "./DesktopUpdates.jsx";
 
@@ -10,6 +10,7 @@ export default function DesktopTitlebar() {
     platform: desktop?.platform || "",
   });
   const [connection, setConnection] = useState({ status: "connecting", attempt: 0 });
+  const [capabilityGuideLoading, setCapabilityGuideLoading] = useState(false);
   useEffect(() => {
     if (!desktop?.isElectron) return undefined;
     let active = true;
@@ -24,6 +25,11 @@ export default function DesktopTitlebar() {
       active = false;
       unsubscribe?.();
     };
+  }, []);
+  useEffect(() => {
+    const update = (event) => setCapabilityGuideLoading(event.detail?.status === "loading");
+    window.addEventListener("mli:capability-guide-status", update);
+    return () => window.removeEventListener("mli:capability-guide-status", update);
   }, []);
   useEffect(() => {
     const update = (event) => setConnection(event.detail || { status: "connecting" });
@@ -62,6 +68,12 @@ export default function DesktopTitlebar() {
         >
           设置
         </button>
+        {capabilityGuideLoading && (
+          <span className="desktop-capability-status" role="status" aria-label="正在生成能力说明" title="正在生成能力说明">
+            <LoaderCircle className="spin" size={13} />
+            <Sparkles size={13} />
+          </span>
+        )}
         {connection.status !== "connected" && (
           <button
             className="desktop-connection-status"

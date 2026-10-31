@@ -13,20 +13,21 @@ export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const execute = promisify(execFile);
 const NODE_VERSION = '22.22.0';
 
-function copyTree(source, target) {
+function copyTree(source, target, packageRoot = true) {
   if (fs.lstatSync(source).isSymbolicLink()) throw new Error(`发布文件不能是符号链接：${source}`);
   fs.mkdirSync(target, { recursive: true });
   for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
-    if (['.git', 'node_modules', 'test', 'tests', 'doc', 'docs', 'sample', 'samples', 'example', 'examples', 'benchmark'].includes(entry.name)) continue;
+    if (['.git', 'node_modules'].includes(entry.name) || (packageRoot && ['test', 'tests', 'doc', 'docs', 'sample', 'samples', 'example', 'examples', 'benchmark'].includes(entry.name))) continue;
     if (entry.isSymbolicLink()) throw new Error(`发布文件不能是符号链接：${entry.name}`);
-    if (entry.isDirectory()) copyTree(path.join(source, entry.name), path.join(target, entry.name));
+    if (entry.isDirectory()) copyTree(path.join(source, entry.name), path.join(target, entry.name), false);
     else if (entry.isFile()) fs.copyFileSync(path.join(source, entry.name), path.join(target, entry.name));
   }
 }
 
 export function copyTerminalDependencies(destination, root = ROOT, { packages } = {}) {
   const copied = new Map();
-  function visit(name, from) {
+  const installed = new Map();
+  function visit(name, from, parentTarget = destination) {
     const require = createRequire(path.join(from, 'package.json'));
     let directory;
     try { directory = path.dirname(require.resolve(name)); } catch { /* 某些仅供内部引用的包没有 exports 主入口 */ }
@@ -52,15 +53,18 @@ export function copyTerminalDependencies(destination, root = ROOT, { packages } 
     if (manifest?.name !== name) throw new Error(`无法定位终端依赖 ${name}`);
     // pnpm may expose a package without a main entry through a directory link.
     directory = fs.realpathSync(directory);
-    if (copied.has(name)) {
-      if (copied.get(name) !== manifest.version) throw new Error(`终端依赖版本冲突：${name}`);
+    let target = path.join(destination, 'node_modules', name);
+    if (copied.has(name) && copied.get(name) !== manifest.version) target = path.join(parentTarget, 'node_modules', name);
+    if (installed.has(target)) {
+      if (installed.get(target) !== manifest.version) throw new Error(`终端依赖版本冲突：${name}`);
       return;
     }
-    copied.set(name, manifest.version);
-    copyTree(directory, path.join(destination, 'node_modules', name));
-    for (const dependency of Object.keys(manifest.dependencies || {})) visit(dependency, directory);
+    installed.set(target, manifest.version);
+    if (!copied.has(name)) copied.set(name, manifest.version);
+    copyTree(directory, target);
+    for (const dependency of Object.keys(manifest.dependencies || {})) visit(dependency, directory, target);
     for (const dependency of Object.keys(manifest.peerDependencies || {})) {
-      if (!manifest.peerDependenciesMeta?.[dependency]?.optional) visit(dependency, directory);
+      if (!manifest.peerDependenciesMeta?.[dependency]?.optional) visit(dependency, directory, target);
     }
   }
   if (packages) {
@@ -123,7 +127,7 @@ export function stageTerminalClient({ root = ROOT, output, platform = 'linux', a
   const client = path.join(destination, 'client');
   const plan = planClientExport(root);
   for (const entry of plan.entries) {
-    if (!(['server.mjs', 'config.example.json', 'LICENSE', 'scripts/setup-windows-sandbox.mjs', 'scripts/build-sandbox-image.mjs', 'scripts/sandbox/Dockerfile', 'docs/SANDBOX.md', 'docs/APP-CENTER.md', 'electron/compat.cjs', 'electron/runtime.cjs'].includes(entry.path) || /^(core|cli|plugins)\//.test(entry.path))) continue;
+    if (!(['server.mjs', 'config.example.json', 'LICENSE', 'scripts/setup-windows-sandbox.mjs', 'scripts/build-sandbox-image.mjs', 'scripts/sandbox/Dockerfile', 'docs/SANDBOX.md', 'docs/APP-CENTER.md', 'electron/compat.cjs', 'electron/runtime.cjs'].includes(entry.path) || /^(core|cli|plugins|shared)\//.test(entry.path))) continue;
     if (platform !== 'win32' && entry.path.startsWith('plugins/computer-use/')) continue;
     const target = path.join(client, entry.path);
     fs.mkdirSync(path.dirname(target), { recursive: true });

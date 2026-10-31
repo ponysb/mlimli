@@ -1,0 +1,23 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+const execute=promisify(execFile);
+const project=fileURLToPath(new URL('../',import.meta.url));
+test('install real upstream pi TS extension, activate, approve, call and remove through registry',async t=>{
+ const data=fs.mkdtempSync(path.join(os.tmpdir(),'mli-pi-installed-'));t.after(()=>fs.rmSync(data,{recursive:true,force:true}));
+ const script=`import assert from 'node:assert/strict';
+ import {installPiPackage,listPiPackages,removePiPackage} from './core/pi-packages.mjs';
+ import {loadAll,getTool,invokeTool,disposePlugins,expandSlash,executeSlashCommand} from './core/plugins.mjs';
+ import {withRunContext} from './core/run-context.mjs';
+ const record=await installPiPackage('./test/fixtures/pi-upstream-hello');assert.equal(record.status,'pending');assert.equal(listPiPackages().length,1);assert.equal(getTool('hello'),undefined);
+ const info=await loadAll();assert.equal(info.errors.length,0);assert.equal(getTool('hello').permission,'L2');
+ const result=await invokeTool('hello',{name:'MLI'},{session:{id:'test',mode:'auto-all'},timeoutMs:1000});assert.equal(result.content,'Hello, MLI!');
+ await assert.rejects(withRunContext({readOnly:true},()=>invokeTool('hello',{name:'denied'},{session:{id:'test',mode:'auto-all'}})),/只读/);
+ removePiPackage(record.id);await loadAll({reload:true});assert.equal(getTool('hello'),undefined);await disposePlugins();console.log('PI_INSTALL_PASS');process.exit(0);`;
+ const result=await execute(process.execPath,['--input-type=module','-e',script],{cwd:project,env:{...process.env,MLI_AGENT_DATA_DIR:data},timeout:15000});assert.match(result.stdout,/PI_INSTALL_PASS/);
+});

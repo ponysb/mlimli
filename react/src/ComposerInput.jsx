@@ -1,11 +1,11 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, BookOpen, ChevronRight, File, Folder, LoaderCircle, Minimize2, Package, Paperclip, Pencil, Search, Sparkles, Target, Terminal, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, ChevronRight, File, Folder, LoaderCircle, Minimize2, Package, Paperclip, Pencil, Search, Server, Sparkles, Target, Terminal, X } from 'lucide-react';
 import { capabilityItems, composerTrigger, insertCapability, joinComposerReferences, splitComposerReferences, referenceToken } from './composer-capabilities.mjs';
 import ComposerReferences from './ComposerReferences.jsx';
 import './composer-input.css';
 
-const icons = { file: File, folder: Folder, browse: Folder, skill: BookOpen, plugin: Package, expert: Sparkles, command: Terminal, upload: Paperclip, board: Pencil, compact: Minimize2, goal: Target };
+const icons = { file: File, folder: Folder, browse: Folder, skill: BookOpen, plugin: Package, expert: Sparkles, command: Terminal, upload: Paperclip, board: Pencil, compact: Minimize2, goal: Target, mcp: Server };
 
 export default function ComposerInput({ value: serializedValue, onChange: onSerializedChange, onPaste, onSend, disabled, attachmentLoading, placeholder, info, workspace, running, onExpert, onUpload, onBoard, onCompact, onGoal, canCompact, compacting }) {
   const { text: value, references } = useMemo(() => splitComposerReferences(serializedValue), [serializedValue]);
@@ -17,7 +17,18 @@ export default function ComposerInput({ value: serializedValue, onChange: onSeri
   const [fileRevision, setFileRevision] = useState(0);
   const [fileSearch, setFileSearch] = useState(''), [fileStatus, setFileStatus] = useState({});
   const [trigger, setTrigger] = useState(null), [index, setIndex] = useState(0), [directory, setDirectory] = useState(null), [files, setFiles] = useState([]), [loading, setLoading] = useState(false), [error, setError] = useState('');
-  const capabilities = useMemo(() => capabilityItems(info), [info]);
+  const [mcpServers, setMcpServers] = useState([]);
+  useEffect(() => {
+    if (!trigger) return;
+    const controller = new AbortController();
+    fetch('/api/mcp/settings', { signal: controller.signal }).then(async response => {
+      if (!response.ok) throw new Error('MCP 服务列表加载失败');
+      const data = await response.json();
+      setMcpServers([...data.servers, ...data.contributed].filter(s => s.enabled !== false).map(({ name, url }) => ({ name, description: url ? '远程服务' : '本地服务' })));
+    }).catch(e => { if (!controller.signal.aborted) { setMcpServers([]); setError(e.message); } });
+    return () => controller.abort();
+  }, [Boolean(trigger)]);
+  const capabilities = useMemo(() => capabilityItems({ ...info, mcpServers }), [info, mcpServers]);
   const query = trigger?.query.toLocaleLowerCase() || '';
   const rows = useMemo(() => {
     if (!trigger) return [];
@@ -64,8 +75,8 @@ export default function ComposerInput({ value: serializedValue, onChange: onSeri
   useLayoutEffect(() => {
     if (!trigger) return;
     const position = () => {
-      const rect = input.current.getBoundingClientRect(), width = Math.min(460, rect.width, innerWidth - 16);
-      setPlacement({ position: 'fixed', left: Math.max(8, Math.min(rect.left, innerWidth - width - 8)), bottom: innerHeight - rect.top + 8, width, maxHeight: Math.max(0, Math.min(440, rect.top - 16)) });
+      const rect = input.current.getBoundingClientRect(), width = Math.min(360, rect.width, innerWidth - 16);
+      setPlacement({ position: 'fixed', left: Math.max(8, Math.min(rect.left, innerWidth - width - 8)), bottom: innerHeight - rect.top + 8, width, maxHeight: Math.max(0, Math.min(320, rect.top - 16)) });
     };
     position(); window.addEventListener('resize', position); window.addEventListener('scroll', position, true);
     return () => { window.removeEventListener('resize', position); window.removeEventListener('scroll', position, true); };
@@ -110,7 +121,7 @@ export default function ComposerInput({ value: serializedValue, onChange: onSeri
     if (item.kind === 'browse') { browse(); return; }
     if (item.kind === 'expert' && running) return;
     if (item.kind === 'compact' && (!canCompact || running || compacting)) return;
-    const reference = ['file', 'folder', 'skill', 'plugin'].includes(item.kind);
+    const reference = ['file', 'folder', 'skill', 'plugin', 'mcp'].includes(item.kind);
     if (reference && references.length >= 20 && !references.some(entry => entry.key === referenceToken(item))) { setError('最多引用 20 项'); return; }
     const inserted = insertCapability(value, trigger, reference ? { kind: 'expert' } : item);
     if (reference) {
@@ -141,7 +152,7 @@ export default function ComposerInput({ value: serializedValue, onChange: onSeri
       <header>{directory !== null ? <><button title="返回" aria-label="返回能力菜单" onMouseDown={event => event.preventDefault()} onClick={() => { setDirectory(null); input.current?.focus(); }}><ArrowLeft size={15}/></button><span>{workspace?.name || '工作目录'}</span></> : <><Search size={14}/><span>{query || (trigger.symbol === '/' ? '命令与能力' : '添加引用')}</span></>}<button title="关闭菜单" aria-label="关闭引用菜单" onClick={() => { close(); input.current?.focus(); }}><X size={14}/></button></header>
       {directory !== null && <div className="capability-file-search"><Search size={14}/><input ref={fileSearchInput} aria-label="搜索工作目录文件" aria-autocomplete="list" aria-controls="composer-capabilities" aria-activedescendant={results[index] ? `composer-capability-${index}` : undefined} placeholder="搜索文件或文件夹" value={fileSearch} onChange={event => setFileSearch(event.target.value)} onKeyDown={event => { if (['Escape', 'ArrowDown', 'ArrowUp', 'Enter', 'Tab'].includes(event.key)) { keyDown(event); event.stopPropagation(); } }}/></div>}
       <div className="capability-list" role="listbox" id="composer-capabilities" aria-label="可引用能力" ref={list}>
-        {results.map((item, i) => { const Icon = icons[item.kind], unavailable = item.kind === 'expert' && running || item.kind === 'compact' && (!canCompact || running || compacting); return <React.Fragment key={item.key}>{(i === 0 || results[i - 1].group !== item.group) && <div className="capability-group">{item.group}</div>}<div className={`capability-option ${i === index ? 'active' : ''} ${unavailable ? 'unavailable' : ''}`} role="option" title={item.path} id={`composer-capability-${i}`} aria-selected={i === index} aria-disabled={unavailable} onMouseEnter={() => setIndex(i)} onMouseDown={event => event.preventDefault()} onClick={() => choose(item)}><Icon size={17}/><span className={`capability-label ${['file', 'folder'].includes(item.kind) ? 'capability-file-label' : ''}`}><b>{item.displayName || item.name}</b>{item.description && <small>{item.description}</small>}{item.kind === 'expert' && unavailable && <small>会话运行中</small>}</span>{item.kind === 'browse' && <ChevronRight size={15}/>}</div></React.Fragment>; })}
+        {results.map((item, i) => { const Icon = icons[item.kind], unavailable = item.kind === 'expert' && running || item.kind === 'compact' && (!canCompact || running || compacting); return <React.Fragment key={item.key}>{(i === 0 || results[i - 1].group !== item.group) && <div className="capability-group">{item.group}</div>}<div className={`capability-option ${i === index ? 'active' : ''} ${unavailable ? 'unavailable' : ''}`} role="option" title={item.path} id={`composer-capability-${i}`} aria-selected={i === index} aria-disabled={unavailable} onMouseEnter={() => setIndex(i)} onMouseDown={event => event.preventDefault()} onClick={() => choose(item)}><Icon size={15}/><span className={`capability-label ${['file', 'folder'].includes(item.kind) ? 'capability-file-label' : ''}`}><b>{item.displayName || item.name}</b>{item.description && <small>{item.description}</small>}{item.kind === 'expert' && unavailable && <small>会话运行中</small>}</span>{item.kind === 'browse' && <ChevronRight size={15}/>}</div></React.Fragment>; })}
         {loading && <div className="capability-status"><LoaderCircle className="spin" size={14}/>加载文件…</div>}
         {fileStatus.hasMore && !loading && <div className="capability-status">结果较多，请缩小搜索范围</div>}
         {fileStatus.incomplete && !loading && <div className="capability-status">部分目录未能扫描</div>}

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { createRequire } from 'node:module';
 import { copyTerminalDependencies } from '../scripts/terminal-package.mjs';
 import { runtimeDependencyPackages, verifyInstalledBuildDependencies, verifyRuntimeDependencies } from '../scripts/runtime-dependencies.mjs';
 import { bunExecutable } from '../scripts/build-tui.mjs';
@@ -57,6 +58,15 @@ test('staging resolves package-manager directory links for packages without a ma
   assert.equal(fs.readFileSync(path.join(output, 'node_modules', 'linked-package', 'data.json'), 'utf8'), '{"value":1}');
   assert.equal(fs.lstatSync(path.join(output, 'node_modules', 'linked-package')).isSymbolicLink(), false);
   assert.equal(fs.readFileSync(path.join(output, 'node_modules', '@anthropic-ai/sandbox-runtime', 'vendor', 'srt-win', 'x64', 'srt-win.exe'), 'utf8'), 'native-helper-fixture');
+});
+
+test('copied YAML dependency preserves runtime code in nested doc directories', context => {
+  const output = fs.mkdtempSync(path.join(os.tmpdir(), 'mli-yaml-dependency-'));
+  context.after(() => fs.rmSync(output, { recursive: true, force: true }));
+  copyTerminalDependencies(output, undefined, { packages: ['yaml'] });
+  const yaml = createRequire(path.join(output, 'package.json'))('yaml');
+  const value = { version: '0.6.0', files: [{ url: 'installer.exe' }] };
+  assert.deepEqual(yaml.parse(yaml.stringify(value)), value);
 });
 
 test('runtime dependency inventory is derived from shipped source imports', context => {

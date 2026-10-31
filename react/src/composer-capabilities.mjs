@@ -10,6 +10,7 @@ export function capabilityItems(info = {}) {
   const skills = [...(info.localSkills || []), ...(info.plugins?.skills || [])];
   return [
     ...(info.commands || []).map(item => ({ ...item, key: `command:${item.name}`, kind: 'command', group: '命令', name: item.name.startsWith('/') ? item.name : `/${item.name}` })),
+    ...(info.mcpServers || []).filter(item => item.enabled !== false).map(item => ({ ...item, key: `mcp:${item.name}`, kind: 'mcp', group: 'MCP 服务' })),
     ...(info.plugins?.plugins || []).map(item => ({ ...item, key: `plugin:${item.name}`, kind: 'plugin', group: '插件' })),
     ...skills.filter((item, index) => skills.findIndex(other => other.name === item.name) === index).map(item => ({ ...item, key: `skill:${item.name}`, kind: 'skill', group: 'Skill' })),
     ...(info.experts || []).map(item => ({ ...item, key: `expert:${item.id}`, kind: 'expert', group: '专家' })),
@@ -28,7 +29,7 @@ export function insertCapability(text, trigger, item) {
 
 export function splitComposerReferences(serialized) {
   const references = [], seen = new Set();
-  const text = String(serialized || '').replace(/@(file|folder|skill|plugin)\(("(?:[^"\\]|\\.)*")\)/g, (token, kind, encoded) => {
+  const text = String(serialized || '').replace(/@(file|folder|skill|plugin|mcp)\(("(?:[^"\\]|\\.)*")\)/g, (token, kind, encoded) => {
     let target;
     try { target = JSON.parse(encoded); } catch { return token; }
     if (!seen.has(token)) {

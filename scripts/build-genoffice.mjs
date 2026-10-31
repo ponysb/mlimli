@@ -5,10 +5,11 @@ import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import { build } from 'esbuild';
 import { createHash } from 'node:crypto';
+import { assertNativeTarget, ensureWindowsUnwind, probeSheetsNative } from './genoffice-native.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = path.join(root, 'vendor/genoffice');
-const output = path.join(root, 'resources/genoffice');
+const output = path.resolve(process.env.GENOFFICE_OUTPUT || path.join(root, 'resources/genoffice'));
 const editors = ['docs', 'sheets', 'slides', 'pdf'];
 const buildLock = path.join(output, '.build-lock');
 const existingLibunwind = process.platform === 'win32'
@@ -19,7 +20,10 @@ const existingLibunwind = process.platform === 'win32'
   : null;
 if (fs.existsSync(buildLock)) {
   const owner = Number(fs.readFileSync(buildLock, 'utf8'));
-  let alive = false; try { process.kill(owner, 0); alive = true; } catch {}
+  let alive = false;
+  if (Number.isSafeInteger(owner) && owner > 0) {
+    try { process.kill(owner, 0); alive = true; } catch (error) { alive = error.code !== 'ESRCH'; }
+  }
   if (alive) throw new Error('另一个 GenOffice 构建正在运行');
   fs.rmSync(buildLock);
 }
@@ -27,7 +31,8 @@ const selected = process.argv.slice(2).filter(arg => !arg.startsWith('--'));
 if (selected.some(editor => !editors.includes(editor))) throw new Error('支持 docs / sheets / slides / pdf');
 if (!fs.existsSync(path.join(source, 'package.json'))) throw new Error('缺少 vendor/genoffice 源码，参见 docs/GENOFFICE.md');
 function run(command, args, cwd) {
-  const result = spawnSync(command, args, { cwd, stdio: 'inherit', env: { ...process.env, ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }, shell: false });
+  const result = spawnSync(command, args, { cwd, stdio: 'inherit', windowsHide: true, env: { ...process.env, ELECTRON_SKIP_BINARY_DOWNLOAD: '1' }, shell: false });
+  if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${command} 执行失败：${result.status}`);
 }
 function assertSheetsDependencyVersions() {
@@ -78,17 +83,20 @@ for (const editor of selected.length ? selected : editors) {
     const binary = path.join(native, 'target/release', name);
     const cargo = process.env.CARGO || (process.platform === 'win32' ? 'cargo.exe' : 'cargo');
     const cargoResult = spawnSync(cargo, ['--version'], { stdio:'ignore', shell:false });
-    if (cargoResult.status === 0) run(cargo, ['build', '--release', '--manifest-path', path.join(native, 'Cargo.toml')], source);
+    if (cargoResult.status === 0) run(cargo, ['build', '--release', '--locked', '--manifest-path', path.join(native, 'Cargo.toml'), '--config', path.join(native, '.cargo/config.toml')], source);
     else if (!fs.existsSync(binary)) throw new Error('缺少 cargo，且没有可复用的 release 版 xlsx-sidecar；请安装 Rust 工具链后重试');
-    else console.warn('未找到 cargo，复用已存在且将由组件校验覆盖的 release 版 xlsx-sidecar');
+    else console.warn('未找到 cargo，复用本地 release 版 xlsx-sidecar（校验二进制架构及实际运行）');
+    assertNativeTarget(binary);
     fs.mkdirSync(path.join(dest, 'native'), { recursive: true });
     fs.copyFileSync(binary, path.join(dest, 'native', name));
+    if (process.platform !== 'win32') fs.chmodSync(path.join(dest, 'native', name), 0o755);
     if (process.platform === 'win32') {
       const dependency = path.join(native, 'target/release/libunwind.dll');
       if (fs.existsSync(dependency)) fs.copyFileSync(dependency, path.join(dest, 'native/libunwind.dll'));
       else if (existingLibunwind) fs.writeFileSync(path.join(dest, 'native/libunwind.dll'), existingLibunwind);
-      else throw new Error('缺少 sheets/native/libunwind.dll；请先提供与 xlsx-sidecar 匹配的 Windows 运行库');
+      await ensureWindowsUnwind({ binary, destination: path.join(dest, 'native'), cacheRoot: path.join(root, '.cache/genoffice') });
     }
+    probeSheetsNative(output);
   }
 }
 await build({ stdin: { contents: "export { installRendererProtocol } from '@genoffice/electron-utils'; export { setUiLang } from '@genoffice/i18n'", resolveDir: source, loader: 'ts' }, outfile: path.join(output, 'main/runtime.cjs'), bundle: true, platform: 'node', format: 'cjs', external: ['electron'] });

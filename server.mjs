@@ -1,3 +1,8 @@
+import { terminalAgentBinding, assertTerminalAgentTarget, terminalAgentContext, terminalAgentInstruction } from './core/terminal-agent.mjs';
+import { compileTypesetting } from './core/typesetting-preview.mjs';
+import { recommendTerminalCommands } from './core/terminal-assistant.mjs';
+import { installPiPackage, listPiPackages, removePiPackage, withPluginManagement } from './core/pi-packages.mjs';
+import { manageSshDesktopSystem } from './core/ssh-desktop-system.mjs';
 // server.mjs —— 入口：原生 node:http。REST + 全局 SSE 事件总线 + 静态托管
 // UI 只是这个 server 的一个客户端：收用户输入 POST、看 SSE 事件、把用户决策 POST 回来
 import './core/environment.mjs';
@@ -6,26 +11,37 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
+import { redactGitRemoteUrl } from './core/git-remote.mjs';
 import { spawn } from 'node:child_process';
 import { spawnPty } from './core/pty-runtime.mjs';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, getConfig, applyProviderPatch, saveConfigFile, publicSettings, listRemoteModels, testProvider, refreshManagedCatalog } from './core/llm.mjs';
+import { configuredMcp, publicMcpSettings, updateMcpSettings } from './core/mcp-settings.mjs';
+import { beginOAuth, oauthStatus, cancelOAuth, oauthBrowserJob } from './core/mcp-oauth.mjs';
+import { closeMcp, testMcpServer, mcpServers } from './core/mcp.mjs';
 import { modelProfiles } from './core/model-profiles.mjs';
 import { setLoopConfig, runTurn, abortRun, interruptRunForAdjustment, isRunning, runningStep, runDevTool, runtimeInfo, Session } from './core/loop.mjs';
 import { onEvent, emit, eventSequence } from './core/events.mjs';
-import { setWorkspaceRoot, APP_ROOT, DATA_ROOT, getWorkspaceRoot, isWorkspaceRoot } from './core/paths.mjs';
+import { setSessionStorageRoot, setWorkspaceRoot, APP_ROOT, DATA_ROOT, getWorkspaceRoot, isWorkspaceRoot } from './core/paths.mjs';
 import { uiPreferences, updateUiPreferences } from './core/ui-preferences.mjs';
-import { listWorkspaces, addWorkspace, setActiveWorkspace, removeWorkspace, ensureWorkspace } from './core/workspaces.mjs';
+import { cloneGitWorkspace, listWorkspaceRepositories } from './core/git-clone.mjs';
+import { listWorkspaces, addWorkspace, addSshWorkspace, getActiveWorkspace, setActiveWorkspace, removeWorkspace, ensureWorkspace, workspacesForSshConnection } from './core/workspaces.mjs';
+import { confirmSshHostKey, deleteSshConnection, getSshConnection, listSshConnections, saveSshConnection } from './core/ssh-connection-store.mjs';
+import { closeSshConnection, connectSsh, getSshSessionClient, inspectSshHost, listActiveSshConnections, onSshTerminalEvent, resizeSshTerminal, shutdownSshRuntime, startSshTerminal, stopSshTerminal, writeSshTerminal } from './core/ssh-runtime.mjs';
+import { browseSshWorkspacePath, mutateSshHostFile, listSshHostDirectory, listSshWorkspaceDirectory, listSshWorkspaceReferences, readSshGitInfo, readSshHostFileBytes, readSshHostTextFile, readSshServerMetrics, readSshWorkspaceFile, runSshGitAction, setSshWorkspaceRoot, validateSshWorkspacePath, updateSshGitRemote, writeSshHostTextFile, writeSshWorkspaceFile } from './core/ssh-workspace-provider.mjs';
+import { isLocalApiRequest } from './core/local-api-security.mjs';
+import { readWorkspaceGitInfo, runWorkspaceGitAction, updateWorkspaceGitRemote } from './core/git-workspace-provider.mjs';
 import { listWorkspaceReferences } from './core/workspace-reference-files.mjs';
 import { filmCanvasMediaPath, readFilmCanvas, saveFilmCanvasEdits, archiveFilmCanvasNode, restoreFilmCanvasVersion, batchUpdateFilmCanvasNodes, deleteFilmCanvasNodes, disconnectFilmCanvasEdges, arrangeFilmCanvasNodes, groupFilmCanvasNodes } from './core/film-canvas.mjs';
 import { loadAll, pluginsInfo, resolveUiRequest, getCommands, setPlatformSkills } from './core/plugins.mjs';
-import { resolveRequest, listPersistentRules, replacePersistentRules, pendingRequest } from './core/permissions.mjs';
+import { resolveRequest, listPersistentRules, replacePersistentRules, pendingRequest, setPermissionMode } from './core/permissions.mjs';
 import { maybeCompact } from './core/compact.mjs';
 import { disposeLogReader, getApiLogAsync, queryApiLogsAsync } from './core/api-log-service.mjs';
 import { disposeSessionReader, readSessionView } from './core/session-view-service.mjs';
 import { copyWorkspaceItem, createWorkspaceItem, deleteWorkspaceItem, listDirectory, moveWorkspaceItem, openWorkspaceItem, rawWorkspaceFile, readWorkspaceFile, renameWorkspaceItem, revealWorkspaceItem, writeWorkspaceFile } from './core/workspace-files.mjs';
 import { addAsset, addAssetFromFile, assetFile, deleteAsset, listAssets } from './core/assets.mjs';
 import { serveMedia } from './core/media-response.mjs';
+import { filmCanvasMediaInfo, openFilmCanvasMedia } from './core/film-canvas-media.mjs';
 import { checkAccountEmail, createPurchaseOrder, getAccountCaptcha, listPurchasePackages, listPlatformLibrary, listTeamMemory, listAccountPlugins, installAccountPlugin, loginAccount, logoutAccount, publicAccountStatus, queryPurchaseOrder, recordClientLaunch, refreshAccount, registerAccount, requireAccount, resetAccountPassword, sendRegisterCode, sendResetCode, setAccountConfig, updateAccountNickname, verifyAccountCaptcha } from './core/account.mjs';
 import { getMarketingConfig, getMarketingSummary, claimDailyCheckin } from './core/account.mjs';
 import { listSubjects, switchSubject } from './core/account.mjs';
@@ -59,8 +75,10 @@ recordClientLaunch().catch(() => {});
 
 const PORT = Number(process.env.MLI_AGENT_PORT || cfg.server?.port || 10860);
 const HOST = process.env.MLI_AGENT_HOST || cfg.server?.host || '127.0.0.1';
+const terminalAgents = new Map();
 const terminalRuns = new Map();
 const interactiveTerminals = new Map();
+const sshTerminalOwners = new Map();
 const runtimeHost = globalThis.mliRuntimeHost;
 const leases = new Map();
 let shuttingDown = false;
@@ -74,6 +92,7 @@ function shutdown() {
   const sandboxCleanup = shutdownRuntime();
   for (const id of terminalRuns.keys()) stopTerminalRun(id);
   for (const id of interactiveTerminals.keys()) stopInteractiveTerminal(id);
+  shutdownSshRuntime();
   for (const response of sseClients) response.end();
   server.close(() => Promise.resolve(sandboxCleanup).finally(() => process.exit(0)));
   setTimeout(() => process.exit(0), 15000).unref();
@@ -215,13 +234,20 @@ function stopInteractiveTerminal(id) {
   const session = interactiveTerminals.get(id);
   if (!session || session.status !== 'running') return false;
   session.stopping = true;
+  for (const item of terminalAgents.values()) if (item.binding.terminalId === id) stopSession(item.session.id);
   try { session.pty.write('\u0003'); } catch {}
   setTimeout(() => { try { if (session.status === 'running') session.pty.kill(); } catch {} }, 500).unref();
   return true;
 }
 
+function requireLocalApi(req, res, label = 'SSH 配置') {
+  if (isLocalApiRequest(req)) return true;
+  json(res, 403, { error: `${label}仅允许本机同源应用操作` }); return false;
+}
+
 // ---------- SSE 总线 ----------
 const sseClients = new Set();
+const localSshSseClients = new Set();
 const refreshModelProfiles = () => modelProfiles.refresh({ force: true }).then(changed => { if (changed) emit('catalog_updated', { ok: true }); }).catch(() => {});
 setInterval(refreshModelProfiles, 60000).unref();
 // The first /api/info refreshes all catalogs in one notification.
@@ -229,6 +255,13 @@ onEvent((evt) => {
   const frame = `data: ${JSON.stringify(evt)}\n\n`;
   for (const res of sseClients) {
     try { res.write(frame); } catch { sseClients.delete(res); }
+  }
+});
+onSshTerminalEvent((evt) => {
+  if (evt.type === 'terminal_exit') { sshTerminalOwners.delete(evt.terminalId); for (const item of terminalAgents.values()) if (item.binding.terminalId === evt.terminalId) stopSession(item.session.id); }
+  const frame = `data: ${JSON.stringify({ type: evt.type, ts: Date.now(), ...evt })}\n\n`;
+  for (const res of localSshSseClients) {
+    try { res.write(frame); } catch { localSshSseClients.delete(res); }
   }
 });
 setInterval(() => {
@@ -263,7 +296,9 @@ function readBody(req, maxBytes = 64 * 1024 * 1024) {
 }
 
 function getSessionOr400(res, id) {
-  const s = runningSessions.get(id) || Session.load(id);
+  const workspace = getActiveWorkspace();
+  const directory = workspace?.kind === 'ssh' ? path.join(workspace.storagePath, '.agent', 'sessions') : undefined;
+  const s = runningSessions.get(id) || Session.load(id, directory);
   if (!s) { notFound(res, '会话不存在'); return null; }
   return s;
 }
@@ -358,8 +393,141 @@ async function route(req, res, url) {
   }
   if (clientWorkspace && !isWorkspaceRoot(String(clientWorkspace))) return json(res, 409, { error: '工作目录已被其他客户端切换，请重新连接当前项目', code: 'WORKSPACE_CHANGED' });
 
+  if (pathname === '/api/ssh/connections' && ['GET', 'POST'].includes(req.method)) {
+    if (!requireLocalApi(req, res)) return;
+    if (req.method === 'GET') return json(res, 200, { connections: listSshConnections(), active: listActiveSshConnections() });
+    if (!String(req.headers['content-type'] || '').startsWith('application/json')) return json(res, 415, { error: '需要 application/json' });
+    try { return json(res, 200, { connection: saveSshConnection(await readBody(req)), connections: listSshConnections() }); }
+    catch (error) { return badRequest(res, error.message); }
+  }
+  if ((match = m(/^\/api\/ssh\/connections\/([\w-]+)\/probe$/)) && req.method === 'POST') {
+    if (!requireLocalApi(req, res)) return;
+    try { return json(res, 200, await inspectSshHost(match[1])); }
+    catch (error) { return json(res, 502, { error: error.message }); }
+  }
+  if ((match = m(/^\/api\/ssh\/connections\/([\w-]+)\/confirm-host-key$/)) && req.method === 'POST') {
+    if (!requireLocalApi(req, res)) return;
+    try {
+      const body = await readBody(req);
+      const current = getSshConnection(match[1]);
+      if (current?.hostKeyFingerprint && current.hostKeyFingerprint !== body.fingerprint) return json(res, 409, { error: '已固定的主机指纹不能被覆盖；请先独立核验服务器身份', code: 'SSH_HOST_KEY_CHANGED' });
+      const observed = await inspectSshHost(match[1]);
+      const connection = confirmSshHostKey(match[1], body.fingerprint, observed.fingerprint);
+      return json(res, 200, { connection });
+    } catch (error) { return json(res, 409, { error: error.message, code: 'SSH_HOST_KEY_MISMATCH' }); }
+  }
+  if ((match = m(/^\/api\/ssh\/connections\/([\w-]+)\/connect$/)) && req.method === 'POST') {
+    if (!requireLocalApi(req, res)) return;
+    try { return json(res, 200, await connectSsh(match[1], await readBody(req))); }
+    catch (error) { return json(res, 502, { error: error.message, code: 'SSH_CONNECT_FAILED' }); }
+  }
+  if ((match = m(/^\/api\/ssh\/connections\/([\w-]+)\/disconnect$/)) && req.method === 'POST') {
+    if (!requireLocalApi(req, res)) return;
+    return json(res, 200, { disconnected: closeSshConnection(match[1]) });
+  }
+  if ((match = m(/^\/api\/ssh\/connections\/([\w-]+)\/workspace\/root$/)) && req.method === 'POST') {
+    if (!requireLocalApi(req, res, 'SSH 工作区')) return;
+    try {
+      const body = await readBody(req);
+      const active = getActiveWorkspace();
+      const registered = workspacesForSshConnection(match[1]);
+      if (registered.some(item => item.remotePath !== body.path)) {
+        return json(res, 409, { error: '此 SSH 连接已有工作区记录绑定到其他远程目录。请先从工作区列表移除旧记录。', code: 'SSH_WORKSPACE_ROOT_REGISTERED' });
+      }
+      if (active?.kind === 'ssh' && active.connectionId === match[1] && active.remotePath !== body.path) {
+        return json(res, 409, { error: '此 SSH 主机的远程目录正作为当前工作区使用。请先切换到其他工作区，再更改目录。', code: 'SSH_WORKSPACE_IN_USE' });
+      }
+      return json(res, 200, { workspace: await setSshWorkspaceRoot(match[1], body.path), workspaces: listWorkspaces() });
+    }
+    catch (error) { return json(res, 400, { error: error.message, code: 'SSH_WORKSPACE_ROOT_INVALID' }); }
+  }
+  if ((match = m(/^\/api\/ssh\/connections\/([\w-]+)\/(workspace|metrics)$/)) && ['GET', 'POST'].includes(req.method)) {
+    if (!requireLocalApi(req, res, 'SSH 工作区')) return;
+    const connectionId = match[1];
+    if (!listActiveSshConnections().some(item => item.id === connectionId)) return json(res, 409, { error: '请先连接 SSH 主机', code: 'SSH_NOT_CONNECTED' });
+    try {
+      if (match[2] === 'metrics') return json(res, 200, await readSshServerMetrics(connectionId));
+      if (req.method === 'POST') { const body = await readBody(req); return json(res, 200, body.action === 'browse' ? await browseSshWorkspacePath(connectionId, body.path) : await validateSshWorkspacePath(connectionId, body.path)); }
+      return json(res, 200, await listSshWorkspaceDirectory(connectionId, url.searchParams.get('path') || ''));
+    } catch (error) { return json(res, 400, { error: error.message, code: 'SSH_WORKSPACE_FAILED' }); }
+  }
+  if (url.pathname === '/api/terminal/assistant' && req.method === 'POST') {
+    if (!requireLocalApi(req,res,'终端 AI 助手')) return;
+    const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),60000);
+    const disconnect=()=>{if(!res.writableEnded)abort.abort();};res.on('close',disconnect);
+    try {const body=await readBody(req,131072);return json(res,200,await recommendTerminalCommands(body,{signal:abort.signal}));}
+    catch(error){if(!res.destroyed)return json(res,400,{error:abort.signal.aborted?'请求已取消或超时，请重试':error.message});}
+    finally{clearTimeout(timer);res.off('close',disconnect);}
+  }
+  if ((match = m(/^\/api\/ssh\/connections\/([\w-]+)\/desktop\/system$/)) && req.method === 'POST') {
+    if (!requireLocalApi(req, res, 'SSH 桌面系统管理')) return;
+    if (!listActiveSshConnections().some(item => item.id === match[1])) return json(res, 409, { error: '请先连接 SSH 主机', code: 'SSH_NOT_CONNECTED' });
+    try { return json(res, 200, await manageSshDesktopSystem(match[1], await readBody(req, 16384))); }
+    catch (error) { return json(res, 400, { error: error.message, code: 'SSH_DESKTOP_SYSTEM_FAILED' }); }
+  }
+  if ((match = m(/^\/api\/ssh\/connections\/([\w-]+)\/desktop\/operation$/)) && req.method === 'POST') {
+    if (!requireLocalApi(req, res, 'SSH 桌面文件操作')) return;
+    if (!listActiveSshConnections().some(item => item.id === match[1])) return json(res, 409, { error: '请先连接 SSH 主机', code: 'SSH_NOT_CONNECTED' });
+    try { return json(res, 200, await mutateSshHostFile(match[1], await readBody(req, 15 * 1024 * 1024))); }
+    catch (error) { return json(res, 400, { error: error.message, code: 'SSH_DESKTOP_OPERATION_FAILED' }); }
+  }
+  if ((match = m(/^\/api\/ssh\/connections\/([\w-]+)\/desktop\/files$/)) && req.method === 'GET') {
+    if (!requireLocalApi(req, res, 'SSH 虚拟桌面文件管理')) return;
+    if (!listActiveSshConnections().some(item => item.id === match[1])) return json(res, 409, { error: '请先连接 SSH 主机', code: 'SSH_NOT_CONNECTED' });
+    try { return json(res, 200, await listSshHostDirectory(match[1], url.searchParams.get('path') || '/')); }
+    catch (error) { return json(res, 400, { error: error.message, code: 'SSH_DESKTOP_FILE_FAILED' }); }
+  }
+  if ((match = m(/^\/api\/ssh\/connections\/([\w-]+)\/desktop\/file$/)) && ['GET', 'PUT'].includes(req.method)) {
+    if (!requireLocalApi(req, res, 'SSH 虚拟桌面文本编辑')) return;
+    if (!listActiveSshConnections().some(item => item.id === match[1])) return json(res, 409, { error: '请先连接 SSH 主机', code: 'SSH_NOT_CONNECTED' });
+    try {
+      if (req.method === 'GET') return json(res, 200, await readSshHostTextFile(match[1], url.searchParams.get('path') || ''));
+      const body = await readBody(req);
+      return json(res, 200, { file: await writeSshHostTextFile(match[1], body.path, body.content) });
+    } catch (error) { return json(res, 400, { error: error.message, code: 'SSH_DESKTOP_FILE_FAILED' }); }
+  }
+  if ((match = m(/^\/api\/ssh\/connections\/([\w-]+)\/desktop\/download$/)) && req.method === 'GET') {
+    if (!requireLocalApi(req, res, 'SSH 虚拟桌面文件下载')) return;
+    if (!listActiveSshConnections().some(item => item.id === match[1])) return json(res, 409, { error: '请先连接 SSH 主机', code: 'SSH_NOT_CONNECTED' });
+    try {
+      const file = await readSshHostFileBytes(match[1], url.searchParams.get('path') || '');
+      res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': file.size, 'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
+      res.end(file.content);
+      return true;
+    } catch (error) { return json(res, 400, { error: error.message, code: 'SSH_DESKTOP_FILE_FAILED' }); }
+  }
+  if ((match = m(/^\/api\/ssh\/connections\/([\w-]+)\/git$/)) && ['GET', 'POST'].includes(req.method)) {
+    if (!requireLocalApi(req, res, 'SSH Git')) return;
+    const connectionId = match[1];
+    const connection = getSshConnection(connectionId);
+    if (!connection?.workspaceRoot) return json(res, 409, { error: '请先设置远程项目目录', code: 'SSH_WORKSPACE_ROOT_REQUIRED' });
+    if (!listActiveSshConnections().some(item => item.id === connectionId)) return json(res, 409, { error: '请先连接 SSH 主机', code: 'SSH_NOT_CONNECTED' });
+    try {
+      if (req.method === 'GET') return json(res, 200, await readSshGitInfo(connectionId));
+      const body = await readBody(req);
+      if (body.action === 'operation') return json(res, 200, await runSshGitAction(connectionId, body.operation || {}));
+      return json(res, 200, await updateSshGitRemote(connectionId, body));
+    } catch (error) { return json(res, 400, { error: redactGitRemoteUrl(error.message), code: 'SSH_GIT_FAILED' }); }
+  }
+  if ((match = m(/^\/api\/ssh\/connections\/([\w-]+)\/workspace\/file$/)) && ['GET', 'PUT'].includes(req.method)) {
+    if (!requireLocalApi(req, res, 'SSH 工作区')) return;
+    const connectionId = match[1];
+    if (!listActiveSshConnections().some(item => item.id === connectionId)) return json(res, 409, { error: '请先连接 SSH 主机', code: 'SSH_NOT_CONNECTED' });
+    try {
+      if (req.method === 'GET') return json(res, 200, await readSshWorkspaceFile(connectionId, url.searchParams.get('path') || ''));
+      const body = await readBody(req);
+      return json(res, 200, { file: await writeSshWorkspaceFile(connectionId, body.path, body.content) });
+    } catch (error) { return json(res, 400, { error: error.message, code: 'SSH_WORKSPACE_FAILED' }); }
+  }
+  if ((match = m(/^\/api\/ssh\/connections\/([\w-]+)$/)) && req.method === 'DELETE') {
+    if (!requireLocalApi(req, res)) return;
+    if (listActiveSshConnections().some(item => item.id === match[1])) return json(res, 409, { error: '请先断开 SSH 连接再删除' });
+    return json(res, 200, { ok: deleteSshConnection(match[1]), connections: listSshConnections() });
+  }
+
   // SSE
   if (pathname === '/api/event') {
+    const localSshClient = isLocalApiRequest(req);
     res.writeHead(200, {
       'content-type': 'text/event-stream',
       'cache-control': 'no-store',
@@ -367,7 +535,8 @@ async function route(req, res, url) {
     });
     res.write(`data: ${JSON.stringify({ type: 'server_connected', ts: Date.now() })}\n\n`);
     sseClients.add(res);
-    req.on('close', () => sseClients.delete(res));
+    if (localSshClient) localSshSseClients.add(res);
+    req.on('close', () => { sseClients.delete(res); localSshSseClients.delete(res); });
     return true;
   }
 
@@ -517,7 +686,8 @@ async function route(req, res, url) {
   if ((match = m(/^\/api\/account\/plugins\/([^/]+)\/install$/)) && req.method === 'POST') {
     try {
       const body = await readBody(req);
-      return json(res, 200, await installAccountPlugin(decodeURIComponent(match[1]), body.sha256));
+      const pluginId = decodeURIComponent(match[1]);
+      return json(res, 200, await withPluginManagement(async () => { assertWorkspaceIdle(); return installAccountPlugin(pluginId, body.sha256); }));
     } catch (error) { return json(res, error.status || 502, { error: error.message }); }
   }
   if (pathname === '/api/account/nickname' && req.method === 'PUT') {
@@ -542,24 +712,85 @@ async function route(req, res, url) {
     try { return json(res, 200, await queryPurchaseOrder(match[1])); }
     catch (error) { return json(res, error.status === 400 || error.status === 401 || error.status === 404 ? error.status : 502, { error: error.message }); }
   }
-  if (pathname === '/api/workspaces' && req.method === 'GET') return json(res, 200, { workspaces: listWorkspaces(), active: getWorkspaceRoot() });
+  if (pathname === '/api/workspaces/repositories' && req.method === 'GET') {
+    if (!requireLocalApi(req, res, '仓库记录')) return;
+    const workspace = getActiveWorkspace();
+    if (!workspace || workspace.kind === 'ssh') return json(res, 200, { repositories: [] });
+    if (url.searchParams.get('workspaceId') && url.searchParams.get('workspaceId') !== workspace.id) return json(res, 409, { error: '当前工作目录已变化，请刷新后重试', code: 'WORKSPACE_CHANGED' });
+    return json(res, 200, { repositories: listWorkspaceRepositories(workspace.path) });
+  }
+  if (pathname === '/api/workspaces/clone' && req.method === 'POST') {
+    if (!requireLocalApi(req, res, 'Git 克隆')) return;
+    assertWorkspaceIdle();
+    try {
+      const body = await readBody(req), workspace = getActiveWorkspace();
+      if (!workspace || workspace.kind === 'ssh') return json(res, 409, { error: '请先选择本地工作目录；SSH 工作区暂不支持本机克隆', code: 'LOCAL_WORKSPACE_REQUIRED' });
+      if (body.workspaceId && body.workspaceId !== workspace.id) return json(res, 409, { error: '当前工作目录已变化，请刷新后重试', code: 'WORKSPACE_CHANGED' });
+      return json(res, 200, await cloneGitWorkspace({ ...body, parentPath: workspace.path }));
+    }
+    catch (error) { return badRequest(res, error.message); }
+  }
+  if (pathname === '/api/workspaces' && req.method === 'GET') return json(res, 200, { workspaces: listWorkspaces(), active: getActiveWorkspace() || { path: getWorkspaceRoot() } });
   if (pathname === '/api/workspaces' && req.method === 'POST') {
     assertWorkspaceIdle();
-    const body = await readBody(req); const item = addWorkspace(body); setWorkspaceRoot(item.path); cfg.security.workspaceRoot = item.path; saveConfigFile(CONFIG_FILE); setLoopConfig(cfg); emit('workspace_changed', { workspace: item }); return json(res, 200, { workspace: item, workspaces: listWorkspaces() });
+    const body = await readBody(req);
+    if (body.kind === 'ssh') {
+      if (!requireLocalApi(req, res, 'SSH 工作区')) return;
+      const connection = getSshConnection(body.connectionId);
+      if (!connection?.workspaceRoot || !listActiveSshConnections().some(item => item.id === body.connectionId)) return json(res, 409, { error: '请先连接 SSH 并设置远程项目目录', code: 'SSH_WORKSPACE_UNAVAILABLE' });
+      const item = addSshWorkspace({ connectionId: body.connectionId, remotePath: connection.workspaceRoot, name: body.name || connection.name });
+      setSessionStorageRoot(item.storagePath);
+      cfg.security.remoteWorkspaceId = item.id; saveConfigFile(CONFIG_FILE); setLoopConfig(cfg); emit('workspace_changed', { workspace: item });
+      return json(res, 200, { workspace: item, workspaces: listWorkspaces() });
+    }
+    const item = addWorkspace(body); setWorkspaceRoot(item.path); cfg.security.workspaceRoot = item.path; delete cfg.security.remoteWorkspaceId; saveConfigFile(CONFIG_FILE); setLoopConfig(cfg); emit('workspace_changed', { workspace: item }); return json(res, 200, { workspace: item, workspaces: listWorkspaces() });
+  }
+  if ((match = m(/^\/api\/workspaces\/([\w-]+)\/git$/)) && ['GET', 'POST'].includes(req.method)) {
+    if (!requireLocalApi(req, res, 'Git')) return;
+    const workspace = listWorkspaces().find(item => item.id === match[1]);
+    if (!workspace) return json(res, 404, { error: '工作目录不存在', code: 'WORKSPACE_NOT_FOUND' });
+    if (workspace.kind === 'ssh') return json(res, 409, { error: 'SSH 工作区请通过 SSH 连接管理读取 Git 状态', code: 'SSH_GIT_ROUTE' });
+    try {
+      if (req.method === 'GET') return json(res, 200, await readWorkspaceGitInfo(workspace.path));
+      const body = await readBody(req);
+      if (body.action === 'operation') return json(res, 200, await runWorkspaceGitAction(workspace.path, body.operation || {}));
+      return json(res, 200, await updateWorkspaceGitRemote(workspace.path, body));
+    } catch (error) { return json(res, 400, { error: redactGitRemoteUrl(error.message), code: 'WORKSPACE_GIT_FAILED' }); }
   }
   if ((match = m(/^\/api\/workspaces\/([\w-]+)\/activate$/)) && req.method === 'POST') {
     assertWorkspaceIdle();
-    const item = setActiveWorkspace(match[1]); setWorkspaceRoot(item.path); cfg.security.workspaceRoot = item.path; saveConfigFile(CONFIG_FILE); setLoopConfig(cfg); emit('workspace_changed', { workspace: item }); return json(res, 200, { workspace: item, workspaces: listWorkspaces() });
+    const target = listWorkspaces().find(item => item.id === match[1]);
+    if (!target) return json(res, 404, { error: '工作目录不存在' });
+    if (target.kind === 'ssh') {
+      if (!requireLocalApi(req, res, 'SSH 工作区')) return;
+      const connection = getSshConnection(target.connectionId);
+      if (!connection?.workspaceRoot || connection.workspaceRoot !== target.remotePath || !listActiveSshConnections().some(item => item.id === target.connectionId)) {
+        return json(res, 409, { error: 'SSH 工作区路径已失效或主机已断开。请重新设置远程项目目录，确认路径后再打开。', code: 'SSH_WORKSPACE_UNAVAILABLE' });
+      }
+    }
+    const item = setActiveWorkspace(match[1]);
+    setSessionStorageRoot(item.kind === 'ssh' ? item.storagePath : undefined);
+    if (item.kind === 'ssh') { cfg.security.remoteWorkspaceId = item.id; saveConfigFile(CONFIG_FILE); setLoopConfig(cfg); emit('workspace_changed', { workspace: item }); return json(res, 200, { workspace: item, workspaces: listWorkspaces() }); }
+    setWorkspaceRoot(item.path); cfg.security.workspaceRoot = item.path; delete cfg.security.remoteWorkspaceId; saveConfigFile(CONFIG_FILE); setLoopConfig(cfg); emit('workspace_changed', { workspace: item }); return json(res, 200, { workspace: item, workspaces: listWorkspaces() });
   }
   if ((match = m(/^\/api\/workspaces\/([\w-]+)$/)) && req.method === 'DELETE') {
     const target = listWorkspaces().find((item) => item.id === match[1]);
     if (!target) return json(res, 404, { error: '工作目录不存在' });
+    if (target.kind === 'ssh' && !requireLocalApi(req, res, 'SSH 工作区')) return;
     if (target.active) {
       assertWorkspaceIdle();
       const next = listWorkspaces().find((item) => item.id !== target.id);
+      if (next?.kind === 'ssh') {
+        const connection = getSshConnection(next.connectionId);
+        if (!connection?.workspaceRoot || connection.workspaceRoot !== next.remotePath || !listActiveSshConnections().some(item => item.id === next.connectionId)) {
+          return json(res, 409, { error: '备用 SSH 工作区路径已失效或主机已断开。请先重新连接并确认其项目目录，或移除此工作区。', code: 'SSH_WORKSPACE_UNAVAILABLE' });
+        }
+      }
       const root = next?.path || path.join(DATA_ROOT, 'workspace');
-      setWorkspaceRoot(root);
-      cfg.security.workspaceRoot = root; saveConfigFile(CONFIG_FILE); setLoopConfig(cfg);
+      setSessionStorageRoot(next?.kind === 'ssh' ? next.storagePath : undefined);
+      if (next?.kind === 'ssh') cfg.security.remoteWorkspaceId = next.id;
+      else { setWorkspaceRoot(root); cfg.security.workspaceRoot = root; delete cfg.security.remoteWorkspaceId; }
+      saveConfigFile(CONFIG_FILE); setLoopConfig(cfg);
       removeWorkspace(target.id);
       if (next) setActiveWorkspace(next.id);
       emit('workspace_changed', { workspace: next || null });
@@ -569,25 +800,99 @@ async function route(req, res, url) {
     }
     return json(res, 200, { ok: true, workspaces: listWorkspaces() });
   }
-  if (pathname === '/api/files' && req.method === 'GET') return json(res, 200, listDirectory(url.searchParams.get('path') || ''));
-  if (pathname === '/api/files/references' && req.method === 'GET') return json(res, 200, await listWorkspaceReferences({ query: url.searchParams.get('query') || '', limit: url.searchParams.get('limit') }));
+  if (pathname === '/api/files' && req.method === 'GET') {
+    if (getActiveWorkspace()?.kind === 'ssh' && !requireLocalApi(req, res, 'SSH 工作区')) return;
+    return json(res, 200, await listDirectory(url.searchParams.get('path') || ''));
+  }
+  if (pathname === '/api/files/references' && req.method === 'GET') {
+    const active = getActiveWorkspace();
+    if (active?.kind === 'ssh') {
+      if (!requireLocalApi(req, res, 'SSH 工作区')) return;
+      if (!listActiveSshConnections().some(item => item.id === active.connectionId)) return json(res, 409, { error: '请先连接 SSH 主机', code: 'SSH_NOT_CONNECTED' });
+      return json(res, 200, await listSshWorkspaceReferences(active.connectionId, { query: url.searchParams.get('query') || '', limit: url.searchParams.get('limit') }));
+    }
+    return json(res, 200, await listWorkspaceReferences({ query: url.searchParams.get('query') || '', limit: url.searchParams.get('limit') }));
+  }
+  if (pathname.startsWith('/api/terminal/agent')) {
+    if (!requireLocalApi(req, res, '终端 Agent')) return;
+    try {
+      const dependencies = { localTerminals: interactiveTerminals, sshOwners: sshTerminalOwners, connection: getSshConnection, sshClient: getSshSessionClient, workspaceRoot: getWorkspaceRoot() };
+      if (pathname === '/api/terminal/agent' && req.method === 'POST') {
+        const body = await readBody(req);
+        const binding = terminalAgentBinding(String(body.terminalId || ''), dependencies);
+        assertTerminalAgentTarget(binding, dependencies);
+        const session = Session.create('终端 · ' + binding.name, { directory: path.join(binding.storageRoot, '.agent', 'terminal-sessions') });
+        const context = terminalAgentContext(contextForSession(session), binding, () => assertTerminalAgentTarget(binding, dependencies));
+        if (terminalAgents.size >= 100) { const obsolete = [...terminalAgents].find(([id]) => !activeSequences.has(id) && !isRunning(id)); if (obsolete) terminalAgents.delete(obsolete[0]); }
+        terminalAgents.set(session.id, { session, binding, context, error: null });
+        return json(res, 201, { id: session.id, target: binding, model: context.modelSelection?.model?.name || context.modelSelection?.model?.id || cfg.provider?.model || '当前模型' });
+      }
+      const route = pathname.match(/^\/api\/terminal\/agent\/([\w-]+)(?:\/(message|abort|permission))?$/);
+      const item = route && terminalAgents.get(route[1]);
+      if (!item) return notFound(res, '终端 Agent 会话不存在，请重新开始');
+      const { session, binding, context } = item;
+      if (req.method === 'GET' && !route[2]) return json(res, 200, { entries: session.chain(), running: activeSequences.has(session.id) || isRunning(session.id), activeStep: runningStep(session.id), permission: pendingRequest(session.id), error: item.error, target: binding });
+      if (req.method === 'POST' && route[2] === 'abort') return json(res, 200, { ok: stopSession(session.id) });
+      if (req.method === 'POST' && route[2] === 'permission') {
+        const body = await readBody(req);
+        if (!['allow', 'deny'].includes(body.decision)) return badRequest(res, '无效审批决定');
+        if (body.decision === 'allow') assertTerminalAgentTarget(binding, dependencies);
+        return json(res, 200, { ok: resolveRequest(body.requestId, body.decision, session.id) });
+      }
+      if (req.method === 'POST' && route[2] === 'message') {
+        assertTerminalAgentTarget(binding, dependencies);
+        if (activeSequences.has(session.id) || isRunning(session.id)) return json(res, 409, { error: 'Agent 正在处理上一条消息' });
+        const body = await readBody(req, 32768);
+        const text = String(body.text || '').trim();
+        if (!text || text.length > 12000) return badRequest(res, '消息需要 1–12000 字符');
+        assertTerminalAgentTarget(binding, dependencies);
+        if (activeSequences.has(session.id) || isRunning(session.id)) return json(res, 409, { error: 'Agent 正在处理上一条消息' });
+        if (cfg.provider?.managed) requireAccount('调用平台内置模型');
+        item.error = null;
+        runSequence(session, terminalAgentInstruction(binding) + '\n\n用户请求：' + text, [], { context }).catch(error => { item.error = error.message; emit('error', { sessionId: session.id, message: error.message }); });
+        return json(res, 202, { ok: true });
+      }
+      return notFound(res);
+    } catch (error) { return json(res, 409, { error: error.message }); }
+  }
   if (pathname === '/api/terminal/run' && req.method === 'POST') {
     try { return json(res, 200, startTerminalRun((await readBody(req)).command)); }
     catch (error) { return json(res, 400, { error: error.message, code: 'TERMINAL_COMMAND_REJECTED' }); }
   }
   if (pathname === '/api/terminal/interactive' && req.method === 'POST') {
-    try { return json(res, 200, startInteractiveTerminal(await readBody(req))); }
+    try {
+      const body = await readBody(req);
+      if (body.sshConnectionId) {
+        if (!requireLocalApi(req, res, 'SSH 终端')) return;
+        if (!listActiveSshConnections().some(item => item.id === String(body.sshConnectionId))) return json(res, 409, { error: '请先连接 SSH 主机', code: 'SSH_NOT_CONNECTED' });
+        const connection = getSshConnection(String(body.sshConnectionId));
+        const cwd = connection?.workspaceRoot || undefined;
+        const result = startSshTerminal(String(body.sshConnectionId), { ...body, cwd });
+        sshTerminalOwners.set(result.terminalId, String(body.sshConnectionId));
+        return json(res, 200, result);
+      }
+      return json(res, 200, startInteractiveTerminal(body));
+    }
     catch (error) { return json(res, 400, { error: error.message, code: 'TERMINAL_PTY_START_FAILED' }); }
   }
   if ((match = m(/^\/api\/terminal\/([\w-]+)\/input$/)) && req.method === 'POST') {
+    const sshOwner = sshTerminalOwners.get(match[1]);
+    if (sshOwner && !requireLocalApi(req, res, 'SSH 终端')) return;
     const body = await readBody(req);
-    return json(res, 200, { ok: writeInteractiveTerminal(match[1], body.data) });
+    return json(res, 200, { ok: sshOwner ? writeSshTerminal(sshOwner, match[1], body.data) : writeInteractiveTerminal(match[1], body.data) });
   }
   if ((match = m(/^\/api\/terminal\/([\w-]+)\/resize$/)) && req.method === 'POST') {
+    const sshOwner = sshTerminalOwners.get(match[1]);
+    if (sshOwner && !requireLocalApi(req, res, 'SSH 终端')) return;
     const body = await readBody(req);
-    return json(res, 200, { ok: resizeInteractiveTerminal(match[1], body.cols, body.rows) });
+    return json(res, 200, { ok: sshOwner ? resizeSshTerminal(sshOwner, match[1], body.cols, body.rows) : resizeInteractiveTerminal(match[1], body.cols, body.rows) });
   }
-  if ((match = m(/^\/api\/terminal\/([\w-]+)\/stop$/)) && req.method === 'POST') return json(res, 200, { ok: stopTerminalRun(match[1]) || stopInteractiveTerminal(match[1]) });
+  if ((match = m(/^\/api\/terminal\/([\w-]+)\/stop$/)) && req.method === 'POST') {
+    const sshOwner = sshTerminalOwners.get(match[1]);
+    if (sshOwner && !requireLocalApi(req, res, 'SSH 终端')) return;
+    if (sshOwner) { for (const item of terminalAgents.values()) if (item.binding.terminalId === match[1]) stopSession(item.session.id); sshTerminalOwners.delete(match[1]); }
+    return json(res, 200, { ok: sshOwner ? stopSshTerminal(sshOwner, match[1]) : stopTerminalRun(match[1]) || stopInteractiveTerminal(match[1]) });
+  }
   if ((match = m(/^\/api\/terminal\/([\w-]+)$/)) && req.method === 'GET') {
     const run = terminalRuns.get(match[1]);
     if (!run) return notFound(res, '终端任务不存在或已过期');
@@ -615,6 +920,14 @@ async function route(req, res, url) {
     try { return json(res, 200, { canvas: saveFilmCanvasEdits(await readBody(req)) }); }
     catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
   }
+  if (pathname === '/api/film-canvas/media/info' && req.method === 'GET') {
+    try { return json(res, 200, filmCanvasMediaInfo({ assetId: url.searchParams.get('assetId'), path: url.searchParams.get('path') })); }
+    catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  if (pathname === '/api/film-canvas/media/open' && req.method === 'POST') {
+    try { const body = await readBody(req); return json(res, 200, await openFilmCanvasMedia(body, body.action)); }
+    catch (error) { return json(res, 400, { error: error.message }); }
+  }
   if (pathname === '/api/film-canvas/media' && req.method === 'GET') {
     const media = filmCanvasMediaPath(url.searchParams.get('path') || '');
     return serveMedia(req, res, media.path, media.mime, { 'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(media.name)}`, 'cache-control': 'no-store' });
@@ -624,12 +937,17 @@ async function route(req, res, url) {
   if ((match = m(/^\/api\/assets\/([\w-]+)\/raw$/)) && req.method === 'GET') {
     const asset = assetFile(match[1]); return serveMedia(req, res, asset.path, asset.item.mime);
   }
-  if (pathname === '/api/file' && req.method === 'GET') return json(res, 200, readWorkspaceFile(url.searchParams.get('path') || ''));
+  if (pathname === '/api/file' && req.method === 'GET') {
+    if (getActiveWorkspace()?.kind === 'ssh' && !requireLocalApi(req, res, 'SSH 工作区')) return;
+    return json(res, 200, await readWorkspaceFile(url.searchParams.get('path') || ''));
+  }
   if (pathname === '/api/file/meta' && req.method === 'GET') {
+    if (getActiveWorkspace()?.kind === 'ssh') return json(res, 409, { error: 'SSH 工作区暂不支持本地文件元数据读取', code: 'SSH_LOCAL_FILE_UNSUPPORTED' });
     const file = rawWorkspaceFile(url.searchParams.get('path') || '');
     return json(res, 200, { path: file.relative, name: path.basename(file.abs), kind: file.kind, size: file.stat.size });
   }
   if (pathname.startsWith('/api/file/raw/') && req.method === 'GET') {
+    if (getActiveWorkspace()?.kind === 'ssh') return json(res, 409, { error: 'SSH 工作区暂不支持二进制和原始文件预览', code: 'SSH_BINARY_PREVIEW_UNSUPPORTED' });
     const file = rawWorkspaceFile(decodeURIComponent(pathname.slice('/api/file/raw/'.length)));
     const html = /\.html?$/i.test(file.abs);
     res.writeHead(200, {
@@ -643,6 +961,7 @@ async function route(req, res, url) {
     return true;
   }
   if (pathname === '/api/file/raw' && req.method === 'GET') {
+    if (getActiveWorkspace()?.kind === 'ssh') return json(res, 409, { error: 'SSH 工作区暂不支持二进制和原始文件预览', code: 'SSH_BINARY_PREVIEW_UNSUPPORTED' });
     const file = rawWorkspaceFile(url.searchParams.get('path') || '');
     const html = /\.html?$/i.test(file.abs);
     res.writeHead(200, {
@@ -655,7 +974,19 @@ async function route(req, res, url) {
     fs.createReadStream(file.abs).pipe(res);
     return true;
   }
+  if (pathname === '/api/file/typesetting-preview' && req.method === 'POST') {
+    if (!requireLocalApi(req, res, '排版编译')) return;
+    if (getActiveWorkspace()?.kind === 'ssh') return json(res, 409, { error: 'SSH 工作区支持源码编辑，请在本地工作区编译预览' });
+    const body = await readBody(req, 6 * 1024 * 1024);
+    try {
+      const pdf = await compileTypesetting(body.path, body.content);
+      res.writeHead(200, { 'content-type': 'application/pdf', 'content-length': pdf.length, 'cache-control': 'no-store' });
+      res.end(pdf);
+      return true;
+    } catch (error) { return json(res, 422, { error: error.message, code: 'TYPESETTING_PREVIEW_UNAVAILABLE' }); }
+  }
   if (pathname === '/api/file/office-preview' && req.method === 'GET') {
+    if (getActiveWorkspace()?.kind === 'ssh') return json(res, 409, { error: 'SSH 工作区暂不支持远程 Office 预览', code: 'SSH_OFFICE_PREVIEW_UNSUPPORTED' });
     const file = rawWorkspaceFile(url.searchParams.get('path') || '');
     const ext = path.extname(file.abs).toLowerCase();
     if (!['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx'].includes(ext)) return badRequest(res, '仅支持 Word、Excel 和 PowerPoint 文件');
@@ -677,22 +1008,28 @@ async function route(req, res, url) {
     }
   }
   if (pathname === '/api/file/write' && req.method === 'POST') {
-    const body = await readBody(req); return json(res, 200, { file: writeWorkspaceFile(body.path, body.content) });
+    if (getActiveWorkspace()?.kind === 'ssh' && !requireLocalApi(req, res, 'SSH 工作区')) return;
+    const body = await readBody(req); return json(res, 200, { file: await writeWorkspaceFile(body.path, body.content) });
   }
   if (pathname === '/api/file/create' && req.method === 'POST') {
-    const body = await readBody(req); return json(res, 200, { item: createWorkspaceItem(body.parent || '', body.name, body.type) });
+    if (getActiveWorkspace()?.kind === 'ssh' && !requireLocalApi(req, res, 'SSH 工作区')) return;
+    const body = await readBody(req); return json(res, 200, { item: await createWorkspaceItem(body.parent || '', body.name, body.type) });
   }
   if (pathname === '/api/file/rename' && req.method === 'POST') {
-    const body = await readBody(req); return json(res, 200, { item: renameWorkspaceItem(body.path, body.name) });
+    if (getActiveWorkspace()?.kind === 'ssh' && !requireLocalApi(req, res, 'SSH 工作区')) return;
+    const body = await readBody(req); return json(res, 200, { item: await renameWorkspaceItem(body.path, body.name) });
   }
   if (pathname === '/api/file/move' && req.method === 'POST') {
-    const body = await readBody(req); return json(res, 200, { item: moveWorkspaceItem(body.path, body.target || '') });
+    if (getActiveWorkspace()?.kind === 'ssh' && !requireLocalApi(req, res, 'SSH 工作区')) return;
+    const body = await readBody(req); return json(res, 200, { item: await moveWorkspaceItem(body.path, body.target || '') });
   }
   if (pathname === '/api/file/copy' && req.method === 'POST') {
-    const body = await readBody(req); return json(res, 200, { item: copyWorkspaceItem(body.path, body.target || '') });
+    if (getActiveWorkspace()?.kind === 'ssh' && !requireLocalApi(req, res, 'SSH 工作区')) return;
+    const body = await readBody(req); return json(res, 200, { item: await copyWorkspaceItem(body.path, body.target || '') });
   }
   if (pathname === '/api/file/delete' && req.method === 'POST') {
-    const body = await readBody(req); return json(res, 200, { item: deleteWorkspaceItem(body.path) });
+    if (getActiveWorkspace()?.kind === 'ssh' && !requireLocalApi(req, res, 'SSH 工作区')) return;
+    const body = await readBody(req); return json(res, 200, { item: await deleteWorkspaceItem(body.path) });
   }
   if (pathname === '/api/file/reveal' && req.method === 'POST') {
     const body = await readBody(req); return json(res, 200, revealWorkspaceItem(body.path));
@@ -863,13 +1200,15 @@ async function route(req, res, url) {
     }
   }
   if (pathname === '/api/sessions') {
-    const sessions = Session.list().map((session) => ({
+    const activeWorkspace = getActiveWorkspace();
+    const activeDirectory = activeWorkspace?.kind === 'ssh' ? path.join(activeWorkspace.storagePath, '.agent', 'sessions') : undefined;
+    const sessions = Session.list({ directory: activeDirectory }).map((session) => ({
       ...session,
       running: isRunning(session.id) || activeSequences.has(session.id),
     }));
     const workspaceSessions = Object.fromEntries(listWorkspaces().map((workspace) => {
       if (workspace.active) return [workspace.id, sessions];
-      const directory = path.join(workspace.path, '.agent', 'sessions');
+      const directory = workspace.kind === 'ssh' ? path.join(workspace.storagePath, '.agent', 'sessions') : path.join(workspace.path, '.agent', 'sessions');
       return [workspace.id, Session.list({ directory }).map((session) => ({
         ...session,
         running: isRunning(session.id) || activeSequences.has(session.id),
@@ -909,7 +1248,8 @@ async function route(req, res, url) {
   if (pathname === '/api/session' && req.method === 'POST') {
     const body = await readBody(req);
     if (body.mode !== undefined && !['default', 'auto-all'].includes(body.mode)) return badRequest(res, '无效权限模式');
-    const s = Session.create(body.title ?? '新会话');
+    const remoteWorkspace = getActiveWorkspace()?.kind === 'ssh' ? getActiveWorkspace() : null;
+    const s = Session.create(body.title ?? '新会话', remoteWorkspace ? { directory: path.join(remoteWorkspace.storagePath, '.agent', 'sessions') } : {});
     const mode = body.mode ?? uiPreferences().defaultPermissionMode;
     if (s.mode !== mode) s.setMode(mode);
     emit('session_created', { sessionId: s.id, title: s.title });
@@ -944,6 +1284,42 @@ async function route(req, res, url) {
       const result = await retryBashWithoutSandbox(s, callId, { confirmed: body.confirmed, context: contextForSession(s) });
       return json(res, 200, result);
     } catch (error) { return json(res, error.status || 400, { error: error.message, code: error.code }); }
+  }
+  if (['/api/mcp/settings', '/api/mcp/test', '/api/mcp/auth', '/api/mcp/auth/status', '/api/mcp/auth/cancel', '/api/mcp/auth/browser'].includes(pathname) && ['GET', 'POST'].includes(req.method)) {
+    const host = String(req.headers.host || '');
+    if (!/^(127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/.test(host)) return json(res, 403, { error: 'MCP 配置仅允许本机访问' });
+    if (req.headers.origin) {
+      let origin;
+      try { origin = new URL(req.headers.origin); } catch { return json(res, 403, { error: '无效来源' }); }
+      if (origin.host !== host || !['http:', 'https:'].includes(origin.protocol)) return json(res, 403, { error: 'MCP 配置不允许跨站访问' });
+    }
+    if (req.headers['sec-fetch-site'] === 'cross-site') return json(res, 403, { error: 'MCP 配置不允许跨站访问' });
+    if (req.method === 'GET') return pathname.endsWith('/settings') ? json(res, 200, publicMcpSettings(getConfig())) : badRequest(res, '请使用 POST 测试连接');
+    if (!String(req.headers['content-type'] || '').startsWith('application/json')) return json(res, 415, { error: '需要 application/json' });
+    if (!pathname.includes('/auth')) assertWorkspaceIdle();
+    const body = await readBody(req), cfg = getConfig();
+    try {
+      if (pathname.endsWith('/auth/browser')) return json(res, 200, oauthBrowserJob(body.id));
+      if (pathname.includes('/auth')) {
+        const server = mcpServers(cfg).find(s => s.name === body.name);
+        if (!server) return badRequest(res, '服务不存在');
+        if (pathname.endsWith('/cancel')) return json(res, 200, cancelOAuth(server));
+        if (pathname.endsWith('/status')) return json(res, 200, oauthStatus(server));
+        await closeMcp(); beginOAuth(server, { force: true });
+        return json(res, 200, oauthStatus(server));
+      }
+      if (pathname.endsWith('/test')) {
+        const server = mcpServers(cfg).find(s => s.name === body.name);
+        if (!server) return badRequest(res, '服务不存在');
+        return json(res, 200, await testMcpServer(server));
+      }
+      const previous = cfg.mcp;
+      cfg.mcp = updateMcpSettings(cfg, body);
+      try { saveConfigFile(CONFIG_FILE); } catch (error) { cfg.mcp = previous; throw error; }
+      await closeMcp();
+      setLoopConfig(cfg);
+      return json(res, 200, publicMcpSettings(cfg));
+    } catch (error) { return badRequest(res, error.message); }
   }
   if (pathname === '/api/acp/settings' && ['GET', 'POST'].includes(req.method)) {
     const host = String(req.headers.host || '');
@@ -1009,7 +1385,9 @@ async function route(req, res, url) {
     const paged = req.method === 'GET' && (url.searchParams.has('limit') || url.searchParams.has('before'));
     const all = req.method === 'GET' && url.searchParams.get('all') === '1';
     if (paged && url.searchParams.has('before') && !/^\d+$/.test(url.searchParams.get('before'))) return badRequest(res, '无效历史游标');
-    const s = paged || all ? (runningSessions.get(match[1]) || Session.loadLight(match[1])) : getSessionOr400(res, match[1]); if (!s) { if (paged || all) notFound(res, '会话不存在'); return; }
+  const activeWorkspace = getActiveWorkspace();
+  const directory = activeWorkspace?.kind === 'ssh' ? path.join(activeWorkspace.storagePath, '.agent', 'sessions') : undefined;
+    const s = paged || all ? (runningSessions.get(match[1]) || Session.loadLight(match[1], directory)) : getSessionOr400(res, match[1]); if (!s) { if (paged || all) notFound(res, '会话不存在'); return; }
     if (req.method === 'GET') {
       const group = agentManager.view(s);
       const ids = [group.rootSessionId, s.id, ...group.tasks.map(task => task.sessionId)].filter((id, index, all) => all.indexOf(id) === index);
@@ -1024,7 +1402,7 @@ async function route(req, res, url) {
     if (req.method === 'DELETE') {
       if (isRunning(s.id) || activeSequences.has(s.id) || agentManager.pending(s).length) return json(res, 409, { error: '任务或子任务正在运行，停止后才能删除' });
       if (s.parentSessionId) return json(res, 409, { error: '子会话作为主任务证据保留，请管理主任务' });
-      Session.remove(s.id);
+      Session.remove(s.id, directory);
       emit('session_deleted', { sessionId: s.id });
       return json(res, 200, { ok: true });
     }
@@ -1154,7 +1532,7 @@ async function route(req, res, url) {
     if (s.parentSessionId) return badRequest(res, '子 Agent 的权限模式由派发时的主任务决定');
     const body = await readBody(req);
     const mode = ['default', 'auto-all'].includes(body.mode) ? body.mode : 'default';
-    s.setMode(mode);
+    setPermissionMode(s, mode);
     emit('session_updated', { sessionId: s.id, mode });
     return json(res, 200, { mode });
   }
@@ -1184,11 +1562,19 @@ async function route(req, res, url) {
     if (isRunning(s.id)) return json(res, 409, { error: '会话运行中，不能修改工作目录' });
     if (s.parentSessionId || agentManager.view(s).tasks.length) return json(res, 409, { error: '任务组保留在原工作区，请新建会话使用其他工作目录' });
     const body = await readBody(req);
-    const item = addWorkspace(body, { activate: false });
-    s.moveToWorkspace(item.path);
+    if ((body.kind === 'ssh' || getActiveWorkspace()?.kind === 'ssh') && !requireLocalApi(req, res, 'SSH 工作区')) return;
+    const item = body.kind === 'ssh'
+      ? await (async () => {
+        const connection = getSshConnection(body.connectionId);
+        if (!connection?.workspaceRoot || !listActiveSshConnections().some(value => value.id === body.connectionId)) throw new Error('请先连接 SSH 并设置远程项目目录');
+        return addSshWorkspace({ connectionId: body.connectionId, remotePath: connection.workspaceRoot, name: body.name || connection.name }, { activate: false });
+      })()
+      : addWorkspace(body, { activate: false });
+    s.moveToWorkspace(item.kind === 'ssh' ? item.storagePath : item.path);
     setActiveWorkspace(item.id);
-    setWorkspaceRoot(item.path);
-    cfg.security.workspaceRoot = item.path;
+    setSessionStorageRoot(item.kind === 'ssh' ? item.storagePath : undefined);
+    if (item.kind === 'ssh') cfg.security.remoteWorkspaceId = item.id;
+    else { setWorkspaceRoot(item.path); cfg.security.workspaceRoot = item.path; delete cfg.security.remoteWorkspaceId; }
     saveConfigFile(CONFIG_FILE);
     setLoopConfig(cfg);
     emit('session_workspace_changed', { sessionId: s.id, workspace: item });
@@ -1226,11 +1612,24 @@ async function route(req, res, url) {
       return json(res, 400, { error: e.message });
     }
   }
+  if (pathname === '/api/plugins/pi' && req.method === 'GET') return json(res, 200, { packages: listPiPackages(), runtime: pluginsInfo() });
+  if (pathname === '/api/plugins/pi/install' && req.method === 'POST') {
+    const body = await readBody(req);
+    const result = await withPluginManagement(async () => { assertWorkspaceIdle(); return installPiPackage(body.source); });
+    return json(res, 200, result);
+  }
+  if ((match = m(/^\/api\/plugins\/pi\/([a-f0-9]{20})$/)) && req.method === 'DELETE') {
+    await withPluginManagement(async () => { assertWorkspaceIdle(); removePiPackage(match[1]); });
+    return json(res, 200, { status: 'pending-reload' });
+  }
   if (pathname === '/api/plugins/reload' && req.method === 'POST') {
-    assertWorkspaceIdle();
-    await disconnectChannels();
-    const info = await loadAll({ reload: true });
-    await initializeChannels();
+    const info = await withPluginManagement(async () => {
+      assertWorkspaceIdle();
+      await disconnectChannels();
+      const result = await loadAll({ reload: true });
+      await initializeChannels();
+      return result;
+    });
     emit('plugins_reloaded', {});
     return json(res, 200, info);
   }

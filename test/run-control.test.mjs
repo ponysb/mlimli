@@ -13,6 +13,8 @@ import { buildSystemPrompt } from '../core/prompts.mjs';
 import { buildRequest, sessionRoutingKey, setConfig, resolveModelSelection } from '../core/llm.mjs';
 import { loadAll, disposePlugins, getTool, executeTool } from '../core/plugins.mjs';
 import { runTurn, setLoopConfig, abortRun, interruptRunForAdjustment, runningStep } from '../core/loop.mjs';
+import { onEvent } from '../core/events.mjs';
+import { resolveRequest } from '../core/permissions.mjs';
 import { saveTaskCheckpoint, taskRecoveryState } from '../core/task-checkpoint.mjs';
 import { parseOpenAIStream, parseResponsesStream, parseAnthropicStream, assembleToolCalls } from '../core/stream.mjs';
 
@@ -162,6 +164,24 @@ test('会话标识按协议写入缓存路由字段，并规范化异常标识',
   assert.equal(sessionRoutingKey('含空格的会话'.repeat(20)), sessionRoutingKey('含空格的会话'.repeat(20)));
 });
 
+test('三种协议把动态状态放在历史之后，系统提示与已有消息前缀保持稳定', () => {
+  const history = [{ role: 'user', content: '检查项目' }, { role: 'assistant', text: '已读取第一批内容。' }];
+  const system = '稳定系统规则';
+  for (const protocol of ['openai-chat', 'openai-responses', 'anthropic']) {
+    const request = (messages, state) => buildRequest({ protocol, baseUrl: 'http://localhost' }, { model: 'fixture' }, messages, system, [], true, undefined, 'cache-session', state).body;
+    const first = request(history, '已运行 1 轮，约 10 秒');
+    const second = request([...history, { role: 'user', content: '继续检查第二批内容' }], '已运行 2 轮，约 20 秒');
+    const firstMessages = first.input || first.messages, secondMessages = second.input || second.messages;
+    assert.deepEqual(secondMessages.slice(0, firstMessages.length - 1), firstMessages.slice(0, -1), protocol);
+    assert.match(firstMessages.at(-1).content, /runtime_context[\s\S]*已运行 1 轮/);
+    assert.match(secondMessages.at(-1).content, /runtime_context[\s\S]*已运行 2 轮/);
+    assert.equal(first.instructions, second.instructions);
+    assert.equal(first.system, second.system);
+    assert.equal(first.prompt_cache_key, second.prompt_cache_key);
+  }
+  assert.equal(history.length, 2, '不能修改持久化历史');
+});
+
 async function loopFixture(t, respond, { maxSteps = 12, maxDurationMs = 20000, quality = false, omitQualityConfig = false, runControl, allowedTools = ['read_file', 'write_file', 'read_tool_output'] } = {}) {
   const root = workspace(t), seen = [];
   fs.writeFileSync(path.join(root, 'input.txt'), 'stable');
@@ -199,6 +219,70 @@ async function waitUntil(predicate, message, timeoutMs = 3000) {
   }
   assert.fail(message);
 }
+
+test('审批续执行保留模型、中文上下文与沟通规则，思考不混入正文', async t => {
+  const before = '将保存内容，授权后继续核对。';
+  const thinking = 'INTERNAL_REASONING_FIXTURE';
+  const fixture = await loopFixture(t, (_, n) => n === 1 ? {
+    frames: [{ choices: [{ delta: {
+      reasoning_content: thinking, content: before,
+      tool_calls: [{ index: 0, id: 'approved-write', type: 'function', function: {
+        name: 'write_file', arguments: JSON.stringify({ path: 'approved.txt', content: '已授权内容' }),
+      } }],
+    }, finish_reason: 'tool_calls' }] }],
+  } : { text: '已保存内容。' });
+  fixture.session.setMode('default');
+  let request;
+  t.after(onEvent(event => {
+    if (event.type === 'permission_request' && event.sessionId === fixture.session.id) request = event.request;
+  }));
+  const running = fixture.run('用中文说明，保存 approved.txt');
+  try {
+    await waitUntil(() => request, '未收到写入审批');
+    assert.equal(fixture.seen.length, 1, '等待审批时不重发模型请求');
+    assert.equal(fs.existsSync(path.join(fixture.root, 'approved.txt')), false);
+    assert.equal(resolveRequest(request.reqId, 'allow', fixture.session.id), true);
+    await running;
+    assert.equal(fixture.seen.length, 2);
+    assert.equal(fixture.seen[1].model, fixture.seen[0].model);
+    const history = fixture.seen[1].messages;
+    assert.ok(history.some(message => message.role === 'assistant' && message.content === before));
+    assert.ok(history.some(message => message.role === 'tool' && message.tool_call_id === 'approved-write'));
+    assert.ok(!JSON.stringify(history).includes(thinking), '思考不回灌为正文');
+    for (const body of fixture.seen) {
+      const system = body.messages.filter(message => message.role === 'system').map(message => message.content).join('\n');
+      assert.match(system, /始终沿用用户要求的语言/);
+      assert.match(system, /审批只决定待执行操作是否获准/);
+    }
+    assert.equal(fs.readFileSync(path.join(fixture.root, 'approved.txt'), 'utf8'), '已授权内容');
+    const replies = fixture.session.entries().filter(entry => entry.type === 'message' && entry.role === 'assistant');
+    assert.deepEqual(replies.map(entry => entry.text), [before, '已保存内容。']);
+  } finally {
+    if (request) resolveRequest(request.reqId, 'deny', fixture.session.id);
+    abortRun(fixture.session.id);
+    await running;
+  }
+});
+
+test('会话统计由真实请求生成，累计 usage 不重复，事件和分页重载一致', async t => {
+  const fixture = await loopFixture(t, () => ({ text: '统计完成', usages: [
+    { prompt_tokens: 100, completion_tokens: 10 },
+    { prompt_tokens: 100, completion_tokens: 20, prompt_tokens_details: { cached_tokens: 25 } },
+  ] }));
+  const events = [];
+  const dispose = onEvent(event => { if (event.sessionId === fixture.session.id) events.push(event); });
+  t.after(dispose);
+  await fixture.run('核对统计');
+  const snapshot = Session.load(fixture.session.id, fixture.session.directory).snapshot(128000, { limit: 1 });
+  assert.equal(snapshot.statistics.turns, 1);
+  assert.equal(snapshot.statistics.steps, 1);
+  assert.equal(snapshot.statistics.totalTokens, 120);
+  assert.equal(snapshot.statistics.cacheHitPercent, 25);
+  assert.ok(snapshot.statistics.tokensPerSecond > 0);
+  assert.equal(fixture.session.entries().filter(e => e.type === 'model_usage').length, 1);
+  assert.deepEqual(events.find(e => e.type === 'session_statistics').statistics, snapshot.statistics);
+  assert.equal(events.find(e => e.type === 'message_start').statistics.steps, 1);
+});
 
 test('立即调整会中断模型流、丢弃半截工具调用，并在同一 turn 重发上下文', async t => {
   const fixture = await loopFixture(t, (_, n) => n === 1 ? {
@@ -364,7 +448,7 @@ test('累计 usage 帧在每次模型响应中只计最终值，多轮仍累加'
 });
 
 test('真实循环在相同结果预警后收尾，无额外用户消息', { timeout: 30000 }, async t => {
-  const fixture = await loopFixture(t, body => body.messages[0].content.includes('相同参数和结果已出现') ? { text: '已核对，不再重复读取。' } : { call: { name: 'read_file', args: { path: 'input.txt' } } });
+  const fixture = await loopFixture(t, body => body.messages.at(-1).content.includes('相同参数和结果已出现') ? { text: '已核对，不再重复读取。' } : { call: { name: 'read_file', args: { path: 'input.txt' } } });
   await fixture.run('核对 input.txt 的内容，不修改文件');
   const summary = fixture.session.entries().findLast(e => e.type === 'task_summary');
   assert.equal(summary.reason, 'done'); assert.equal(summary.stepCount, 4);
@@ -373,7 +457,7 @@ test('真实循环在相同结果预警后收尾，无额外用户消息', { tim
 });
 
 test('真实循环收到收尾预算后正常结束；持续调用仍按原上限失败', { timeout: 30000 }, async t => {
-  const fixture = await loopFixture(t, body => body.messages[0].content.includes('已进入收尾预算') ? { text: '已完成必要核对。' } : { call: { name: 'read_file', args: { path: 'input.txt' } } }, { maxSteps: 4 });
+  const fixture = await loopFixture(t, body => body.messages.at(-1).content.includes('已进入收尾预算') ? { text: '已完成必要核对。' } : { call: { name: 'read_file', args: { path: 'input.txt' } } }, { maxSteps: 4 });
   await fixture.run('核对内容'); assert.equal(fixture.session.entries().findLast(e => e.type === 'task_summary').reason, 'done');
   assert.equal(fixture.seen.length, 4); assert.ok(fixture.session.entries().some(e => e.type === 'runtime_notice' && e.kind === 'wrap_up'));
   fixture.seen.length = 0;
@@ -392,7 +476,7 @@ test('截断文本有界恢复，禁用运行提醒也不能误判完整，原�
   const fixture = await loopFixture(t, () => ({ text: '无法完整输出', reason: 'length' }), { maxSteps: 10, runControl: { enabled: false } });
   await fixture.run('回答问题');
   assert.equal(fixture.seen.length, 3); assert.equal(fixture.session.entries().findLast(e => e.type === 'task_summary').reason, 'model_output_incomplete');
-  assert.match(fixture.seen[1].messages[0].content, /模型响应被截断/);
+  assert.match(fixture.seen[1].messages.at(-1).content, /模型响应被截断/);
 });
 
 test('收尾提醒不绕过质量门禁：无验证文字交付仍未完成', { timeout: 30000 }, async t => {
@@ -424,4 +508,27 @@ test('shell 超长输出保留尾部失败证据，结构化退出码不会被�
   const result = await withRunContext({ executionRoot: root, sandboxPolicy: { mode: 'off' } }, () => executeTool(getTool('bash'), { command: 'node large-output.cjs' }, { session: { id: 'test' }, timeoutMs: 10000 }));
   assert.equal(result.exitCode, 3); assert.match(result.content, /TAIL_FAILURE/); assert.equal(result.structuredContent.truncated, true);
   assert.ok(result.content.length < 1100000); const payload = prepareToolOutput(null, result); assert.match(payload.content, /TAIL_FAILURE/); assert.match(payload.content, /"exitCode":3/);
+});
+
+
+test('连续工具后在正常模型请求中提醒汇报，不新增请求或伪造进展', async t => {
+  const fixture = await loopFixture(t, (_, n) => n === 1
+    ? { call: { name: 'read_file', args: { path: 'input.txt' } } }
+    : { text: '已核对文件，内容为 stable。' });
+  await fixture.run('核对 input.txt 后回复');
+  assert.equal(fixture.seen.length, 2);
+  const system = body => body.messages.filter(message => message.role === 'system').map(message => message.content).join('\n');
+  assert.equal(system(fixture.seen[0]), system(fixture.seen[1]), '动态状态不能改变历史前的系统提示');
+  assert.doesNotMatch(system(fixture.seen[1]), /# 本轮运行控制|# 进展沟通提醒/);
+  assert.doesNotMatch(fixture.seen[0].messages.at(-1).content, /# 进展沟通提醒/);
+  assert.match(fixture.seen[1].messages.at(-1).content, /# 进展沟通提醒/);
+  assert.match(system(fixture.seen[1]), /连续 6–8 次工具调用/);
+  assert.deepEqual(fixture.seen[0].tools, fixture.seen[1].tools);
+  const prefix = fixture.seen[0].messages.slice(0, -1);
+  assert.deepEqual(fixture.seen[1].messages.slice(0, prefix.length), prefix, '已有历史前缀完整复用');
+  assert.equal(fixture.seen[0].prompt_cache_key, fixture.seen[1].prompt_cache_key);
+  assert.ok(!JSON.stringify(fixture.session.messages()).includes('<runtime_context>'), '临时状态不累积进入历史');
+  const replies = fixture.session.entries().filter(entry => entry.type === 'message' && entry.role === 'assistant' && entry.text);
+  assert.equal(replies.length, 1);
+  assert.equal(replies[0].text, '已核对文件，内容为 stable。');
 });

@@ -3,9 +3,11 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { getWorkspaceRoot, resolveInWorkspace } from './paths.mjs';
 import { docxExtractText, pptxExtractText, pptxRenderSlides, xlsxRead } from '../plugins/office/lib/ooxml.mjs';
+import { createSshWorkspaceDirectory, createSshWorkspaceFile, deleteSshWorkspaceItem, listSshWorkspaceDirectory, moveSshWorkspaceItem, readSshWorkspaceFile, renameSshWorkspaceItem, writeSshWorkspaceFile } from './ssh-workspace-provider.mjs';
+import { getActiveWorkspace } from './workspaces.mjs';
 
 const TEXT_EXTENSIONS = new Set([
-  '', '.txt', '.md', '.mdx', '.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.json', '.jsonc',
+  '', '.txt', '.tex', '.latex', '.typ', '.bib', '.sty', '.cls', '.md', '.mdx', '.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.json', '.jsonc',
   '.css', '.scss', '.less', '.html', '.htm', '.xml', '.svg', '.yaml', '.yml', '.toml', '.ini',
   '.env', '.gitignore', '.npmrc', '.editorconfig', '.py', '.rb', '.php', '.java', '.kt', '.kts',
   '.c', '.h', '.cc', '.cpp', '.hpp', '.cs', '.go', '.rs', '.swift', '.sql', '.sh', '.ps1', '.bat',
@@ -25,6 +27,7 @@ const MIME = {
   '.m4a': 'audio/mp4', '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime',
 };
 const MAX_TEXT_BYTES = 5 * 1024 * 1024;
+function activeRemoteWorkspace() { const workspace = getActiveWorkspace(); return workspace?.kind === 'ssh' ? workspace : null; }
 
 function cleanRelative(input = '') {
   const value = String(input).replaceAll('\\', '/').replace(/^\/+|\/+$/g, '');
@@ -66,6 +69,8 @@ function fileKind(file, sample) {
 }
 
 export function listDirectory(relativePath = '') {
+  const remote = activeRemoteWorkspace();
+  if (remote) return listSshWorkspaceDirectory(remote.connectionId, relativePath);
   const { relative, abs } = requireItem(relativePath, 'directory');
   const entries = fs.readdirSync(abs, { withFileTypes: true })
     .filter((entry) => entry.name !== '.agent')
@@ -87,6 +92,8 @@ export function listDirectory(relativePath = '') {
 }
 
 export function readWorkspaceFile(relativePath) {
+  const remote = activeRemoteWorkspace();
+  if (remote) return readSshWorkspaceFile(remote.connectionId, relativePath);
   const { relative, abs, stat } = requireItem(relativePath, 'file');
   const handle = fs.openSync(abs, 'r');
   const sample = Buffer.alloc(Math.min(stat.size, 8192));
@@ -115,6 +122,7 @@ export function readWorkspaceFile(relativePath) {
 }
 
 export function rawWorkspaceFile(relativePath) {
+  if (activeRemoteWorkspace()) throw new Error('远程媒体预览将在后续阶段支持');
   const item = requireItem(relativePath, 'file');
   const sample = Buffer.alloc(Math.min(item.stat.size, 8192));
   const handle = fs.openSync(item.abs, 'r');
@@ -123,6 +131,8 @@ export function rawWorkspaceFile(relativePath) {
 }
 
 export function writeWorkspaceFile(relativePath, content) {
+  const remote = activeRemoteWorkspace();
+  if (remote) return writeSshWorkspaceFile(remote.connectionId, relativePath, content);
   const { relative, abs } = absolute(relativePath, { write: true });
   if (!relative) throw new Error('不能写入工作目录根路径');
   if (fs.existsSync(abs) && fs.statSync(abs).isDirectory()) throw new Error('目标是文件夹');
@@ -134,6 +144,16 @@ export function writeWorkspaceFile(relativePath, content) {
 }
 
 export function createWorkspaceItem(parentPath, name, type = 'file') {
+  const remote = activeRemoteWorkspace();
+  if (remote) {
+    const safeName = String(name ?? '').trim();
+    if (!safeName || safeName === '.' || safeName === '..' || safeName.includes('/') || safeName.includes('\\') || safeName === '.agent') throw new Error('名称无效');
+    const parent = String(parentPath || '').replace(/\/$/, '');
+    const relative = parent ? `${parent}/${safeName}` : safeName;
+    if (type === 'directory') return createSshWorkspaceDirectory(remote.connectionId, relative);
+    if (type === 'file') return createSshWorkspaceFile(remote.connectionId, relative);
+    throw new Error('类型必须是 file 或 directory');
+  }
   const parent = requireItem(parentPath, 'directory');
   const safeName = String(name ?? '').trim();
   if (!safeName || safeName === '.' || safeName === '..' || safeName.includes('/') || safeName.includes('\\')) throw new Error('名称无效');
@@ -148,6 +168,8 @@ export function createWorkspaceItem(parentPath, name, type = 'file') {
 }
 
 export function renameWorkspaceItem(relativePath, newName) {
+  const remote = activeRemoteWorkspace();
+  if (remote) return renameSshWorkspaceItem(remote.connectionId, relativePath, newName);
   const source = requireItem(relativePath, 'write');
   if (!source.relative) throw new Error('不能重命名工作目录根路径');
   const safeName = String(newName ?? '').trim();
@@ -161,6 +183,8 @@ export function renameWorkspaceItem(relativePath, newName) {
 }
 
 export function moveWorkspaceItem(relativePath, targetDirectory) {
+  const remote = activeRemoteWorkspace();
+  if (remote) return moveSshWorkspaceItem(remote.connectionId, relativePath, targetDirectory);
   const source = requireItem(relativePath, 'write');
   if (!source.relative) throw new Error('不能移动工作目录根路径');
   const targetDir = requireItem(targetDirectory, 'directory');
@@ -174,6 +198,7 @@ export function moveWorkspaceItem(relativePath, targetDirectory) {
 }
 
 export function copyWorkspaceItem(relativePath, targetDirectory) {
+  if (activeRemoteWorkspace()) throw new Error('远程文件复制将在后续阶段支持');
   const source = requireItem(relativePath, 'read');
   if (!source.relative) throw new Error('不能复制工作目录');
   const targetDir = requireItem(targetDirectory, 'directory');
@@ -195,6 +220,8 @@ export function copyWorkspaceItem(relativePath, targetDirectory) {
 }
 
 export function deleteWorkspaceItem(relativePath) {
+  const remote = activeRemoteWorkspace();
+  if (remote) return deleteSshWorkspaceItem(remote.connectionId, relativePath);
   const item = requireItem(relativePath, 'write');
   if (!item.relative) throw new Error('不能删除工作目录');
   fs.rmSync(item.abs, { recursive: item.stat.isDirectory(), force: false });
@@ -202,6 +229,7 @@ export function deleteWorkspaceItem(relativePath) {
 }
 
 export function workspacePath(relativePath = '') {
+  if (activeRemoteWorkspace()) throw new Error('远程路径不是本机文件路径');
   return absolute(relativePath).abs;
 }
 
@@ -211,6 +239,7 @@ function launchDetached(command, args) {
 }
 
 export function revealWorkspaceItem(relativePath) {
+  if (activeRemoteWorkspace()) throw new Error('远程路径无法在本机资源管理器显示');
   const item = requireItem(relativePath, 'read');
   if (process.platform === 'win32') launchDetached('explorer.exe', item.stat.isDirectory() ? [item.abs] : ['/select,', item.abs]);
   else if (process.platform === 'darwin') launchDetached('open', ['-R', item.abs]);
@@ -219,6 +248,7 @@ export function revealWorkspaceItem(relativePath) {
 }
 
 export function openWorkspaceItem(relativePath) {
+  if (activeRemoteWorkspace()) throw new Error('远程路径无法由本机应用打开');
   const item = requireItem(relativePath, 'read');
   if (process.platform === 'win32') launchDetached('rundll32.exe', ['url.dll,FileProtocolHandler', item.abs]);
   else if (process.platform === 'darwin') launchDetached('open', [item.abs]);
@@ -227,5 +257,7 @@ export function openWorkspaceItem(relativePath) {
 }
 
 export function workspaceRootInfo() {
+  const remote = activeRemoteWorkspace();
+  if (remote) return { path: remote.remotePath, name: remote.name, kind: 'ssh', connectionId: remote.connectionId };
   return { path: getWorkspaceRoot(), name: path.basename(getWorkspaceRoot()) };
 }

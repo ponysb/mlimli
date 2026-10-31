@@ -1,3 +1,4 @@
+import {getRunContext} from './run-context.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -114,7 +115,7 @@ export class AppCenter {
     if (this.connected() && this.bridge.id !== clientId) throw new Error('应用台已由另一个桌面实例连接');
     this.bridge = { id: clientId, touched: this.now() };
     const jobs = [];
-    for (const job of this.jobs.values()) if (!job.dispatched) { job.dispatched = true; job.clientId = clientId; jobs.push({ id: job.id, app: job.app ? { ...job.app } : { ...this.get(job.appId) }, action: job.action, args: job.args }); }
+    for (const job of this.jobs.values()) if (!job.dispatched) { job.dispatched = true; job.clientId = clientId; jobs.push({ id: job.id, app: job.app ? { ...job.app } : { ...this.get(job.appId) }, action: job.action, args: job.args, assertAuthority:job.assertAuthority }); }
     return { jobs, activeJobIds: [...this.jobs.keys()] };
   }
   complete(clientId, id, result, error) {
@@ -133,7 +134,9 @@ export class AppCenter {
       const finish = (error, result) => { clearTimeout(timer); signal?.removeEventListener('abort', abort); this.jobs.delete(id); error ? reject(error) : resolve(result); };
       const abort = () => finish(new Error('任务已停止'));
       const timer = setTimeout(() => finish(new Error('应用台操作超时')), timeoutMs);
-      this.jobs.set(id, { id, appId, app, action, args, finish }); signal?.addEventListener('abort', abort, { once: true });
+      const originalAuthority=getRunContext()?.assertExecutionLease;
+      const assertAuthority=typeof originalAuthority==='function'?async()=>{if(!this.jobs.has(id)||signal?.aborted)throw new Error('浏览器作业已取消或超时');await originalAuthority();}:undefined;
+      this.jobs.set(id, { id, appId, app, action, args, finish, assertAuthority }); signal?.addEventListener('abort', abort, { once: true });
     });
   }
   openUrl(url, { sessionId, rootSessionId, signal, timeoutMs = 30000 } = {}) {

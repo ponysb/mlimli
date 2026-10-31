@@ -5,6 +5,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { buildSync } from 'esbuild';
 import { CLIENT_FILES, CLIENT_TREES, exportClient, planClientExport } from '../scripts/export-client.mjs';
 import { normalizeProtocol } from '../core/providers.mjs';
 import { setConfig, providerInfo, chat } from '../core/llm.mjs';
@@ -91,11 +92,10 @@ test('客户端发布清单包含完整本地运行代码，不含后台、官�
     }
   }
   for (const entry of plan.entries.filter(item => /\.(?:mjs|cjs|jsx|js)$/.test(item.path))) {
-    const imports = entry.path.startsWith('test/')
-      ? /^import\s+(?:[^;\n]*?\sfrom\s+)?['"](\.[^'"]+)['"]/gm
-      : /(?:from\s+|import\s+|require\()['"](\.[^'"]+)['"]/g;
-    for (const match of entry.data.toString('utf8').matchAll(imports)) {
-      const target = path.posix.normalize(path.posix.join(path.posix.dirname(entry.path), match[1]));
+    // Parse actual imports; generated browser fixture strings have their own resolveDir.
+    const { metafile } = buildSync({ stdin: { contents: entry.data.toString('utf8'), loader: entry.path.endsWith('.jsx') ? 'jsx' : 'js' }, bundle: true, external: ['*'], platform: 'node', format: 'esm', write: false, metafile: true, logLevel: 'silent' });
+    for (const dependency of Object.values(metafile.inputs).flatMap(input => input.imports).filter(item => item.path.startsWith('.'))) {
+      const target = path.posix.normalize(path.posix.join(path.posix.dirname(entry.path), dependency.path));
       assert.ok(paths.has(target), `发布包缺少本地依赖：${entry.path} → ${target}`);
     }
   }

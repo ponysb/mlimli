@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { duplicateGraph, generationContext, mediaKind, referenceContext, upstreamNodes, validReferenceRole, snapshot, selectionToolbarPosition } from '../react/src/film-canvas-model.mjs';
+import { duplicateGraph, generationContext, mediaKind, replacementMediaData, referenceContext, upstreamNodes, validReferenceRole, snapshot, selectionToolbarPosition } from '../react/src/film-canvas-model.mjs';
 const nodes = [
   { id: 'a', type: 'media', position: { x: 0, y: 0 }, data: { title: '参考', assetId: 'asset1' } },
   { id: 'b', type: 'result', position: { x: 320, y: 0 }, data: { title: '镜头', kind: 'video' } },
@@ -50,6 +50,23 @@ test('引用用途检查媒体类型和已有素材，支持路径识别视频',
   assert.equal(validReferenceRole({ type: 'media', data: { mime: 'audio/wav', path: 'voice.wav' } }, '音频'), true);
   assert.equal(validReferenceRole({ type: 'result', data: { mime: 'audio/wav' } }, '音频'), false);
   assert.equal(mediaKind({ path: 'shots/output.mp4' }), 'video');
+});
+test('替换素材会更新媒体类型并保留节点制作属性', () => {
+  const current = { title: '分镜一', kind: 'image', assetId: 'old', mime: 'image/png', model: 'image-model', params: { seed: 1 }, runId: 'run-1', status: 'error', error: '旧错误', favorite: true, shotId: 'shot-1', versions: [{ id: 'v1' }] };
+  const replaced = replacementMediaData(current, { id: 'new', title: 'clip.mp4', kind: 'video', mime: 'video/mp4' });
+  assert.equal(replaced.assetId, 'new');
+  assert.equal(replaced.kind, 'video');
+  assert.equal(replaced.mime, 'video/mp4');
+  assert.equal(replaced.title, '分镜一');
+  assert.equal(replaced.status, 'completed');
+  assert.equal(replaced.model, undefined);
+  assert.equal(replaced.params, undefined);
+  assert.equal(replaced.runId, undefined);
+  assert.equal(replaced.error, undefined);
+  assert.equal(replaced.favorite, true);
+  assert.equal(replaced.shotId, 'shot-1');
+  assert.deepEqual(replaced.versions, [{ id: 'v1' }]);
+  assert.equal(replacementMediaData({}, { title: 'sound.wav' }).title, 'sound.wav');
 });
 test('发送上下文保留媒体与语义关系；历史快照不受之后编辑影响', () => {
   const refs = referenceContext([nodes[1]], edges);

@@ -82,9 +82,9 @@
 .agent-detail-compose button:disabled { opacity: .45; cursor: default; }
 .agent-detail-loading, .agent-detail-error { display: flex; align-items: center; gap: 8px; margin: 18px 22px; color: var(--muted); font-size: 12px; }
 .agent-detail-error { color: #b5524b; }
-.subagent-message { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--line); border-left: 2px solid #79ae91; border-radius: 6px; font-size: 12px; }
+.subagent-message { margin: 6px 0; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; }
 .subagent-message summary { display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--muted); }
-.subagent-message .message-content { margin-top: 10px; }
+.subagent-message .message-content { margin-top: 6px; }
 .subagent-parent { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); font-size: 12px; }
 .subagent-parent button { padding: 5px 9px; border: 1px solid var(--line); border-radius: 5px; background: transparent; color: inherit; cursor: pointer; }
 .swarm-goal { overflow-wrap: anywhere; }

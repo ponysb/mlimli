@@ -1,8 +1,8 @@
 import React from 'react';
-import { BookOpen, File, Folder, Package, X } from 'lucide-react';
+import { BookOpen, File, Folder, Package, Server, X } from 'lucide-react';
 
-const icons = { file: File, folder: Folder, skill: BookOpen, plugin: Package };
-const labels = { file: '文件', folder: '文件夹', skill: 'Skill', plugin: '插件' };
+const icons = { file: File, folder: Folder, skill: BookOpen, plugin: Package, mcp: Server };
+const labels = { file: '文件', folder: '文件夹', skill: 'Skill', plugin: '插件', mcp: 'MCP' };
 export default function ComposerReferences({ items, onRemove }) {
   if (!items.length) return null;
   return <div className={`composer-references ${onRemove ? '' : 'read-only'}`} aria-label="已引用内容">{items.map(item => {

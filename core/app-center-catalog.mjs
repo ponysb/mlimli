@@ -3,7 +3,7 @@ import { accountServerUrl, publicAccountStatus } from './account.mjs';
 export function createCatalogSync({ fetcher = fetch, now = Date.now } = {}) {
   let cached, pending;
   return async (center, { force = false, baseUrl = accountServerUrl(), enabled = publicAccountStatus().enabled } = {}) => {
-    if (!enabled) return {};
+    if (process.env.MLI_CLOUD_MODE==='1' || !enabled) return {};
     if (pending?.baseUrl === baseUrl) return pending.promise;
     if (!force && cached?.baseUrl === baseUrl && cached.expires > now()) { if (cached.items) center.syncCatalog(cached.items); return cached.status; }
     const promise = (async () => {

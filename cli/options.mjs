@@ -11,6 +11,10 @@ export const HELP = `MLI Agent
   mli logout
   mli serve
   mli acp [--cwd PATH]
+  mli plugins list
+  mli plugins install npm:PACKAGE@VERSION|LOCAL_DIRECTORY
+  mli plugins reload
+  mli plugins remove PACKAGE_ID
 
   --data-dir PATH   User configuration directory
   --connect URL     Connect to an existing loopback runtime
@@ -20,7 +24,7 @@ export const HELP = `MLI Agent
 
 export function parseOptions(args, cwd = process.cwd()) {
   const options = { command: 'tui', cwd: path.resolve(cwd), positional: [], json: false, auto: false };
-  const commands = new Set(['exec', 'models', 'model', 'config', 'login', 'logout', 'serve', 'acp']);
+  const commands = new Set(['exec', 'models', 'model', 'config', 'login', 'logout', 'serve', 'acp', 'plugins']);
   for (let index = 0; index < args.length; index++) {
     const value = args[index];
     if (value === '--') { options.positional.push(...args.slice(index + 1)); break; }

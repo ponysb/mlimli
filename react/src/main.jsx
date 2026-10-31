@@ -1,3 +1,6 @@
+import TypesettingPreview from './TypesettingPreview.jsx';
+import { latexLanguage, typstLanguage } from './typesetting-language.mjs';
+import McpAuthorization from './McpAuthorization.jsx';
 import React, {
   useEffect,
   useLayoutEffect,
@@ -21,6 +24,7 @@ import {
   Activity,
   AlarmClock,
   AppWindow,
+  ArrowDownToLine,
   Archive,
   ArrowUp,
   Bot,
@@ -39,6 +43,7 @@ import {
   Code2,
   Coins,
   Copy,
+  Download,
   ExternalLink,
   Eye,
   File,
@@ -51,6 +56,7 @@ import {
   FolderOpen,
   FolderPlus,
   GitBranch,
+  GitCommit,
   Globe,
   Images,
   LayoutDashboard,
@@ -93,9 +99,11 @@ import {
   selectVisibleModels,
 } from "./remote-model-selection.mjs";
 import { indexConversationBoundaries } from "./conversation-index.mjs";
+import { groupRunActivities, summarizeToolActivity, toolNeedsAttention } from "./run-activity.mjs";
 import "streamdown/styles.css";
 import ExpertSkillLibrary from "./ExpertSkillLibrary.jsx";
 import ConversationAvatar from "./ConversationAvatar.jsx";
+import SessionStatistics from "./SessionStatistics.jsx";
 import SidebarFunctions from "./SidebarFunctions.jsx";
 import VoiceInput from "./VoiceInput.jsx";
 import MeetingHistory from "./MeetingHistory.jsx";
@@ -106,7 +114,8 @@ import PermissionModePopover, {
 } from "./PermissionModePopover.jsx";
 import VoiceProfilesSettings from "./VoiceProfilesSettings.jsx";
 import SpeechModelSettings from "./SpeechModelSettings.jsx";
-import TerminalWorkspace from "./TerminalWorkspace.jsx";
+import TerminalWorkspace, { SshConnectionDialog } from "./TerminalWorkspace.jsx";
+import WorkspaceAddDialog from "./WorkspaceAddDialog.jsx";
 const FilmCanvas = React.lazy(() => import("./FilmCanvas.jsx"));
 import {
   applyTerminalEvent,
@@ -127,6 +136,7 @@ import { splitComposerReferences } from "./composer-capabilities.mjs";
 import ReasoningSettings from "./ReasoningSettings.jsx";
 import MemorySettings from "./MemorySettings.jsx";
 import AcpSettings from "./AcpSettings.jsx";
+import McpSettings from "./McpSettings.jsx";
 import TaskSplitLayout from "./TaskSplitLayout.jsx";
 import PreviewAnnotations, { AnnotationSurface } from "./PreviewAnnotations.jsx";
 import AnnotatedHtml from './AnnotatedHtml.jsx';
@@ -198,7 +208,7 @@ const MODE = {
   },
   "auto-all": {
     label: "完全访问",
-    desc: "自动允许文件修改和命令执行",
+    desc: "自动批准所有已开放工具；只读、沙箱、桌面开关和云端授权仍生效",
     tone: "danger",
   },
 };
@@ -206,6 +216,11 @@ const MODE = {
 function App() {
   const [appRequest, setAppRequest] = useState(null);
   const [agentWorkspaceOpen, setAgentWorkspaceOpen] = useState(false);
+  const [workspaceAddOpen, setWorkspaceAddOpen] = useState(false);
+  const [workspaceAddAnchor, setWorkspaceAddAnchor] = useState(null);
+  const [workspaceSessionTarget, setWorkspaceSessionTarget] = useState(null);
+  useEffect(()=>{const receive=event=>{const text=event.detail?.text;if(typeof text!=='string')return;setDraft(value=>value?`${value}\n\n${text}`:text);setView('task');};window.addEventListener('mli-terminal-agent-draft',receive);return()=>window.removeEventListener('mli-terminal-agent-draft',receive);},[]);
+  const [workspaceSshOpen, setWorkspaceSshOpen] = useState(false);
   const [contextPopupOpen, setContextPopupOpen] = useState(() => {
     try {
       const savedPanel = localStorage.getItem("mli.right-panel");
@@ -226,7 +241,7 @@ function App() {
     }
   });
   const [appTabOpen, setAppTabOpen] = useState(false);
-  const [terminalTabOpen, setTerminalTabOpen] = useState(false);
+  const [terminalTabOwner, setTerminalTabOwner] = useState(null);
   const [browserTabs, setBrowserTabs] = useState([]);
   const [workspaceTabs, setWorkspaceTabs] = useState([]);
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState('conversation');
@@ -290,6 +305,9 @@ function App() {
     [assetRevision, setAssetRevision] = useState(0),
     [scheduleRevision, setScheduleRevision] = useState(0),
     [terminalPanes, setTerminalPanes] = useState([{ id: 'terminal-1', terminal: null, launching: false }]),
+    [sshConnections, setSshConnections] = useState([]),
+    [activeSshIds, setActiveSshIds] = useState([]),
+    [sshConnectionId, setSshConnectionId] = useState(''),
     [unreadSessionIds, setUnreadSessionIds] = useState(() => new Set());
   const marketing = useMarketing(account);
   useEffect(() => { if (view === 'app-center') setAppTabOpen(true); }, [view]);
@@ -313,6 +331,8 @@ function App() {
   }, [current?.id, current?.goal?.text]);
   const currentId = useRef(null),
     terminalPaneSequence = useRef(1),
+    terminalSwitchQueue = useRef(Promise.resolve()),
+    terminalBackendRef = useRef(''),
     terminalPaneByRun = useRef(new Map()),
     terminalEventQueue = useRef(new Map()),
     terminalCloseRequested = useRef(new Set()),
@@ -330,6 +350,7 @@ function App() {
     const timer = window.setTimeout(() => setToast(null), 1800);
     return () => window.clearTimeout(timer);
   }, [toast]);
+  useEffect(() => { reloadSshConnections().catch(() => {}); }, []);
   async function copyToClipboard(text, stage = "message_copy") {
     try {
       await navigator.clipboard.writeText(String(text || ""));
@@ -761,6 +782,14 @@ function App() {
       setAccount(e.account);
       return;
     }
+    if (e.type === 'ssh_connection_status') {
+      setActiveSshIds(ids => e.connected ? (ids.includes(e.connectionId) ? ids : [...ids, e.connectionId]) : ids.filter(id => id !== e.connectionId));
+      if (!e.connected) {
+        if (terminalBackendRef.current === e.connectionId) terminalBackendRef.current = '';
+        setSshConnectionId(id => id === e.connectionId ? '' : id);
+      }
+      return;
+    }
     if (e.type === "catalog_updated" || e.type === "plugins_reloaded") {
       loadInfo().catch(() => {});
       return;
@@ -778,6 +807,7 @@ function App() {
       return;
     }
     if (e.type === "workspace_changed") {
+      switchTerminalBackend(e.workspace?.kind === 'ssh' ? e.workspace.connectionId : '', { restart: true });
       const pendingAction = pendingWorkspaceAction.current;
       pendingWorkspaceAction.current = null;
       setWorkspaceTabs([]);
@@ -908,6 +938,7 @@ function App() {
           };
         });
     } else if (e.type === "message_start") {
+      if (e.statistics) setCurrent((x) => x ? { ...x, statistics: e.statistics } : x);
       setRunning(true);
       setLive((x) => {
         const sameTurn =
@@ -997,6 +1028,9 @@ function App() {
     else if (e.type === "ui_request") setUiRequest(e.request);
     else if (e.type === "ui_resolved")
       setUiRequest((value) => (value?.reqId === e.reqId ? null : value));
+    else if (e.type === "session_statistics") {
+      setCurrent((x) => x ? { ...x, statistics: e.statistics } : x);
+    }
     else if (e.type === "context_update") {
       setCurrent((x) => (x ? { ...x, context: e.context } : x));
       setLive((x) => (x ? { ...x, context: e.context } : x));
@@ -1051,14 +1085,55 @@ function App() {
       setError(toUiError(e, "ui_request"));
     }
   }
-  async function addWorkspace() {
-    const path = window.desktop?.chooseDirectory
-      ? await window.desktop.chooseDirectory()
-      : await promptAction("输入工作目录绝对路径");
-    if (path) await post("/api/workspaces", { path });
+  function addWorkspace(event) { setWorkspaceAddAnchor(event?.currentTarget?.getBoundingClientRect?.().toJSON?.() || null); setWorkspaceSessionTarget(null); setWorkspaceAddOpen(true); reloadSshConnections().catch(() => {}); }
+  function changeWorkspaceFromComposer(event) { setWorkspaceAddAnchor(event?.currentTarget?.getBoundingClientRect?.().toJSON?.() || null); setWorkspaceSessionTarget(current?.id || null); setWorkspaceAddOpen(true); reloadSshConnections().catch(() => {}); }
+  async function createWorkspaceFromDialog(input) {
+    if (input.kind === 'ssh') {
+      await setSshWorkspaceRoot(input.connectionId, input.path);
+      input = { kind: 'ssh', connectionId: input.connectionId };
+    }
+    const result = await post(workspaceSessionTarget ? `/api/session/${workspaceSessionTarget}/workspace` : '/api/workspaces', input);
+    await loadInfo(); await loadSessions(false);
+    if (workspaceSessionTarget) await loadSession(workspaceSessionTarget);
+    else openWorkbench();
+    return result.workspace;
+  }
+  async function cloneWorkspaceFromDialog({ url, workspace }) {
+    if (!workspace?.id || !workspace.path) throw new Error('请先选择本地工作目录');
+    if (workspace.kind === 'ssh') throw new Error('当前为 SSH 工作区，暂不支持本机克隆');
+    const result = await post('/api/workspaces/clone', { url, workspaceId: workspace.id });
+    setFileRevision(value => value + 1);
+    setToast({ id: Date.now(), message: result.mode === 'reference' ? `未找到 Git，仓库地址已保存到 ${result.name}，供 Agent 读取` : `已克隆到当前工作区：${result.name}` });
+    return result;
+  }
+  async function loadWorkspaceRepositories(workspace) {
+    if (!workspace?.id || workspace.kind === 'ssh') return [];
+    const result = await api(`/api/workspaces/repositories?workspaceId=${encodeURIComponent(workspace.id)}`);
+    return result.repositories;
+  }
+  async function chooseWorkspaceFromDialog(workspace) {
+    if (workspace.kind === 'ssh' && !activeSshIds.includes(workspace.connectionId)) throw new Error('请先连接 SSH 服务器');
+    if (workspaceSessionTarget) {
+      await post(`/api/session/${workspaceSessionTarget}/workspace`, workspace.kind === 'ssh' ? { kind: 'ssh', connectionId: workspace.connectionId } : { path: workspace.path });
+      await loadInfo(); await loadSessions(false); await loadSession(workspaceSessionTarget);
+    } else { await activateWorkspace(workspace.id); await loadInfo(); await loadSessions(false); openWorkbench(); }
   }
   async function activateWorkspace(id) {
     await post(`/api/workspaces/${id}/activate`);
+  }
+  async function selectSshWorkspace(id) {
+    const workspace = workspaces.find(item => item.id === id);
+    if (!workspace || workspace.kind !== 'ssh' || !activeSshIds.includes(workspace.connectionId)) {
+      throw new Error('SSH 工作区不存在或连接已断开');
+    }
+    if (workspace.id !== activeWorkspace?.id) {
+      await activateWorkspace(id);
+      await loadInfo();
+      await loadSessions(false);
+      await switchTerminalBackend(workspace.connectionId);
+      openWorkbench();
+    }
+    return true;
   }
   async function removeWorkspaceFromList(workspace) {
     try {
@@ -1121,6 +1196,11 @@ function App() {
     const value = (direct ? override : draft).trim();
     const pending = direct ? extraAttachments : [...attachments, ...extraAttachments];
     if ((!value && !pending.length) || !activeWorkspace) return false;
+    const selectedModel = info?.models?.find(item => item.id === info?.activeModelId);
+    if (pending.some(item => item.name === '文档选区.png') && selectedModel?.capabilities?.image === false) {
+      setError('当前模型不支持图片，请切换支持图片的模型，或关闭“附带可见截图”后重试。');
+      return false;
+    }
     const clientMessageId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     if (!direct) {
       setDraft("");
@@ -1224,6 +1304,7 @@ function App() {
   }
   async function showCapabilityGuide() {
     if (!activeWorkspace || running) return;
+    window.dispatchEvent(new CustomEvent("mli:capability-guide-status", { detail: { status: "loading" } }));
     const demoModel = info?.models?.find((model) =>
       info?.providers?.some(
         (provider) =>
@@ -1243,6 +1324,8 @@ function App() {
       );
     } catch (error) {
       setError(toUiError(error, "capability_guide"));
+    } finally {
+      window.dispatchEvent(new CustomEvent("mli:capability-guide-status", { detail: { status: "idle" } }));
     }
   }
   async function adjustQueued(item) {
@@ -1355,24 +1438,6 @@ function App() {
       setError(toUiError(e, "expert_clear"));
     }
   }
-  async function changeSessionWorkspace() {
-    if (!current || running) return;
-    const path = window.desktop?.chooseDirectory
-      ? await window.desktop.chooseDirectory()
-      : await promptAction(
-          "输入新的工作目录绝对路径",
-          activeWorkspace?.path || "",
-        );
-    if (!path) return;
-    try {
-      await post(`/api/session/${current.id}/workspace`, { path });
-      await loadInfo();
-      await loadSessions();
-      await loadSession(current.id);
-    } catch (e) {
-      setError(toUiError(e, "workspace_change"));
-    }
-  }
   function openFile(file) {
     setSelectedFile(file || null);
     setPreviewMedia(null);
@@ -1383,6 +1448,9 @@ function App() {
       setView('file');
     } else { setActiveWorkspaceTab('conversation'); setView(current ? 'task' : 'workbench'); }
     if (window.innerWidth <= 800) setSidebarOpen(false);
+  }
+  async function moveRemoteFileToFolder(item) {
+    return promptAction('移动到远程文件夹（相对路径）', item ? parentPath(item.path) : '');
   }
   function openMediaPreview(item) {
     if (item?.type === "file" && item.workspacePath) {
@@ -1401,6 +1469,7 @@ function App() {
   async function closeWorkspaceTab(id) {
     const tab = workspaceTabs.find(item => item.id === id);
     if (tab?.dirty && !(await confirmAction(`“${tab.file?.name || '文件'}”有未保存修改，关闭并放弃修改吗？`, { confirmLabel: '放弃修改并关闭' }))) return;
+    if (terminalTabOwner?.id === id) closeTerminal();
     setWorkspaceTabs(tabs => tabs.filter(tab => tab.id !== id));
     if (activeWorkspaceTab === id) { setActiveWorkspaceTab('conversation'); setView(current ? 'task' : 'workbench'); }
   }
@@ -1419,6 +1488,7 @@ function App() {
     setBrowserTabs(tabs => tabs.map(tab => tab.id === id ? { ...tab, url: state.url || tab.url, title: state.title || tab.title } : tab));
   }
   async function closeBrowserTab(id) {
+    if (terminalTabOwner?.id === id) closeTerminal();
     await window.desktop?.closeBrowserTab?.(id).catch(() => {});
     setBrowserTabs(tabs => tabs.filter(tab => tab.id !== id));
     if (activeWorkspaceTab === id) { setActiveWorkspaceTab('conversation'); setView(current ? 'task' : 'workbench'); }
@@ -1429,7 +1499,7 @@ function App() {
   }
   function openTerminal() {
     if (view !== 'terminal') terminalReturnView.current = { view, activeWorkspaceTab };
-    setTerminalTabOpen(true);
+    if (view !== 'terminal') setTerminalTabOwner({ view, id: activeWorkspaceTab });
     setView("terminal");
     if (window.innerWidth <= 800) setSidebarOpen(false);
   }
@@ -1472,12 +1542,114 @@ function App() {
       return false;
     }
   }
+  async function reloadSshConnections() {
+    const result = await get('/api/ssh/connections');
+    const credentials = await window.desktop?.sshCredentialStatus?.().catch(() => null);
+    const connections = (result.connections || []).map(c => ({ ...c, passwordSaved: Boolean(credentials?.savedIds.includes(c.id)) }));
+    setSshConnections(connections);
+    setActiveSshIds((result.active || []).map(item => item.id));
+    setSshConnectionId(current => current && connections.some(item => item.id === current) ? current : '');
+    return result;
+  }
+  async function saveSshConnection(connection) {
+    const { password, rememberPassword, ...configuration } = connection;
+    const saved = window.desktop?.sshSaveConnection
+      ? await window.desktop.sshSaveConnection(connection)
+      : (await post('/api/ssh/connections', configuration)).connection;
+    await reloadSshConnections();
+    return saved;
+  }
+  async function probeSshHost(id) {
+    return post(`/api/ssh/connections/${id}/probe`);
+  }
+  async function trustAndConnectSsh(id, fingerprint, passphrase, password, rememberPassword) {
+    if (fingerprint) await post(`/api/ssh/connections/${id}/confirm-host-key`, { fingerprint });
+    if (window.desktop?.sshConnect) await window.desktop.sshConnect({ id, passphrase, password, rememberPassword });
+    else await post(`/api/ssh/connections/${id}/connect`, { passphrase, password });
+    await reloadSshConnections();
+    await switchTerminalBackend(id);
+  }
+  async function disconnectSsh(id) {
+    if (sshConnectionId === id) await switchTerminalBackend('');
+    await post(`/api/ssh/connections/${id}/disconnect`);
+    await reloadSshConnections();
+  }
+  async function deleteSshConnection(id) {
+    if (sshConnectionId === id) await switchTerminalBackend('');
+    if (window.desktop?.sshDeleteConnection) await window.desktop.sshDeleteConnection(id);
+    else await api(`/api/ssh/connections/${id}`, { method: 'DELETE' });
+    await reloadSshConnections();
+  }
+  async function browseSshWorkspace(id, remotePath) {
+    return post(`/api/ssh/connections/${id}/workspace`, { path: remotePath || '/', action: 'browse' });
+  }
+  async function validateSshWorkspace(id, remotePath) {
+    return post(`/api/ssh/connections/${id}/workspace`, { path: remotePath });
+  }
+  async function setSshWorkspaceRoot(id, remotePath) {
+    const result = await post(`/api/ssh/connections/${id}/workspace/root`, { path: remotePath });
+    await reloadSshConnections();
+    return result.workspace;
+  }
+  async function readSshMetrics(id) {
+    return get(`/api/ssh/connections/${id}/metrics`);
+  }
+  async function addSshWorkspace(id) {
+    const result = await post('/api/workspaces', { kind: 'ssh', connectionId: id });
+    return result.workspace;
+  }
+  async function readSshGitInfo(id) {
+    return get(`/api/ssh/connections/${id}/git`);
+  }
+  async function updateSshGitRemote(id, change) {
+    return post(`/api/ssh/connections/${id}/git`, change);
+  }
+  async function readWorkspaceGitInfo(workspace) {
+    return workspace?.kind === 'ssh'
+      ? readSshGitInfo(workspace.connectionId)
+      : get(`/api/workspaces/${workspace.id}/git`);
+  }
+  async function updateWorkspaceGitRemote(workspace, change) {
+    return workspace?.kind === 'ssh'
+      ? updateSshGitRemote(workspace.connectionId, change)
+      : post(`/api/workspaces/${workspace.id}/git`, change);
+  }
+  async function runWorkspaceGitAction(workspace, operation) {
+    const body = { action: 'operation', operation };
+    return workspace?.kind === 'ssh'
+      ? post(`/api/ssh/connections/${workspace.connectionId}/git`, body)
+      : post(`/api/workspaces/${workspace.id}/git`, body);
+  }
+  async function switchTerminalBackend(id, { restart = false } = {}) {
+    const switchBackend = async () => {
+      if (id === terminalBackendRef.current && !restart) return;
+      if (terminalPanes.some(pane => pane.launching)) {
+        setError(toUiError(new Error('终端正在启动，请稍后切换执行位置。'), 'ssh_terminal'));
+        return;
+      }
+      const runningIds = terminalPanes.map(pane => pane.terminal?.terminalId).filter(Boolean);
+      await Promise.all(runningIds.map(terminalId => post(`/api/terminal/${terminalId}/stop`).catch(() => {})));
+      if (runningIds.length) await new Promise(resolve => setTimeout(resolve, 600));
+      setTerminalPanes(panes => panes.map(pane => ({ ...pane, terminal: null, launching: false })));
+      terminalBackendRef.current = id;
+      setSshConnectionId(id);
+    };
+    const pending = terminalSwitchQueue.current.then(switchBackend, switchBackend);
+    terminalSwitchQueue.current = pending.catch(() => {});
+    return pending;
+  }
   async function startInteractiveTerminal(paneId, dimensions = {}) {
     const pane = terminalPanes.find(item => item.id === paneId);
-    if (pane?.terminal?.terminalId || pane?.launching) return pane?.terminal?.terminalId || false;
+    if (pane?.launching) return false;
+    if (pane?.terminal?.terminalId && ['running', 'starting'].includes(pane.terminal.status)) return pane.terminal.terminalId;
+    const { sshConnectionId: selectedSshId = '', ...terminalSize } = dimensions;
+    if (selectedSshId && !activeSshIds.includes(selectedSshId)) {
+      setError(toUiError(new Error('请先在 SSH 服务器管理中连接此主机。'), 'ssh_terminal'));
+      return false;
+    }
     setTerminalPanes(panes => panes.map(item => item.id === paneId ? { ...item, launching: true } : item));
     try {
-      const result = await post('/api/terminal/interactive', dimensions);
+      const result = await post('/api/terminal/interactive', { ...terminalSize, ...(selectedSshId ? { sshConnectionId: selectedSshId } : {}) });
       terminalPaneByRun.current.set(result.terminalId, paneId);
       const events = terminalEventQueue.current.get(result.terminalId) || [];
       terminalEventQueue.current.delete(result.terminalId);
@@ -1513,8 +1685,8 @@ function App() {
   function clearTerminal(paneId) {
     setTerminalPanes(panes => panes.map(pane => pane.id === paneId && pane.terminal ? { ...pane, terminal: { ...pane.terminal, lines: [] } } : pane));
   }
-  function addTerminalPane() {
-    setTerminalPanes(panes => [...panes, { id: `terminal-${++terminalPaneSequence.current}`, terminal: null, launching: false }]);
+  function addTerminalPane(id) {
+    setTerminalPanes(panes => [...panes, { id: typeof id === 'string' ? id : `terminal-${++terminalPaneSequence.current}`, terminal: null, launching: false }]);
   }
   function closeTerminalPane(paneId) {
     const pane = terminalPanes.find(item => item.id === paneId);
@@ -1523,7 +1695,7 @@ function App() {
     setTerminalPanes(panes => panes.length <= 1 ? panes : panes.filter(item => item.id !== paneId));
   }
   function closeTerminal() {
-    setTerminalTabOpen(false);
+    setTerminalTabOwner(null);
     for (const pane of terminalPanes) {
       if (pane.launching && !pane.terminal?.terminalId) terminalCloseRequested.current.add(pane.id);
       if (pane.terminal?.terminalId) post(`/api/terminal/${pane.terminal.terminalId}/stop`).catch(() => {});
@@ -1828,7 +2000,7 @@ function App() {
       }}
       info={info}
       workspace={activeWorkspace}
-      onWorkspace={current ? changeSessionWorkspace : addWorkspace}
+      onWorkspace={changeWorkspaceFromComposer}
       onMode={setMode}
       onModelsChanged={reloadConfiguration}
       onAgents={() => setAgentWorkspaceOpen(true)}
@@ -1958,6 +2130,9 @@ function App() {
         "--right-panel-width": `${rightPanelWidth}px`,
       }}
     >
+      {workspaceAddOpen && <div style={workspaceSshOpen ? { display: 'none' } : undefined}><WorkspaceAddDialog workspaces={workspaces} connections={sshConnections} activeIds={activeSshIds} sessionMode={Boolean(workspaceSessionTarget)} anchorRect={workspaceAddAnchor} suspended={workspaceSshOpen} onClose={() => setWorkspaceAddOpen(false)} onManageSsh={() => setWorkspaceSshOpen(true)} onCreate={createWorkspaceFromDialog} onRepository={cloneWorkspaceFromDialog} onLoadRepositories={loadWorkspaceRepositories} onBrowseRemote={browseSshWorkspace} onValidateRemote={validateSshWorkspace} onReload={async () => { await loadInfo(); await reloadSshConnections(); }}/></div>}
+      {workspaceSshOpen && <SshConnectionDialog connections={sshConnections} activeIds={activeSshIds} workspaces={workspaces} activeWorkspace={activeWorkspace} onClose={() => setWorkspaceSshOpen(false)} onReload={reloadSshConnections} onSave={saveSshConnection} onProbe={probeSshHost} onTrustAndConnect={trustAndConnectSsh} onDisconnect={disconnectSsh} onDelete={deleteSshConnection} onSetWorkspace={setSshWorkspaceRoot} onAddWorkspace={addSshWorkspace} onSelectWorkspace={selectSshWorkspace} onMetrics={readSshMetrics} onGitInfo={readSshGitInfo} onGitRemote={updateSshGitRemote} onError={message => setError(toUiError(new Error(message), 'ssh'))}/>}
+
       <Sidebar
         marketing={marketing.data}
         info={info}
@@ -2023,6 +2198,9 @@ function App() {
         selectedFile={selectedFile}
         fileRevision={fileRevision}
         onFileRevision={() => setFileRevision((x) => x + 1)}
+        onGitInfo={readWorkspaceGitInfo}
+        onGitRemote={updateWorkspaceGitRemote}
+        onGitAction={runWorkspaceGitAction}
         onToggle={toggleSidebar}
       />
       {sidebarOpen && (
@@ -2039,17 +2217,17 @@ function App() {
             <header className="workspace-tabbar">
               <button className="workspace-sidebar-toggle" aria-label={sidebarOpen ? '收起项目侧栏' : '展开项目侧栏'} title={sidebarOpen ? '收起项目侧栏' : '展开项目侧栏'} onClick={() => setSidebarOpen(value => !value)}><Menu size={17}/></button>
               <div className="workspace-tabs" role="tablist" aria-label="工作区标签页">
-                <button role="tab" title={current?.title || '会话'} aria-selected={["task", "workbench"].includes(view)} onClick={() => { setActiveWorkspaceTab('conversation'); setView(current ? 'task' : 'workbench'); }}><MessageSquare size={14}/><span>{current?.title || '会话'}</span></button>
-                {appTabOpen && <div className={`workspace-file-tab ${view === 'app-center' ? 'active' : ''}`}><button role="tab" aria-selected={view === 'app-center'} onClick={() => setView('app-center')}><Globe size={14}/>应用台</button><button className="workspace-tab-close" aria-label="关闭应用台标签页" title="关闭标签页" onClick={() => { setAppTabOpen(false); if (view === 'app-center') setView(current ? 'task' : 'workbench'); }}><X size={12}/></button></div>}
-                {browserTabs.map(tab => <div className={`workspace-file-tab ${(tab.kind === 'film-canvas' ? view === 'film-canvas' : view === 'browser') && activeWorkspaceTab === tab.id ? 'active' : ''}`} key={tab.id}>
-                  <button role="tab" aria-selected={(tab.kind === 'film-canvas' ? view === 'film-canvas' : view === 'browser') && activeWorkspaceTab === tab.id} title={tab.title} onClick={() => { setActiveWorkspaceTab(tab.id); setView(tab.kind === 'film-canvas' ? 'film-canvas' : 'browser'); }}>{tab.kind === 'film-canvas' ? <Film size={14}/> : <Globe size={14}/>}<span>{tab.title || '新标签页'}</span></button>
+                <button role="tab" title={terminalTabOwner && ['task', 'workbench'].includes(terminalTabOwner.view) ? '终端' : current?.title || '会话'} aria-selected={["task", "workbench"].includes(view) || view === 'terminal' && ['task', 'workbench'].includes(terminalTabOwner?.view)} onClick={() => { setActiveWorkspaceTab('conversation'); setView(terminalTabOwner && ['task', 'workbench'].includes(terminalTabOwner.view) ? 'terminal' : current ? 'task' : 'workbench'); }}>{terminalTabOwner && ['task', 'workbench'].includes(terminalTabOwner.view) ? <SquareTerminal size={14}/> : <MessageSquare size={14}/>}<span>{terminalTabOwner && ['task', 'workbench'].includes(terminalTabOwner.view) ? '终端' : current?.title || '会话'}</span></button>
+                {appTabOpen && <div className={`workspace-file-tab ${view === 'app-center' || view === 'terminal' && terminalTabOwner?.view === 'app-center' ? 'active' : ''}`}><button role="tab" aria-selected={view === 'app-center' || view === 'terminal' && terminalTabOwner?.view === 'app-center'} onClick={() => setView(terminalTabOwner?.view === 'app-center' ? 'terminal' : 'app-center')}>{terminalTabOwner?.view === 'app-center' ? <SquareTerminal size={14}/> : <Globe size={14}/>}{terminalTabOwner?.view === 'app-center' ? '终端' : '应用台'}</button><button className="workspace-tab-close" aria-label="关闭应用台标签页" title="关闭标签页" onClick={() => { if (terminalTabOwner?.view === 'app-center') closeTerminal(); setAppTabOpen(false); if (view === 'app-center' || view === 'terminal' && terminalTabOwner?.view === 'app-center') setView(current ? 'task' : 'workbench'); }}><X size={12}/></button></div>}
+                {browserTabs.map(tab => <div className={`workspace-file-tab ${((tab.kind === 'film-canvas' ? view === 'film-canvas' : view === 'browser') || view === 'terminal' && terminalTabOwner?.id === tab.id) && activeWorkspaceTab === tab.id ? 'active' : ''}`} key={tab.id}>
+                  <button role="tab" aria-selected={((tab.kind === 'film-canvas' ? view === 'film-canvas' : view === 'browser') || view === 'terminal' && terminalTabOwner?.id === tab.id) && activeWorkspaceTab === tab.id} title={tab.title} onClick={() => { setActiveWorkspaceTab(tab.id); setView(terminalTabOwner?.id === tab.id ? 'terminal' : tab.kind === 'film-canvas' ? 'film-canvas' : 'browser'); }}>{terminalTabOwner?.id === tab.id ? <SquareTerminal size={14}/> : tab.kind === 'film-canvas' ? <Film size={14}/> : <Globe size={14}/>}<span>{terminalTabOwner?.id === tab.id ? '终端' : tab.title || '新标签页'}</span></button>
                   <button className="workspace-tab-close" aria-label={`关闭 ${tab.title || '网页标签页'}`} title="关闭标签页" onClick={() => closeBrowserTab(tab.id)}><X size={12}/></button>
                 </div>)}
-                {workspaceTabs.map(tab => <div className={`workspace-file-tab ${view === 'file' && activeWorkspaceTab === tab.id ? 'active' : ''}`} key={tab.id}>
-                  <button role="tab" aria-selected={view === 'file' && activeWorkspaceTab === tab.id} title={tab.file?.path || tab.media?.name} onClick={() => { setActiveWorkspaceTab(tab.id); setSelectedFile(tab.file || null); setView('file'); }}><File size={14}/><span>{tab.file?.name || tab.media?.name || '预览'}{tab.dirty ? ' *' : ''}</span></button>
+                {workspaceTabs.map(tab => <div className={`workspace-file-tab ${(view === 'file' || view === 'terminal' && terminalTabOwner?.id === tab.id) && activeWorkspaceTab === tab.id ? 'active' : ''}`} key={tab.id}>
+                  <button role="tab" aria-selected={(view === 'file' || view === 'terminal' && terminalTabOwner?.id === tab.id) && activeWorkspaceTab === tab.id} title={tab.file?.path || tab.media?.name} onClick={() => { setActiveWorkspaceTab(tab.id); setSelectedFile(tab.file || null); setView(terminalTabOwner?.id === tab.id ? 'terminal' : 'file'); }}>{terminalTabOwner?.id === tab.id ? <SquareTerminal size={14}/> : <File size={14}/>}<span>{terminalTabOwner?.id === tab.id ? '终端' : tab.file?.name || tab.media?.name || '预览'}{tab.dirty ? ' *' : ''}</span></button>
                   <button className="workspace-tab-close" aria-label={`关闭 ${tab.file?.name || tab.media?.name || '预览'}`} title="关闭标签页" onClick={() => closeWorkspaceTab(tab.id)}><X size={12}/></button>
                 </div>)}
-                {terminalTabOpen && <div className={`workspace-file-tab ${view === 'terminal' ? 'active' : ''}`}><button role="tab" aria-selected={view === 'terminal'} onClick={openTerminal}><SquareTerminal size={14}/><span>终端</span></button><button className="workspace-tab-close" aria-label="关闭终端标签页" onClick={closeTerminal}><X size={12}/></button></div>}
+
                 <button className="workspace-new-tab" title="新建网页标签页" aria-label="新建网页标签页" onClick={newBrowserTab}><Plus size={17}/></button>
               </div>
               {taskSession && ['task', 'workbench'].includes(view) ? <TaskTopbar actionsOnly contextOpen={contextPopupOpen} contextMode={contextPopupMode} onShowContext={() => { if (contextPopupOpen && contextPopupMode === 'context') { toggleContextPopup(); return; } setContextPopupMode('context'); if (!contextPopupOpen) setContextPopupOpen(true); }} onShowAvailable={() => { if (contextPopupOpen && contextPopupMode === 'available') { toggleContextPopup(); return; } setContextPopupMode('available'); if (!contextPopupOpen) setContextPopupOpen(true); }} contextSplitOpen={rightPanel === 'context'} onToggleContext={toggleContextPopup} onToggleContextSplit={() => updateRightPanel('context')} filesOpen={rightPanel === 'files'} onToggleFiles={() => updateRightPanel('files')}/> : <button className={`workspace-files-toggle ${rightPanel === 'files' ? 'active' : ''}`} title={rightPanel === 'files' ? '关闭文件目录' : '打开文件目录'} aria-label={rightPanel === 'files' ? '关闭文件目录' : '打开文件目录'} aria-pressed={rightPanel === 'files'} onClick={() => updateRightPanel('files')}><FolderOpen size={17}/></button>}
@@ -2067,7 +2245,7 @@ function App() {
             <div className="workspace-tab-body">
               <div className="workspace-tab-content">
                 <div className="workspace-tab-pane" hidden={!["task", "workbench"].includes(view)}>
-                  {taskSession ? <TaskSplitLayout panel={contextPopup}>{taskConversation}</TaskSplitLayout> : <WorkbenchState workspace={activeWorkspace} draft={draft} setDraft={setDraft} composer={composer} onWorkspace={addWorkspace} onCapabilities={showCapabilityGuide} capabilityBusy={running}/>}
+                  {taskSession ? <TaskSplitLayout panel={contextPopup}>{taskConversation}</TaskSplitLayout> : <WorkbenchState workspace={activeWorkspace} draft={draft} setDraft={setDraft} composer={composer} onWorkspace={changeWorkspaceFromComposer} onCapabilities={showCapabilityGuide} capabilityBusy={running}/>}
                 </div>
                 <div className="workspace-tab-pane" hidden={view !== 'app-center'}>
                   {appTabOpen && <AppCenter get={get} post={post} request={appRequest} onFiles={() => openRightPanel('files')} onTerminal={openTerminal} overlayVisible={Boolean(view !== 'app-center' || error || accountOpen || (uiRequest && uiRequest.presentation !== 'inline'))} onResume={id => { setAppRequest(null); loadSession(id); }} onError={value => setError(toUiError(value, 'app_center'))} onToggle={toggleSidebar}/>}
@@ -2083,7 +2261,7 @@ function App() {
                   const clean = text => typeof text === 'string' ? text.split('\n\n[AI 影视画布上下文]')[0] : text;
                   return { ...entry, text: clean(entry.text), content: Array.isArray(entry.content) ? entry.content.map(part => part.type === 'text' ? { ...part, text: clean(part.text) } : part) : clean(entry.content) };
                 })} live={live} running={running} sessionId={current?.id} onOpenMedia={openMediaPreview} onOpenFile={openFile}/> : null}/></React.Suspense></div>
-                <div className="workspace-tab-pane" hidden={view !== 'terminal'}><TerminalWorkspace panes={terminalPanes} workspace={activeWorkspace} onStart={startInteractiveTerminal} onInput={writeInteractiveTerminal} onResize={resizeInteractiveTerminal} onRun={runTerminal} onStop={stopTerminal} onClear={clearTerminal} onAddPane={addTerminalPane} onClosePane={closeTerminalPane} onClose={closeTerminal} onToggle={toggleSidebar}/></div>
+                <div className="workspace-tab-pane" hidden={view !== 'terminal'}><TerminalWorkspace panes={terminalPanes} workspace={activeWorkspace} workspaces={workspaces} sshConnections={sshConnections} activeSshIds={activeSshIds} sshConnectionId={sshConnectionId} onSelectSsh={switchTerminalBackend} onSelectWorkspace={selectSshWorkspace} onSshSave={saveSshConnection} onSshProbe={probeSshHost} onSshTrustAndConnect={trustAndConnectSsh} onSshDisconnect={disconnectSsh} onSshDelete={deleteSshConnection} onSshSetWorkspace={setSshWorkspaceRoot} onSshMetrics={readSshMetrics} onAddSshWorkspace={addSshWorkspace} onSshGitInfo={readSshGitInfo} onSshGitRemote={updateSshGitRemote} onReloadSsh={reloadSshConnections} onError={message => setError(toUiError(new Error(message), 'ssh'))} onStart={startInteractiveTerminal} onInput={writeInteractiveTerminal} onResize={resizeInteractiveTerminal} onRun={runTerminal} onStop={stopTerminal} onClear={clearTerminal} onAddPane={addTerminalPane} onClosePane={closeTerminalPane} onClose={closeTerminal} onToggle={toggleSidebar}/></div>
               </div>
               <aside className={`workspace-right-panel ${visibleRightPanel ? 'is-open' : ''} ${rightPanelContent === 'files' ? 'is-files' : ''} ${rightPanelResizing ? 'is-resizing' : ''}`} aria-label={rightPanelContent === 'context' ? '任务上下文' : '文件目录'} aria-hidden={!visibleRightPanel} inert={!visibleRightPanel}>
                 {visibleRightPanel === 'files' && <div className="workspace-right-panel-resize" role="separator" aria-label="调整文件目录宽度" aria-orientation="vertical" onPointerDown={startRightPanelResize}/>} 
@@ -2091,7 +2269,7 @@ function App() {
                   {rightPanelContent === 'context' && <SessionContextPanel entries={entries} live={live} info={info} current={current} appCatalog={appCatalog} full mode="context" onClose={() => updateRightPanel('context')} onOpenFile={openFile} onOpenMedia={openMediaPreview}/>} 
                   {rightPanelContent === 'files' && <div className="workspace-files-panel">
                     <header><b>文件目录</b><button title="关闭文件目录" aria-label="关闭文件目录面板" onClick={() => updateRightPanel('files')}><X size={15}/></button></header>
-                    <FileExplorer workspace={activeWorkspace} selectedFile={selectedFile} revision={fileRevision} onOpen={openFile} onOpenTerminal={openTerminal} onMutated={() => setFileRevision(x => x + 1)}/>
+                    <FileExplorer workspace={activeWorkspace} selectedFile={selectedFile} revision={fileRevision} onOpen={openFile} onOpenTerminal={openTerminal} onMutated={() => setFileRevision(x => x + 1)} onMoveToFolder={moveRemoteFileToFolder} onGitInfo={readWorkspaceGitInfo} onGitRemote={updateWorkspaceGitRemote} onGitAction={runWorkspaceGitAction}/>
                   </div>}
                 </div>
               </aside>
@@ -2163,6 +2341,23 @@ function App() {
           <TerminalWorkspace
             panes={terminalPanes}
             workspace={activeWorkspace}
+            sshConnections={sshConnections}
+            activeSshIds={activeSshIds}
+            sshConnectionId={sshConnectionId}
+            onSelectSsh={switchTerminalBackend}
+            onSshSave={saveSshConnection}
+            onSshProbe={probeSshHost}
+            onSshTrustAndConnect={trustAndConnectSsh}
+            onSshDisconnect={disconnectSsh}
+            onSshDelete={deleteSshConnection}
+            onSshSetWorkspace={setSshWorkspaceRoot}
+            onSshMetrics={readSshMetrics}
+            onReloadSsh={reloadSshConnections}
+            workspaces={workspaces}
+            onAddSshWorkspace={addSshWorkspace}
+            onSshGitInfo={readSshGitInfo}
+            onSshGitRemote={updateSshGitRemote}
+            onError={message => setError(toUiError(new Error(message), 'ssh'))}
             onStart={startInteractiveTerminal}
             onInput={writeInteractiveTerminal}
             onResize={resizeInteractiveTerminal}
@@ -2278,6 +2473,9 @@ function Sidebar({
   selectedFile,
   fileRevision,
   onFileRevision,
+  onGitInfo,
+  onGitRemote,
+  onGitAction,
   onToggle,
 }) {
   // 侧栏显示当前主体的余额：企业主体下显示企业钱包，避免误读个人余额。
@@ -2440,11 +2638,9 @@ function Sidebar({
             >
               <Search size={15} />
             </button>
-            {workspaces.length > 0 && (
-              <button className="tab-add" onClick={onAddWorkspace} title="添加工作目录" aria-label="添加工作目录">
+            <button className="tab-add" onClick={onAddWorkspace} title="添加工作目录" aria-label="添加工作目录">
                 <Plus size={15} />
               </button>
-            )}
           </div>
         </div>
         <div className="session-search" aria-hidden={!searching}>
@@ -2583,6 +2779,8 @@ function Sidebar({
           onOpen={onOpenFile}
           onOpenTerminal={onOpenTerminal}
           onMutated={onFileRevision}
+          onGitInfo={onGitInfo}
+          onGitRemote={onGitRemote}
         />
       )}
       <div className="sidebar-spacer" />
@@ -3677,12 +3875,8 @@ function WorkbenchState({
               onClick={onCapabilities}
               disabled={!workspace || capabilityBusy}
             >
-              {capabilityBusy ? (
-                <LoaderCircle className="spin" size={14} />
-              ) : (
-                <Sparkles size={14} />
-              )}
-              {capabilityBusy ? "正在生成" : "我能做什么"}
+              <Sparkles size={14} />
+              我能做什么
             </button>
             {capabilities.map(({ label, icon: Icon, text }) => (
               <button
@@ -4002,6 +4196,20 @@ function PluginCenter({ info, onReload, onError }) {
     [selected, setSelected] = useState(null),
     [remote, setRemote] = useState([]),
     [remoteBusy, setRemoteBusy] = useState(false);
+  const [piSource, setPiSource] = useState('');
+  const [piMessage, setPiMessage] = useState('');
+  async function installPi() {
+    setBusy(true); setPiMessage('');
+    try {
+      const installed = await post('/api/plugins/pi/install', { source: piSource.trim() });
+      const runtime = await post('/api/plugins/reload');
+      await onReload();
+      const failure = runtime.errors?.find(item => item.name === installed.id);
+      if (failure) throw new Error(`已安装，但激活失败：${failure.error}`);
+      setPiMessage(`${installed.name} 已安装并激活`); setPiSource('');
+    } catch (error) { onError(error); }
+    finally { setBusy(false); }
+  }
   const data = info?.plugins || {},
     plugins = data.plugins || [],
     skills = data.skills || [],
@@ -4010,7 +4218,7 @@ function PluginCenter({ info, onReload, onError }) {
     ...plugin,
     skills: skills.filter(
       (skill) =>
-        skill.path
+        skill.plugin === plugin.name || skill.path
           ?.toLowerCase()
           .includes(`plugins\\${plugin.name.toLowerCase()}\\`) ||
         skill.path
@@ -4085,6 +4293,13 @@ function PluginCenter({ info, onReload, onError }) {
           />
         </label>
       </header>
+      <form className="pi-install-form" onSubmit={event => { event.preventDefault(); installPi(); }}>
+        <label>安装 pi 插件<input aria-label="pi 插件来源" value={piSource} onChange={event => setPiSource(event.target.value)} placeholder="npm:包名@版本 或本地包目录" disabled={busy}/></label>
+        <button type="submit" disabled={busy || !piSource.trim()}>{busy ? '处理中…' : '安装并激活'}</button>
+        <small>支持工具、命令和 Skill。部分依赖 pi 会话或专用界面的插件暂不兼容。</small>
+        {piMessage && <span role="status">{piMessage}</span>}
+      </form>
+      {!!data.errors?.length && <div role="alert">{data.errors.map(item => <p key={item.name}>{item.name}：{item.error}</p>)}</div>}
       <div className="plugin-overview">
         <div>
           <Package size={18} />
@@ -4497,9 +4712,16 @@ function Conversation({
   const liveKeys = new Set(
     (live?.steps || []).map((step) => `${live.turnId}:${step.step}`),
   );
-  const visible = timeline.filter(
-    (node) => node.kind !== "step" || !liveKeys.has(node.key),
-  );
+  const visible = groupRunActivities([
+    ...timeline.filter((node) => node.kind !== "step" || !liveKeys.has(node.key)),
+    ...(live?.steps || []).map((step) => ({
+      ...step,
+      kind: "step",
+      key: `${live.turnId}:${step.step}`,
+      turnId: live.turnId,
+      live: true,
+    })),
+  ]);
   const nextBoundary = indexConversationBoundaries(visible);
   const eagerStart = Math.max(0, visible.length - 40);
   const showConversationTools =
@@ -4586,6 +4808,7 @@ function Conversation({
       ) : node.kind === "step" ? (
         <RunStep
           item={node}
+          live={node.live}
           sessionId={sessionId}
           onOpenMedia={onOpenMedia}
           onAssetAdded={onAssetAdded}
@@ -4792,14 +5015,6 @@ function Conversation({
       <div className="conversation-body">
         {content}
         {live?.compaction && <Compaction item={live.compaction} />}{" "}
-        {live && (
-          <Live
-            live={live}
-            sessionId={sessionId}
-            onOpenMedia={onOpenMedia}
-            onAssetAdded={onAssetAdded}
-          />
-        )}
         {(showConversationTools || canResume) && (
           <div className="conversation-actions">
             {canResume && (
@@ -5127,17 +5342,12 @@ function Message({
             </div>
           )}
           {item.toolCalls?.length ? (
-            <div className="embedded-tools">
-              {item.toolCalls.map((t) => (
-                <Tool
-                  key={t.id}
-                  item={t}
-                  sessionId={sessionId}
-                  onOpenMedia={onOpenMedia}
-                  onAssetAdded={onAssetAdded}
-                />
-              ))}
-            </div>
+            <ToolActivityGroup
+              tools={item.toolCalls}
+              sessionId={sessionId}
+              onOpenMedia={onOpenMedia}
+              onAssetAdded={onAssetAdded}
+            />
           ) : null}
         </div>
         {entryActions}
@@ -5146,6 +5356,7 @@ function Message({
   );
 }
 function RunStep({ item, sessionId, onOpenMedia, onAssetAdded, live = false }) {
+  const activityOnly = !item.text?.trim() && Boolean(item.tools?.length);
   const hasBody =
     item.text?.trim() || item.thinking?.trim() || item.tools?.length;
   if (
@@ -5155,13 +5366,15 @@ function RunStep({ item, sessionId, onOpenMedia, onAssetAdded, live = false }) {
   )
     return null;
   return (
-    <article className={`run-entry ${live ? "is-live" : ""}`}>
+    <article className={`run-entry ${live ? "is-live" : ""} ${activityOnly ? "is-activity-only" : ""}`}>
+      {!activityOnly && (
       <div className="run-entry-header">
         <ConversationAvatar />
         <div className="message-meta">
           <b>魔力工作台</b>
         </div>
       </div>
+      )}
       <div className="run-entry-body">
         {item.text && (
           <div className="message-content">
@@ -5197,17 +5410,13 @@ function RunStep({ item, sessionId, onOpenMedia, onAssetAdded, live = false }) {
           </div>
         )}
         {item.tools?.length ? (
-          <div className="step-tools">
-            {item.tools.map((tool) => (
-              <Tool
-                key={tool.id}
-                item={tool}
-                sessionId={sessionId}
-                onOpenMedia={onOpenMedia}
-                onAssetAdded={onAssetAdded}
-              />
-            ))}
-          </div>
+          <ToolActivityGroup
+            tools={item.tools}
+            waiting={live && item.status === "running"}
+            sessionId={sessionId}
+            onOpenMedia={onOpenMedia}
+            onAssetAdded={onAssetAdded}
+          />
         ) : null}
         {!hasBody && !item.retry && item.status === "running" && (
           <div className="run-placeholder">
@@ -5225,19 +5434,37 @@ function RunStep({ item, sessionId, onOpenMedia, onAssetAdded, live = false }) {
     </article>
   );
 }
-function Live({ live, sessionId, onOpenMedia, onAssetAdded }) {
+function ToolActivityGroup({ tools, waiting = false, sessionId, onOpenMedia, onAssetAdded }) {
+  const [open, setOpen] = useState(false);
+  const activity = summarizeToolActivity(tools);
+  const attention = tools.filter(toolNeedsAttention);
+  const ActivityIcon = activity.kind === "command" ? SquareTerminal : BookOpen;
+  const renderTool = (tool) => (
+    <Tool
+      key={tool.id || tool.toolCallId}
+      item={tool}
+      sessionId={sessionId}
+      onOpenMedia={onOpenMedia}
+      onAssetAdded={onAssetAdded}
+    />
+  );
   return (
-    <div className="live-run">
-      {live.steps?.map((step) => (
-        <RunStep
-          key={`${live.turnId}:${step.step}`}
-          item={step}
-          live
-          sessionId={sessionId}
-          onOpenMedia={onOpenMedia}
-          onAssetAdded={onAssetAdded}
-        />
-      ))}
+    <div className="tool-activity-group">
+      <button
+        className="tool-activity-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        {activity.running || waiting ? <LoaderCircle className="spin" size={14} /> : <ActivityIcon size={14} />}
+        <span>{activity.label}{waiting && !activity.running ? " · 正在分析结果" : ""}</span>
+        <small className={activity.problems ? "has-problems" : ""}>{activity.detail}</small>
+        <ChevronRight className={open ? "rotated" : ""} size={14} />
+      </button>
+      {open ? (
+        <div className="tool-activity-details">{tools.map(renderTool)}</div>
+      ) : attention.length > 0 ? (
+        <div className="tool-activity-attention">{attention.map(renderTool)}</div>
+      ) : null}
     </div>
   );
 }
@@ -5552,20 +5779,14 @@ function TaskSummary({ item, candidates = [], onOpenFile, entryActions }) {
   );
   return (
     <article className="agent-response">
-      <div className="agent-response-header">
-        <ConversationAvatar />
-        <div className="message-meta">
-          <b>魔力工作台</b>
-        </div>
-      </div>
       <div className="message-body agent-response-body">
         <section className={`task-summary ${verified ? "" : "not-done"} ${hasBody ? "" : "is-header-only"}`}>
           <div className="task-summary-head">
             <span className="summary-icon">
-              {verified ? <Check size={17} /> : <ShieldAlert size={17} />}
+              <ConversationAvatar />
             </span>
             <span>
-              <b>{title}</b>
+              <b>{!verified && <ShieldAlert size={15} aria-label="任务未完成" />}{title}</b>
               <small>
                 <span>
                 {[
@@ -5668,55 +5889,57 @@ function TaskSummary({ item, candidates = [], onOpenFile, entryActions }) {
             </div>
           )}
           {(primary || otherFiles.length > 0) && (
-            <div className="summary-deliverables">
-              <span>交付文件</span>
-              <small>{otherFiles.length + (primary ? 1 : 0)} 项</small>
+            <div className="summary-files-panel">
+              <div className="summary-deliverables">
+                <span>交付文件</span>
+                <small>{otherFiles.length + (primary ? 1 : 0)} 项</small>
+              </div>
+            {primary && (
+              <button
+                className="summary-file summary-primary-file"
+                onClick={() => open(primary)}
+                title={`打开主要成果：${primary.path}`}
+              >
+                <FileIcon name={primary.path} />
+                <span>{primary.path}</span>
+                <small>主要成果</small>
+                <ExternalLink size={13} />
+              </button>
+            )}
+            {visible.map((file) => (
+              <button
+                className="summary-file"
+                key={file.path}
+                title={file.path}
+                onClick={() => open(file)}
+                disabled={file.status === "deleted"}
+              >
+                <FileIcon name={file.path} />
+                <span>{file.path}</span>
+                {file.status && (
+                  <small className={file.status}>
+                    {file.status === "created"
+                      ? "新增"
+                      : file.status === "deleted"
+                        ? "删除"
+                        : "修改"}
+                  </small>
+                )}
+                {file.additions > 0 && <i>+{file.additions}</i>}
+                {file.deletions > 0 && <em>-{file.deletions}</em>}
+                {file.status !== "deleted" && <ExternalLink size={13} />}
+              </button>
+            ))}
+            {otherFiles.length > 3 && (
+              <button
+                className="summary-more"
+                onClick={() => setExpanded(!expanded)}
+              >
+                {expanded ? "收起" : `再显示 ${otherFiles.length - 3} 个文件`}
+                <ChevronDown className={expanded ? "rotated" : ""} size={14} />
+              </button>
+            )}
             </div>
-          )}
-          {primary && (
-            <button
-              className="summary-file summary-primary-file"
-              onClick={() => open(primary)}
-              title={`打开主要成果：${primary.path}`}
-            >
-              <FileIcon name={primary.path} />
-              <span>{primary.path}</span>
-              <small>主要成果</small>
-              <ExternalLink size={13} />
-            </button>
-          )}
-          {visible.map((file) => (
-            <button
-              className="summary-file"
-              key={file.path}
-              title={file.path}
-              onClick={() => open(file)}
-              disabled={file.status === "deleted"}
-            >
-              <FileIcon name={file.path} />
-              <span>{file.path}</span>
-              {file.status && (
-                <small className={file.status}>
-                  {file.status === "created"
-                    ? "新增"
-                    : file.status === "deleted"
-                      ? "删除"
-                      : "修改"}
-                </small>
-              )}
-              {file.additions > 0 && <i>+{file.additions}</i>}
-              {file.deletions > 0 && <em>-{file.deletions}</em>}
-              {file.status !== "deleted" && <ExternalLink size={13} />}
-            </button>
-          ))}
-          {otherFiles.length > 3 && (
-            <button
-              className="summary-more"
-              onClick={() => setExpanded(!expanded)}
-            >
-              {expanded ? "收起" : `再显示 ${otherFiles.length - 3} 个文件`}
-              <ChevronDown className={expanded ? "rotated" : ""} size={14} />
-            </button>
           )}
           {previewPath && (
             <div
@@ -5903,7 +6126,12 @@ function FileExplorer({
   onOpen,
   onOpenTerminal,
   onMutated,
+  onMoveToFolder,
+  onGitInfo,
+  onGitRemote,
+  onGitAction,
 }) {
+  const remoteWorkspace = workspace?.kind === 'ssh';
   const [tree, setTree] = useState({}),
     [expanded, setExpanded] = useState(new Set([""])),
     [busy, setBusy] = useState(false),
@@ -5912,6 +6140,13 @@ function FileExplorer({
     [selectedPath, setSelectedPath] = useState(""),
     [clipboard, setClipboard] = useState(null),
     [error, setError] = useState(""),
+    [gitOpen, setGitOpen] = useState(false),
+    [gitInfo, setGitInfo] = useState(null),
+    [gitDrafts, setGitDrafts] = useState({}),
+    [gitDiff, setGitDiff] = useState(null),
+    [gitMessage, setGitMessage] = useState(""),
+    [gitBranchDraft, setGitBranchDraft] = useState(""),
+    [gitBusy, setGitBusy] = useState(false),
     treeRef = useRef(null);
   const rootItem = {
     name: workspace?.name || "工作目录",
@@ -5949,11 +6184,58 @@ function FileExplorer({
     setEditing(null);
     setMenu(null);
     setSelectedPath("");
+    setGitOpen(false);
+    setGitInfo(null);
+    setGitDrafts({});
+    setGitDiff(null);
+    setGitMessage("");
+    setGitBranchDraft("");
     if (workspace) refresh(new Set([""]));
   }, [workspace?.id]);
   useEffect(() => {
     if (workspace) refresh();
   }, [revision]);
+  async function loadGit() {
+    if (!workspace) return;
+    setGitBusy(true);
+    setError("");
+    try {
+      const value = await onGitInfo(workspace);
+      setGitInfo(value);
+      setGitDrafts(current => ({
+        ...current,
+        ...(value.remotes || []).reduce((drafts, remote) => ({ ...drafts, [remote.name]: remote.url }), {}),
+      }));
+    } catch (failure) { setError(failure.message); }
+    finally { setGitBusy(false); }
+  }
+  async function saveGitRemote(action, name, url) {
+    setGitBusy(true);
+    setError("");
+    try {
+      const value = await onGitRemote(workspace, { action, name, url });
+      setGitInfo(value);
+      setGitDrafts(current => ({ ...current, ...(value.remotes || []).reduce((drafts, remote) => ({ ...drafts, [remote.name]: remote.url }), {}) }));
+      return true;
+    } catch (failure) { setError(failure.message); return false; }
+    finally { setGitBusy(false); }
+  }
+  async function runGitAction(operation) {
+    setGitBusy(true);
+    setError("");
+    try {
+      const value = await onGitAction(workspace, operation);
+      if (value?.diff !== undefined) setGitDiff(value);
+      else { setGitInfo(value); setGitDiff(null); }
+      return value;
+    } catch (failure) { setError(failure.message); return null; }
+    finally { setGitBusy(false); }
+  }
+  async function runGitConfirmed(operation, prompt) {
+    const location = remoteWorkspace ? `SSH 主机 ${workspace.name}，使用服务器 Git 凭据` : "本机工作区，使用本机 Git 凭据";
+    if (!window.confirm(`${prompt}\n\n执行位置：${location}`)) return;
+    return runGitAction(operation);
+  }
   useEffect(() => {
     const close = () => setMenu(null);
     window.addEventListener("pointerdown", close);
@@ -5989,6 +6271,7 @@ function FileExplorer({
     return next;
   }
   async function mutate(action, item, extra = {}) {
+    if (remoteWorkspace && !['create', 'rename', 'move', 'delete'].includes(action)) { setError('远程工作区暂不支持此文件操作'); return null; }
     setBusy(true);
     setError("");
     try {
@@ -6114,6 +6397,7 @@ function FileExplorer({
     }
   }
   function setClip(action, item) {
+    if (remoteWorkspace) return;
     if (!item.root) setClipboard({ action, item });
     setMenu(null);
   }
@@ -6241,7 +6525,7 @@ function FileExplorer({
               <div
                 className={`file-tree-row ${selectedPath === item.path || selectedFile?.path === item.path ? "active" : ""} ${clipboard?.action === "cut" && clipboard.item.path === item.path ? "cut" : ""}`}
                 style={{ paddingLeft: 7 + depth * 14 }}
-                draggable={!busy}
+                draggable={!busy && !remoteWorkspace}
                 onDragStart={(event) => {
                   event.dataTransfer.effectAllowed = "move";
                   event.dataTransfer.setData(
@@ -6322,6 +6606,19 @@ function FileExplorer({
         <div>
           <button
             disabled={busy || !workspace}
+            title="管理 Git 远端"
+            aria-label="管理 Git 远端"
+            aria-expanded={gitOpen}
+            onClick={async () => {
+              const next = !gitOpen;
+              setGitOpen(next);
+              if (next) await loadGit();
+            }}
+          >
+            <GitBranch size={15} />
+          </button>
+          <button
+            disabled={busy || !workspace}
             title="打开终端"
             onClick={onOpenTerminal}
           >
@@ -6357,6 +6654,48 @@ function FileExplorer({
           </button>
         </div>
       </div>
+      {gitOpen && <section className="workspace-git-panel" aria-label="Git 工作区">
+        <header><b>{gitInfo?.branch ? `分支 ${gitInfo.branch}` : 'Git 工作区'}</b><button title="刷新 Git 状态" aria-label="刷新 Git 状态" disabled={gitBusy} onClick={loadGit}><RefreshCw className={gitBusy ? 'spin' : ''} size={13}/></button></header>
+        {gitInfo && <>
+          <div className="workspace-git-toolbar">
+            <label>分支<select aria-label="Git 当前分支" value={gitInfo.branch || ''} disabled={gitBusy || !gitInfo.branch} onChange={event => runGitConfirmed({ action: 'branch-switch', name: event.target.value }, `切换到分支 ${event.target.value}？`)}>
+              {(gitInfo.branches || []).map(branch => <option key={branch} value={branch}>{branch}</option>)}
+            </select></label>
+            <div className="workspace-git-branch-create"><input aria-label="新 Git 分支名称" placeholder="新分支" value={gitBranchDraft} onChange={event => setGitBranchDraft(event.target.value)}/><button title="创建并切换分支" aria-label="创建并切换分支" disabled={gitBusy || !gitBranchDraft.trim()} onClick={async () => { if (await runGitConfirmed({ action: 'branch-create', name: gitBranchDraft }, `创建并切换到分支 ${gitBranchDraft}？`)) setGitBranchDraft(''); }}><Plus size={13}/></button></div>
+          </div>
+          <div className="workspace-git-changes" aria-label="Git 文件变更">
+            {(gitInfo.changes || []).length ? gitInfo.changes.map(change => {
+              const staged = change.indexStatus !== ' ' && change.indexStatus !== '?';
+              return <div className="workspace-git-change" key={change.path}>
+                <button className="workspace-git-path" title={change.path} onClick={() => runGitAction({ action: 'diff', path: change.path, staged })}>{change.path}</button>
+                <small>{change.untracked ? '未跟踪' : `${change.indexStatus}${change.worktreeStatus}`}</small>
+                <button title={staged ? '取消暂存' : '暂存文件'} aria-label={`${staged ? '取消暂存' : '暂存'} ${change.path}`} disabled={gitBusy || change.conflicted} onClick={() => runGitAction({ action: staged ? 'unstage' : 'stage', paths: [change.path] })}><Check size={12}/></button>
+              </div>;
+            }) : <small>工作区干净</small>}
+          </div>
+          {gitDiff && <div className="workspace-git-diff"><div><b>差异{gitDiff.truncated ? ' · 已截断' : ''}</b><button title="关闭差异" aria-label="关闭差异" onClick={() => setGitDiff(null)}><X size={12}/></button></div><pre>{gitDiff.diff || '没有可显示的文本差异'}</pre></div>}
+          <div className="workspace-git-commit"><textarea aria-label="提交说明" placeholder="提交说明（只提交暂存区）" maxLength={5000} value={gitMessage} onChange={event => setGitMessage(event.target.value)}/><button disabled={gitBusy || !gitMessage.trim() || !gitInfo.hasStagedChanges || gitInfo.protectedStaged} onClick={async () => { if (await runGitAction({ action: 'commit', message: gitMessage })) setGitMessage(''); }}><GitCommit size={13}/>提交暂存项</button></div>
+          {gitInfo.protectedStaged && <small className="workspace-git-warning">暂存区包含凭据或受保护文件，无法提交。</small>}
+          <div className="workspace-git-sync"><button disabled={gitBusy || !gitInfo.remotes.some(remote => remote.name === 'origin')} onClick={() => runGitAction({ action: 'fetch', remote: 'origin' })}><Download size={12}/>Fetch</button><button disabled={gitBusy || !gitInfo.branch || !gitInfo.remotes.some(remote => remote.name === 'origin')} onClick={() => runGitConfirmed({ action: 'pull', remote: 'origin', branch: gitInfo.branch }, `从 origin 拉取分支 ${gitInfo.branch}？只允许 fast-forward。`)}><ArrowDownToLine size={12}/>Pull</button><button disabled={gitBusy || !gitInfo.branch || !gitInfo.remotes.some(remote => remote.name === 'origin')} onClick={() => runGitConfirmed({ action: 'push', remote: 'origin', branch: gitInfo.branch }, `推送 ${gitInfo.branch} 到 origin？`)}><Upload size={12}/>Push</button></div>
+          <pre>{gitInfo.status || '工作区干净'}</pre>
+          {gitInfo.remotes.map(remote => <div className="workspace-git-remote" key={remote.name}>
+            <label>{remote.name}<input aria-label={`${remote.name} Git remote 地址`} value={gitDrafts[remote.name] ?? remote.url} onChange={event => setGitDrafts(current => ({ ...current, [remote.name]: event.target.value }))}/></label>
+            <button title={`保存 ${remote.name}`} aria-label={`保存 ${remote.name} Git remote`} disabled={gitBusy} onClick={() => saveGitRemote('set-url', remote.name, gitDrafts[remote.name] ?? remote.url)}><Save size={13}/></button>
+            <button title={`删除 ${remote.name}`} aria-label={`删除 ${remote.name}`} disabled={gitBusy} onClick={() => saveGitRemote('remove', remote.name)}><Trash2 size={13}/></button>
+          </div>)}
+          <div className="workspace-git-remote is-new">
+            <input aria-label="新 Git remote 名称" placeholder="origin" value={gitDrafts.__newName || ''} onChange={event => setGitDrafts(current => ({ ...current, __newName: event.target.value }))}/>
+            <input aria-label="GitHub、GitLab、Gitee 或自托管 Git 地址" placeholder="git@your-git.example:group/project.git" value={gitDrafts.__newUrl || ''} onChange={event => setGitDrafts(current => ({ ...current, __newUrl: event.target.value }))}/>
+            <button title="添加 Git remote" aria-label="添加 Git remote" disabled={gitBusy} onClick={async () => {
+              const name = gitDrafts.__newName || 'origin';
+              if (await saveGitRemote('add', name, gitDrafts.__newUrl || '')) {
+                setGitDrafts(current => ({ ...current, __newName: '', __newUrl: '' }));
+              }
+            }}><Plus size={14}/></button>
+          </div>
+          <small>兼容 GitHub、GitLab、Gitee 和自托管 Git；凭据由执行 Git 的本机或 SSH 主机管理。pull 仅快进；Git 操作可能产生远端副作用。</small>
+        </>}
+      </section>}
       {error && (
         <div className="explorer-error">
           <span>{error}</span>
@@ -6381,7 +6720,7 @@ function FileExplorer({
           <div className="session-empty">先添加工作目录</div>
         )}
       </div>
-      {clipboard && (
+      {clipboard && !remoteWorkspace && (
         <div className="explorer-clipboard">
           <span>
             {clipboard.action === "cut" ? "已剪切" : "已复制"}：
@@ -6395,7 +6734,8 @@ function FileExplorer({
       {menu && (
         <FileMenu
           menu={menu}
-          clipboard={clipboard}
+          clipboard={remoteWorkspace ? null : clipboard}
+          remoteWorkspace={remoteWorkspace}
           onCreate={startCreate}
           onRename={() => startRename(menu.item)}
           onOpen={() => openExternal(menu.item)}
@@ -6403,6 +6743,7 @@ function FileExplorer({
           onCopy={() => setClip("copy", menu.item)}
           onPaste={() => paste(menu.item)}
           onReveal={() => reveal(menu.item)}
+          onMove={async () => { const target = await onMoveToFolder?.(menu.item); if (target != null) await mutate('move', menu.item, { target }); }}
           onDelete={() => remove(menu.item)}
         />
       )}
@@ -6457,6 +6798,7 @@ function InlineFileName({ item, depth, value, onChange, onCommit, onCancel }) {
 function FileMenu({
   menu,
   clipboard,
+  remoteWorkspace = false,
   onCreate,
   onRename,
   onOpen,
@@ -6464,6 +6806,7 @@ function FileMenu({
   onCopy,
   onPaste,
   onReveal,
+  onMove,
   onDelete,
 }) {
   const item = menu.item;
@@ -6488,13 +6831,13 @@ function FileMenu({
           <div className="menu-separator" />
         </>
       )}
-      {item.type === "file" && (
+      {!remoteWorkspace && item.type === "file" && (
         <button onClick={onOpen}>
           <ExternalLink size={14} />
           使用系统应用打开
         </button>
       )}
-      {!item.root && (
+      {!remoteWorkspace && !item.root && (
         <>
           <button onClick={onCut}>
             <Scissors size={14} />
@@ -6519,10 +6862,8 @@ function FileMenu({
           重命名<kbd>F2</kbd>
         </button>
       )}
-      <button onClick={onReveal}>
-        <FolderOpen size={14} />
-        在资源管理器中显示
-      </button>
+      {remoteWorkspace && !item.root && onMove && <button onClick={onMove}><FolderOpen size={14}/>移动到文件夹</button>}
+      {!remoteWorkspace && <button onClick={onReveal}><FolderOpen size={14}/>在资源管理器中显示</button>}
       {!item.root && (
         <>
           <div className="menu-separator" />
@@ -6621,6 +6962,8 @@ function FileWorkspace({
 }) {
   const [annotationToolbarTarget, setAnnotationToolbarTarget] = useState(null);
   const [officeEditing, setOfficeEditing] = useState(false);
+  const [typesettingPreview, setTypesettingPreview] = useState(previewMode);
+  const [typesettingRevision, setTypesettingRevision] = useState(0);
   const fileLoadGeneration = useRef(0);
   const [data, setData] = useState(null),
     [content, setContent] = useState(""),
@@ -6650,12 +6993,14 @@ function FileWorkspace({
   }
   useEffect(() => {
     setOfficeEditing(false);
-    setHtmlPreview(/\.html?$/i.test(file?.name || ""));
+    setTypesettingPreview(previewMode);
+    setTypesettingRevision(0);
+    setHtmlPreview(workspace?.kind !== 'ssh' && /\.html?$/i.test(file?.name || ""));
     setMarkdownPreview(false);
     setHtmlRevision(0);
     load();
     return () => { fileLoadGeneration.current++; };
-  }, [file?.path, workspace?.path, previewMode]);
+  }, [file?.path, workspace?.id, workspace?.path, previewMode]);
   const dirty = data?.kind === "text" && content !== saved;
   const dirtyCallback = useRef(onDirtyChange);
   dirtyCallback.current = onDirtyChange;
@@ -6691,8 +7036,12 @@ function FileWorkspace({
     );
   const rawUrl = `/api/file/raw?path=${encodeURIComponent(file.path)}`;
   const browserUrl = `/api/file/raw/${file.path.split("/").map(encodeURIComponent).join("/")}${htmlRevision ? `?v=${htmlRevision}` : ""}`;
-  const annotatable = data && (htmlPreview || markdownPreview || ['image', 'pdf', 'office-text', 'office-binary', 'spreadsheet'].includes(data.kind));
-  const previewContent = <FilePreview data={data} content={content} setContent={setContent} rawUrl={htmlPreview ? browserUrl : rawUrl} renderHtml={htmlPreview} renderMarkdown={markdownPreview} />;
+  const remoteWorkspace = workspace?.kind === 'ssh';
+  const typesetting = /\.(tex|latex|typ)$/i.test(file.name);
+  const renderTypesetting = typesetting && typesettingPreview && !remoteWorkspace && data?.kind === 'text';
+  const annotatable = data && (renderTypesetting || (htmlPreview || markdownPreview || ['image', 'pdf', 'office-text', 'office-binary', 'spreadsheet'].includes(data.kind)));
+  const renderHtml = !remoteWorkspace && htmlPreview;
+  const previewContent = renderTypesetting ? <TypesettingPreview key={`${workspace?.path}:${file.path}`} path={file.path} content={content} revision={typesettingRevision}/> : <FilePreview data={data} content={content} setContent={setContent} rawUrl={renderHtml ? browserUrl : rawUrl} renderHtml={renderHtml} renderMarkdown={markdownPreview} />;
   return (
     <div className={`file-workspace ${previewMode ? "preview-workspace" : ""}`}>
       <header className="file-topbar">
@@ -6712,14 +7061,14 @@ function FileWorkspace({
           </span>
         </div>
         <div className="file-actions">
-          {window.desktop?.genOfficeOpen && /\.(docx|xlsx|pptx|pdf)$/i.test(file.name) && !officeEditing && <button className="genoffice-edit-button" aria-label="编辑文档" onClick={() => setOfficeEditing(true)}><Pencil size={14} />编辑<span role="tooltip">在本地编辑文档</span></button>}
+          {!remoteWorkspace && window.desktop?.genOfficeOpen && /\.(docx|xlsx|pptx|pdf)$/i.test(file.name) && !officeEditing && <button className="genoffice-edit-button" aria-label="编辑文档" onClick={() => setOfficeEditing(true)}><Pencil size={14} />编辑<span role="tooltip">在本地编辑文档</span></button>}
           {annotatable && !loading && !officeEditing && <div className="annotation-toolbar-slot" ref={setAnnotationToolbarTarget} />}
           <span>
             {data
               ? `${formatBytes(data.size)} · ${languageName(file.name)}`
               : ""}
           </span>
-          {/\.html?$/i.test(file.name) && (
+          {!remoteWorkspace && /\.html?$/i.test(file.name) && (
             <>
               <button
                 title={htmlPreview ? "查看源码" : "打开预览"}
@@ -6739,6 +7088,11 @@ function FileWorkspace({
               )}
             </>
           )}
+          {typesetting && data?.kind === 'text' && !remoteWorkspace && <>
+            <button title={renderTypesetting ? '查看源码' : '编译预览'} aria-label={renderTypesetting ? '查看源码' : '编译预览'} onClick={() => setTypesettingPreview(value => !value)}>{renderTypesetting ? <Code2 size={15}/> : <Eye size={15}/>}</button>
+            {renderTypesetting && <button title="重新编译" aria-label="重新编译" onClick={() => setTypesettingRevision(value => value + 1)}><RefreshCw size={14}/></button>}
+          </>}
+          {typesetting && remoteWorkspace && <span title="请在本地工作区编译预览">源码编辑</span>}
           {previewMode && /\.mdx?$/i.test(file.name) && (
             <button
               title={markdownPreview ? "查看源码" : "打开预览"}
@@ -6754,7 +7108,7 @@ function FileWorkspace({
               保存
             </button>
           )}
-          {window.desktop?.openWorkspaceFile && (
+          {!remoteWorkspace && window.desktop?.openWorkspaceFile && (
             <button
               title="使用系统默认应用打开"
               onClick={() => window.desktop.openWorkspaceFile(file.path)}
@@ -6762,7 +7116,7 @@ function FileWorkspace({
               <ExternalLink size={15} />
             </button>
           )}
-          {window.desktop?.showItemInFolder && (
+          {!remoteWorkspace && window.desktop?.showItemInFolder && (
             <button
               title="在资源管理器中显示"
               onClick={() =>
@@ -6775,7 +7129,7 @@ function FileWorkspace({
             </button>
           )}
           {onClose && (
-            <button title="关闭预览" aria-label="关闭预览" onClick={async () => { try { if (officeEditing && !await window.desktop.genOfficeClose(`${workspace.path}/${file.path}`)) return; onClose(); } catch (error) { onError(error); } }}>
+            <button title="关闭预览" aria-label="关闭预览" onClick={async () => { try { if (!remoteWorkspace && officeEditing && !await window.desktop.genOfficeClose(`${workspace.path}/${file.path}`)) return; onClose(); } catch (error) { onError(error); } }}>
               <X size={16} />
             </button>
           )}
@@ -7137,6 +7491,8 @@ function languageExtensions(name) {
   if (["md", "mdx"].includes(ext)) return [markdown()];
   if (ext === "py") return [python()];
   if (ext === "sql") return [sql()];
+  if (["tex", "latex", "sty", "cls"].includes(ext)) return [latexLanguage];
+  if (ext === "typ") return [typstLanguage];
   return [];
 }
 function languageName(name) {
@@ -7155,6 +7511,10 @@ function languageName(name) {
       md: "Markdown",
       py: "Python",
       sql: "SQL",
+      tex: "LaTeX",
+      latex: "LaTeX",
+      typ: "Typst",
+      bib: "BibTeX",
       pdf: "PDF",
       png: "PNG",
       jpg: "JPEG",
@@ -7751,17 +8111,6 @@ function ComposerBase({
                 />
               )}
             </div>
-            <span
-              className="tiny-context"
-              title={
-                current?.context?.truncated
-                  ? "已按模型上下文窗口压缩并保留最近消息"
-                  : "当前发送给模型的上下文占用"
-              }
-            >
-              {current?.context?.percent || 0}% 上下文
-              {current?.context?.truncated ? " · 已截取" : ""}
-            </span>
           </div>
           <div className="composer-actions">
             <span id="voice-input-slot" />
@@ -7805,6 +8154,7 @@ function ComposerBase({
           <span>{workspaceLabel}</span>
           <ChevronRight size={12} />
         </button>
+        <SessionStatistics statistics={current?.statistics} context={current?.context} />
         <div className="composer-hint">
           <span>
             <kbd>Enter</kbd> 发送
@@ -9698,10 +10048,13 @@ function UiRequestDialog({ request, onResolve }) {
     <Modal title={title} onClose={() => onResolve(false)}>
       <div className="ui-request-dialog">
         {request.detail && <p>{request.detail}</p>}
-        {request.kind === "input" ? (
+        {request.kind === 'oauth' && /^https?:\/\//.test(request.url || '') && <p><McpAuthorization id={request.authorizationId}/><span> · 授权完成后自动继续</span></p>}
+        {request.kind === "input" || request.kind === "secret" ? (
           <label>
             <span>{request.text || "请输入"}</span>
             <input
+              type={request.kind === "secret" ? "password" : "text"}
+              autoComplete={request.kind === "secret" ? "new-password" : "off"}
               autoFocus
               value={value}
               onChange={(event) => setValue(event.target.value)}
@@ -9732,14 +10085,15 @@ function UiRequestDialog({ request, onResolve }) {
               );
             })}
           </div>
-        ) : (
+        ) : request.kind === 'oauth' ? <button onClick={() => onResolve(false)}>取消授权</button> : (
           <div className="ui-request-actions">
             <button onClick={() => onResolve(false)}>取消</button>
             <button className="primary-action" onClick={() => onResolve(true)}>
-              确认
+              {request.confirmLabel || "确认"}
             </button>
           </div>
         )}
+        {request.kind === "secret" && <div className="ui-request-actions"><button onClick={() => onResolve(false)}>取消</button><button className="primary-action" disabled={!value.trim()} onClick={() => onResolve(value)}>保存并继续</button></div>}
       </div>
     </Modal>
   );
@@ -10376,6 +10730,7 @@ function SettingsPage({
           <Shield size={16} />
           权限配置
         </button>
+        <button role="tab" aria-selected={tab === "mcp"} className={tab === "mcp" ? "active" : ""} onClick={() => setTab("mcp")}><Settings2 size={16} />MCP 服务</button>
         <button role="tab" aria-selected={tab === "acp"} className={tab === "acp" ? "active" : ""} onClick={() => setTab("acp")}><Bot size={16} />外部 Agent</button>
         <button
           role="tab"
@@ -10425,6 +10780,8 @@ function SettingsPage({
       </div>
       {tab === "models" ? (
         <Models info={info} onSaved={onSaved} onError={onError} />
+      ) : tab === "mcp" ? (
+        <McpSettings get={get} post={post} />
       ) : tab === "acp" ? (
         <AcpSettings get={get} post={post} />
       ) : tab === "voice" ? (

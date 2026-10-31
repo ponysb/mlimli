@@ -100,13 +100,22 @@ test('Windows staging only contains public runtime files and no private services
   }
   assert.ok(record.files.includes('client/server.mjs'));
   assert.ok(record.files.includes('client/core/loop.mjs'));
+  for (const name of ['terminal-assistant.mjs', 'terminal-command-dictionary.mjs', 'ssh-app-catalog.mjs', 'shell-command-tokens.mjs']) {
+    assert.ok(record.files.includes(`client/shared/${name}`));
+    assert.equal(fs.readFileSync(path.join(stage.runtimeDirectory, 'shared', name), 'utf8'), fs.readFileSync(path.join(source, 'shared', name), 'utf8'));
+  }
   assert.ok(record.files.includes('client/electron/runtime.cjs'));
   assert.ok(record.files.includes('client/cli/main.cjs'));
   assert.ok(record.files.includes('client/dist/branding/logo.png'));
   assert.ok(record.files.includes('client/licenses/dotenv.txt'));
+  assert.ok(record.files.includes('client/licenses/ssh2.txt'));
+  assert.ok(record.files.includes('client/licenses/asn1.txt'));
+  assert.ok(record.files.includes('client/licenses/bcrypt-pbkdf.txt'));
   assert.ok(record.files.includes('client/LICENSE'));
   assert.equal(fs.readFileSync(path.join(stage.runtimeDirectory, 'LICENSE'), 'utf8'), fs.readFileSync(path.join(source, 'LICENSE'), 'utf8'));
   assert.ok(record.files.includes('app/electron/preload.cjs'));
+  assert.ok(record.files.includes('app/core/browser-scripts.cjs'));
+  assert.equal(fs.readFileSync(path.join(stage.appDirectory, 'core', 'browser-scripts.cjs'), 'utf8'), fs.readFileSync(path.join(source, 'core', 'browser-scripts.cjs'), 'utf8'));
   const manifest = JSON.parse(fs.readFileSync(path.join(stage.appDirectory, 'package.json')));
   assert.equal(manifest.main, 'electron/main.cjs');
   assert.equal(manifest.dependencies, undefined);
@@ -127,6 +136,8 @@ test('Windows staging only contains public runtime files and no private services
   assert.throws(() => stageWindowsClient({ root: source, output: stage.destination }), /必须为空/);
   fs.cpSync(path.join(source, 'dist'), path.join(source, 'dist-legacy'), { recursive: true });
   const legacyStage = stageWindowsClient({ root: source, output: path.join(directory, 'legacy-package'), legacy: true });
+  assert.ok(fs.existsSync(path.join(legacyStage.appDirectory, 'core', 'browser-scripts.cjs')));
+  assert.ok(fs.existsSync(path.join(legacyStage.runtimeDirectory, 'shared', 'terminal-assistant.mjs')));
   assert.ok(fs.existsSync(path.join(legacyStage.runtimeDirectory, 'sandbox-runtime-repair.gz')));
   const legacyConfig = windowsBuildConfig(legacyStage);
   assert.equal(fs.readFileSync(path.join(legacyStage.runtimeDirectory, 'client-defaults.env'), 'utf8'), fs.readFileSync(path.join(stage.runtimeDirectory, 'client-defaults.env'), 'utf8'));

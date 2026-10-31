@@ -139,9 +139,9 @@ export default function PreviewAnnotations({ storageKey, path, onSend, contextPr
     try {
       const supplied = await contextProvider?.() || {};
       const selection = String(window.getSelection?.()?.toString() || '').trim();
-      const context = { live:{ ...(supplied.live || {}), ...liveContext.current, ...(selection ? { selection:selection.slice(0, 5000) } : {}) } };
+      const context = { live:{ ...(supplied.live || {}), ...liveContext.current, ...(!contextProvider && selection ? { selection:selection.slice(0, 5000) } : {}) } };
       const message = notes.length ? annotationMessage(path, notes, instruction, context) : fileRequestMessage(path, instruction, context);
-      if (await onSend(message) === true) {
+      if (await onSend(message, supplied) === true) {
         try { localStorage.removeItem(storageKey); } catch { /* Storage may be disabled. */ }
         setNotes([]); setSelected(null); setInstruction(''); setOpen(false); setSelecting(false);
       } else setError('未能发送批注，草稿已保留，请重试。');

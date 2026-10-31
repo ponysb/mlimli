@@ -55,8 +55,12 @@ function writePluginArchive(buffer, expectedSha256) {
       count++;
     }
     if (!fs.existsSync(path.join(temp, 'plugin.mjs')) && !fs.existsSync(path.join(temp, 'skills'))) throw new Error('插件包必须包含 plugin.mjs 或 skills 目录');
-    fs.rmSync(target, { recursive: true, force: true });
-    fs.renameSync(temp, target);
+    const backup = `${target}.backup-${crypto.randomUUID()}`;
+    const existed = fs.existsSync(target);
+    if (existed) fs.renameSync(target, backup);
+    try { fs.renameSync(temp, target); }
+    catch (error) { if (existed) fs.renameSync(backup, target); throw error; }
+    if (existed) fs.rmSync(backup, { recursive: true, force: true });
     return { name: manifest.name, version: manifest.version || '0.0.0', sha256, files: count };
   } catch (error) {
     fs.rmSync(temp, { recursive: true, force: true });

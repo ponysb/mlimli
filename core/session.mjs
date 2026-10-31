@@ -6,6 +6,7 @@
 //   compaction  {summary}                  压缩摘要：重建消息时"截断"其前的历史
 //   event       {event:{type:'turn_end'}}  运行边界（重放时用于恢复 UI 状态）
 import fs from 'node:fs';
+import { sessionStatistics } from './session-statistics.mjs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { sessionsDir } from './paths.mjs';
@@ -155,14 +156,14 @@ export class Session {
     return Object.values(idx).filter(item => includeChildren || !item.parentSessionId).sort((a, b) => b.updated - a.updated);
   }
 
-  static remove(id) {
-    const file = path.join(sessionsDir(), `${id}.jsonl`);
+  static remove(id, directory = sessionsDir()) {
+    const file = path.join(directory, `${id}.jsonl`);
     try { fs.unlinkSync(file); } catch { /* 已不存在 */ }
-    try { fs.rmSync(attachmentDir(id), { recursive: true, force: true }); } catch { /* 已不存在 */ }
-    try { removeToolOutputs(sessionsDir(), id); } catch { /* 不删除越界存储 */ }
-    const idx = readIndex();
+    try { fs.rmSync(attachmentDir(id, directory), { recursive: true, force: true }); } catch { /* 已不存在 */ }
+    try { removeToolOutputs(directory, id); } catch { /* 不删除越界存储 */ }
+    const idx = readIndex(directory);
     delete idx[id];
-    writeIndex(idx);
+    writeIndex(idx, directory);
   }
 
   /** 将会话文件与索引迁移到另一个工作目录，目标存在同 ID 时拒绝覆盖。 */
@@ -578,6 +579,7 @@ export class Session {
       meetingId: this._lastState('meetingId', null),
       entries: paged ? recent : this.chain(),
       recovery: (() => { const { baseline, qualityProgress, ...state } = taskRecoveryState(this); return state; })(),
+      statistics: sessionStatistics(this.chain()),
       context: this.contextStats(contextWindow),
       ...(paged ? { history: { hasMore: page.hasMore, oldestId: page.oldestId, newestId: page.newestId, limit: Number(options.limit) } } : {}),
     };

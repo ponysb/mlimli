@@ -6,31 +6,7 @@ const { appUrl, privateHost, publicPageUrl } = require('../core/app-center-polic
 
 // Scripts are fixed, with JSON-encoded data arguments; there is no arbitrary JS
 // evaluation or Cookie/storage API exposed to the model or workbench renderer.
-function snapshotScript(prefix) {
-  return `(() => {
-    const visible = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden'; };
-    const secret = el => el.type === 'password' || /password|one-time-code|cc-/i.test(el.autocomplete || '') || /password|passwd|secret|token|otp|verification/i.test([el.name, el.id, el.getAttribute('aria-label')].join(' '));
-    const elements = Array.from(document.querySelectorAll('a,button,input,textarea,select,[role="button"],[contenteditable="true"]')).filter(el => visible(el) && !secret(el)).slice(0, 200);
-    window.__mliAppRefs = new Map();
-    const items = elements.map((el, i) => { const ref = ${JSON.stringify(prefix)} + '-' + i; window.__mliAppRefs.set(ref, el); return { ref, tag: el.tagName.toLowerCase(), type: el.type || '', label: (el.getAttribute('aria-label') || el.innerText || el.placeholder || el.name || '').slice(0, 160), disabled: Boolean(el.disabled) }; });
-    return { title: document.title.slice(0, 200), text: (document.body?.innerText || '').slice(0, 18000), elements: items };
-  })()`;
-}
-function elementScript(ref, action, text) {
-  return `(() => {
-    const el = window.__mliAppRefs?.get(${JSON.stringify(ref)});
-    if (!el || !el.isConnected) throw new Error('元素引用已失效，请重新读取页面');
-    if (el.disabled || el.type === 'password' || /password|one-time-code|cc-/i.test(el.autocomplete || '') || /password|passwd|secret|token|otp|verification/i.test([el.name, el.id, el.getAttribute('aria-label')].join(' '))) throw new Error('不能操作密码、验证码、支付或敏感字段');
-    const rect = el.getBoundingClientRect(); if (!rect.width || !rect.height || getComputedStyle(el).visibility === 'hidden') throw new Error('元素当前不可见');
-    el.scrollIntoView({block:'center'}); el.focus();
-    ${action === 'click' ? 'el.click();' : `if (!['INPUT','TEXTAREA'].includes(el.tagName) && !el.isContentEditable) throw new Error('该元素不能输入文字');
-      if (el.isContentEditable) el.textContent = ${JSON.stringify(text)};
-      else { const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype; const set = Object.getOwnPropertyDescriptor(proto, 'value').set; set.call(el, ${JSON.stringify(text)}); }
-      el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true}));`}
-    window.__mliAppRefs = null;
-    return { ok: true };
-  })()`;
-}
+const {snapshotScript,elementScript}=require('../core/browser-scripts.cjs');
 
 function elementPickerScript(action) {
   const encodedAction = JSON.stringify(action);
@@ -318,11 +294,14 @@ function createAppBrowser({ electron, getWindow, serverUrl, dataRoot, testAllowL
     else if (!item.contents.getURL()) await item.contents.loadURL(target);
     notify(item); return state(item);
   }
-  async function guard(item) {
-    if (item.contents.isLoadingMainFrame()) throw new Error('应用页面正在加载，请稍后重试');
+  async function guard(item, { requirePage = true } = {}) {
+    if (requirePage && item.contents.isLoadingMainFrame()) throw new Error('应用页面正在加载，请稍后重试');
     const { apps } = await request(''); const app = apps.find(a => a.id === item.app.id);
     if (!app || app.agentAllowed === false || app.status !== 'authorized') throw new Error('应用尚未确认或已撤销使用权限，请在应用卡片上确认登录或恢复权限');
-    validateUrl(item.contents.getURL());
+    if (requirePage) {
+      if (!item.contents.getURL() || item.contents.getURL() === 'about:blank') throw new Error('应用页面尚未打开，请先调用 app_open 或使用 navigate 打开目标网址');
+      validateUrl(item.contents.getURL());
+    }
     return app;
   }
   async function execute(job) {
@@ -343,16 +322,26 @@ function createAppBrowser({ electron, getWindow, serverUrl, dataRoot, testAllowL
         notify(item);
         return { ...result, browser_id: job.app.id, url: publicPageUrl(item.contents.getURL()) };
       }
-      const app = await guard(item), wc = item.contents;
+      // Navigation replaces the current page, which may still be blank after
+      // a restart. Validate the destination and authorization independently.
+      const navigationTarget = job.action === 'navigate' ? validateUrl(job.args.url) : null;
+      const app = await guard(item, { requirePage: job.action !== 'navigate' }), wc = item.contents;
       item.app = app; item.agentMode = true;
       if (job.cancelled) throw new Error('任务已停止');
       let result = { ok: true };
-      const evaluate = code => wc.executeJavaScriptInIsolatedWorld(999, [{ code }]);
+      // Preserve fixed-script errors across Electron's isolated-world boundary.
+      const evaluate = async code => {
+        const response = await wc.executeJavaScriptInIsolatedWorld(999, [{ code: `(async () => { try { return { value: await (${code}) }; } catch (error) { return { error: String(error.message || error) }; } })()` }]);
+        if (response.error) throw new Error(response.error);
+        return response.value;
+      };
       if (job.action === 'snapshot') result = await evaluate(snapshotScript(crypto.randomUUID()));
       else if (['click', 'type'].includes(job.action)) {
         if (typeof job.args.ref !== 'string' || job.args.ref.length > 100) throw new Error('需要页面元素 ref');
         if (job.action === 'type' && (typeof job.args.text !== 'string' || job.args.text.length > 20000)) throw new Error('输入文本无效或过长');
         result = await evaluate(elementScript(job.args.ref, job.action, job.args.text));
+        // The fixed script uses Chromium's editing command instead of changing
+        // textContent, so editors observe real input without the system clipboard.
       } else if (job.action === 'press') {
         if (!['Enter', 'Tab', 'Escape', 'ArrowDown', 'ArrowUp'].includes(job.args.key)) throw new Error('不支持该按键');
         // Do not type/submit passwords or OTP fields through keyboard automation.
@@ -364,8 +353,7 @@ function createAppBrowser({ electron, getWindow, serverUrl, dataRoot, testAllowL
         if (!Number.isFinite(delta) || Math.abs(delta) > 5000) throw new Error('滚动距离无效');
         await evaluate(`window.scrollBy(0, ${JSON.stringify(delta)})`);
       } else if (job.action === 'navigate') {
-        const target = validateUrl(job.args.url);
-        await wc.loadURL(target.href);
+        await wc.loadURL(navigationTarget.href);
       } else throw new Error('不支持的应用操作');
       return { ...result, url: publicPageUrl(wc.getURL()) };
     };

@@ -50,6 +50,15 @@ export async function main(args = process.argv.slice(2)) {
         const { runTui } = await import('./tui.mjs');
         process.exitCode = await runTui(client, options, { signal: abort.signal });
       }
+    } else if (options.command === 'plugins') {
+      const [action = 'list', source] = options.positional;
+      let result;
+      if (action === 'list') result = await client.request('/api/plugins/pi');
+      else if (action === 'install' && source) result = await client.request('/api/plugins/pi/install', { source: source.startsWith('npm:') ? source : path.resolve(options.cwd, source) }, { timeoutMs: 180000 });
+      else if (action === 'reload') result = await client.request('/api/plugins/reload', {});
+      else if (action === 'remove' && source) result = await client.request(`/api/plugins/pi/${source}`, undefined, { method: 'DELETE' });
+      else throw new Error('用法：mli plugins list|install SOURCE|reload|remove ID');
+      process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     } else if (options.command === 'models') {
       const settings = await client.request('/api/settings');
       for (const model of settings.models) process.stdout.write(`${model.id === settings.activeModelId ? '*' : ' '} ${model.id}\t${model.name}\t${model.model}\n`);

@@ -8,11 +8,12 @@ import { memoryLearner } from './memory-learning.mjs';
 import { userProfileSnapshot } from './user-profiles.mjs';
 import { shutdownAppCenter } from './app-center.mjs';
 import { createRunContext, getRunContext, withRunContext } from './run-context.mjs';
+import { getActiveWorkspace, workspaceForStorageRoot } from './workspaces.mjs';
 import { getSandboxPolicy } from './sandbox-policy.mjs';
 import { resolveTaskAgent } from './agent-profiles.mjs';
 import { setLoopConfig, runTurn, abortRun, Session } from './loop.mjs';
 import { accountUserId, requireAccount, setAccountConfig } from './account.mjs';
-import { DATA_ROOT, getWorkspaceRoot, setWorkspaceRoot, resolveInWorkspace } from './paths.mjs';
+import { DATA_ROOT, getWorkspaceRoot, setSessionStorageRoot, setWorkspaceRoot, resolveInWorkspace } from './paths.mjs';
 import { ensureWorkspace, listWorkspaces, setActiveWorkspace, workspaceRegistryExists } from './workspaces.mjs';
 import { loadAll, cancelUiRequests, disposePlugins } from './plugins.mjs';
 import { cancelRequests } from './permissions.mjs';
@@ -33,23 +34,33 @@ let runtimeConfig;
 let channelSerial = Promise.resolve();
 let agentEventCleanup;
 
-export async function initializeRuntime() {
+export async function initializeRuntime(options = {}) {
+  const cloud = options.mode === 'cloud';
+  if (cloud && (options.scheduler !== false || options.channels !== false || options.autoRecover !== false)) {
+    throw new Error('云模式必须显式关闭 scheduler、channels 和 autoRecover');
+  }
   const cfg = loadConfig(CONFIG_FILE);
   runtimeConfig = cfg;
   setLoopConfig(cfg);
   setAccountConfig(cfg);
   const root = path.resolve(DATA_ROOT, process.env.MLI_AGENT_WORKSPACE || cfg.security?.workspaceRoot || '.');
-  const workspace = workspaceRegistryExists() && !listWorkspaces().length ? null : ensureWorkspace(root);
-  setWorkspaceRoot(workspace?.path || root);
+  const activeWorkspace = getActiveWorkspace();
+  const workspace = activeWorkspace?.kind === 'ssh' ? activeWorkspace : workspaceRegistryExists() && !listWorkspaces().length ? null : ensureWorkspace(root);
+  if (activeWorkspace?.kind === 'ssh') cfg.security.remoteWorkspaceId = activeWorkspace.id;
+  else delete cfg.security.remoteWorkspaceId;
+  setSessionStorageRoot(activeWorkspace?.kind === 'ssh' ? activeWorkspace.storagePath : undefined);
+  setWorkspaceRoot(activeWorkspace?.kind === 'ssh' ? root : workspace?.path || root);
   initializeSandbox(cfg);
   initializeAgentRuntime();
   memoryLearner.disposed = false;
   await loadAll();
-  setChannelRunner({ run: runChannelMessage, stop: stopSession });
-  await initializeChannels();
-  scheduler.setRunner(runScheduledTask);
-  scheduler.start();
-  for (const { session, group } of agentManager.recover(getWorkspaceRoot(), cfg)) {
+  if (!cloud) {
+    setChannelRunner({ run: runChannelMessage, stop: stopSession });
+    await initializeChannels();
+    scheduler.setRunner(runScheduledTask);
+    scheduler.start();
+  }
+  for (const { session, group } of (cloud ? [] : agentManager.recover(getWorkspaceRoot(), cfg))) {
     const policy = group.runtimePolicy, recovery = taskRecoveryState(session);
     if (recovery.available && (recovery.unknownActions.some(action => !['agent_wait', 'agent_inspect'].includes(action.name)) || recovery.externalHandles.length)) {
       group.mission.status = 'blocked'; group.mission.blockedReason = '主任务存在结果未知的操作，请从检查点核对恢复';
@@ -85,6 +96,8 @@ export function contextForSession(session) {
   if (profile) profile.tools = childTask.externalAgentId ? ['acp_launch', 'acp_permission'] : childTask.allowedTools || profile.tools;
   let context;
   context = createRunContext({ session, config, modelSelection: resolveModelSelection(childTask?.modelId), profileOwnerId: accountUserId() || 'local', sandboxPolicy: { ...getSandboxPolicy(), ...(childTask?.readOnly ? { mode: 'read-only' } : {}) }, ...(profile ? { taskId: childTask.taskId, parentAgentId: childTask.parentSessionId, canDelegate: childTask.canDelegate, readOnly: childTask.readOnly, allowedTools: profile.tools, maxSteps: profile.maxSteps, maxDurationMs: profile.maxDurationMs, taskInstruction: childTask.instruction } : {}), changedPaths: new Set(), acquireResource: tool => agentManager.acquireResource(agentManager.group(session, context), session.id, tool), assertResource: (tool, args) => agentManager.assertResource(agentManager.group(session, context), session.id, tool, args), recordUsage: metrics => agentManager.recordUsage(context, metrics) });
+  const remoteWorkspace = workspaceForStorageRoot(context.sessionStorageRoot);
+  if (remoteWorkspace?.kind === 'ssh') context = Object.freeze({ ...context, remoteWorkspace });
   if (childTask?.executionRoot) context = Object.freeze({ ...context, executionRoot: childTask.executionRoot, isolatedWorkspace: Boolean(childTask.writablePaths) });
   if (!context.userProfileSnapshot) context = Object.freeze({ ...context, userProfileSnapshot: withRunContext(context, () => structuredClone(userProfileSnapshot())) });
   return context;
@@ -171,10 +184,9 @@ export function shutdownRuntime() {
   for (const id of activeSequences) stopSession(id);
   agentEventCleanup?.();
   scheduler.dispose();
-  closeMcp();
-  disposePlugins();
+  const pluginShutdown = Promise.allSettled([closeMcp(), disposePlugins()]);
   disconnectChannels().catch((error) => console.error('[channels] shutdown failed', error.message));
-  return stopAllSandboxCommands();
+  return Promise.all([pluginShutdown, stopAllSandboxCommands()]);
 }
 
 function samePath(left, right) {

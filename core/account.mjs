@@ -1,3 +1,4 @@
+import { getRunContext } from './run-context.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -247,10 +248,11 @@ export function publicAccountStatus() {
     currentSubject: currentSubjectStatus(),
   };
 }
-export function accountToken() { return current?.token || ''; }
-export function accountUserId() { return current?.user?.id ? String(current.user.id) : ''; }
+export function accountToken() { return getRunContext()?.cloudAccount ? 'task-scoped-relay' : (current?.token || ''); }
+export function accountUserId() { return getRunContext()?.cloudAccountUser?.id || (current?.user?.id ? String(current.user.id) : ''); }
 export function accountServerUrl() { return accountConfig().baseUrl; }
 export async function listManagedModels() {
+  if(getRunContext()?.cloudAccount)return getRunContext().cloudAccount.listManagedModels();
   if (!current?.token) return { models: [] };
   return request('/api/v2/models', { token: current.token });
 }
@@ -271,7 +273,7 @@ export async function listAccountPlugins() {
 export async function installAccountPlugin(id, sha256) {
   if (!current?.token) throw new Error('请先登录账户');
   const result = await installPlatformPlugin({ baseUrl: accountConfig().baseUrl, token: current.token, id, sha256 });
-  emit('plugins_reloaded', { plugin: result.name });
+  emit('plugin_installed', { plugin: result.name, status: 'pending' });
   return result;
 }
 
@@ -386,6 +388,7 @@ export function logoutAccount() {
 }
 
 export async function refreshAccount() {
+  if(getRunContext()?.cloudAccount)return {user:await getRunContext().cloudAccount.requireAccount()};
   const cfg = accountConfig();
   if (!cfg.enabled || !current?.token) return publicAccountStatus();
   try {
@@ -415,6 +418,10 @@ export async function updateAccountNickname(nickname) {
 
 export async function requireAccount({ paid = false } = {}) {
   const cfg = accountConfig();
+  if (process.env.MLI_CLOUD_MODE === '1' && !cfg.enabled) {
+    const error = new Error('云模式必须启用账户校验'); error.status = 503; throw error;
+  }
+  if(getRunContext()?.cloudAccount)return getRunContext().cloudAccount.requireAccount({paid});
   if (!cfg.enabled) return null;
   if (!current?.token) {
     const error = new Error('请先登录账户');

@@ -1,0 +1,21 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {once} from 'node:events';
+import {fileURLToPath} from 'node:url';
+import runtime from '../electron/runtime.cjs';
+test('HTTP pi install stays pending until activation, then executes and unloads', {timeout:15000}, async t=>{
+ const data=fs.mkdtempSync(path.join(os.tmpdir(),'mli-pi-http-'));const runtimeRoot=fileURLToPath(new URL('../',import.meta.url));
+ const instance=runtime.startRuntime({executable:process.execPath,runtimeRoot,dataRoot:data,managed:true,environment:{MLI_ACCOUNT_ENABLED:'false'}});
+ t.after(async()=>{if(instance.child.exitCode===null){const end=once(instance.child,'exit');instance.child.kill();await end}fs.rmSync(data,{recursive:true,force:true})});
+ const url=(await instance.ready).url;
+ const request=async(route,body,method=body?'POST':'GET')=>{const r=await fetch(url+route,{method,headers:{'content-type':'application/json'},body:body?JSON.stringify(body):undefined});const d=await r.json();assert.equal(r.status,200,JSON.stringify(d));return d};
+ const installed=await request('/api/plugins/pi/install',{source:path.join(runtimeRoot,'test/fixtures/pi-upstream-hello')});assert.equal(installed.status,'pending');
+ assert.equal((await request('/api/plugins/pi')).runtime.tools.includes('hello'),false);
+ const active=await request('/api/plugins/reload',{});assert.equal(active.errors.length,0);assert.ok(active.tools.includes('hello'));
+ const session=await request('/api/session',{title:'pi test'});await request(`/api/session/${session.id}/mode`,{mode:'auto-all'});
+ const result=await request(`/api/session/${session.id}/dev-tool`,{tool:'hello',args:{name:'HTTP'}});assert.equal(result.result.content,'Hello, HTTP!');
+ await request(`/api/plugins/pi/${installed.id}`,undefined,'DELETE');await request('/api/plugins/reload',{});assert.equal((await request('/api/plugins/pi')).runtime.tools.includes('hello'),false);
+});

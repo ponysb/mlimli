@@ -110,9 +110,10 @@ app.whenReady().then(async () => {
   await evaluate("document.querySelector('[aria-label=\"关闭面板\"]').click()");
   const microphoneBounds = () => evaluate("(() => { const r = document.querySelector('[aria-label=\"语音输入与会议录制\"]').getBoundingClientRect(); return {x: Math.round(r.x+r.width/2), y: Math.round(r.y+r.height/2)}; })()");
   const assertInlineStatus = async () => {
-    const layout = await evaluate("(() => { const status=document.querySelector('.voice-live'),mic=document.querySelector('.voice-button'),send=document.querySelector('.send-button'),meta=document.querySelector('.composer-meta');const bounds=e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,centerY:r.y+r.height/2};};return {inSlot:status.parentElement.id==='voice-input-slot',status:bounds(status),mic:bounds(mic),send:bounds(send),meta:bounds(meta),width:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth}; })()");
+    const layout = await evaluate("(() => { const status=document.querySelector('.voice-live'),mic=document.querySelector('.voice-button'),slot=document.querySelector('#voice-input-slot'),meta=document.querySelector('.composer-meta'),composer=document.querySelector('.composer');const bounds=e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,centerY:r.y+r.height/2};};return {inSlot:status.parentElement===slot,status:bounds(status),mic:bounds(mic),slot:bounds(slot),composer:bounds(composer),buttons:[...document.querySelectorAll('.composer-actions button')].filter(el=>el.getClientRects().length).map(bounds),meta:bounds(meta),width:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth}; })()");
     const overlaps = (a,b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-    if (!layout.inSlot || layout.status.right > layout.mic.left || Math.abs(layout.status.centerY-layout.mic.centerY)>1 || overlaps(layout.status,layout.meta) || layout.status.left<0 || layout.send.right>layout.width || layout.overflow) throw new Error('Microphone status is not aligned safely to its left: ' + JSON.stringify(layout));
+    const buttonOverlap = layout.buttons.some((a, index) => layout.buttons.slice(index + 1).some(b => overlaps(a, b)));
+    if (!layout.inSlot || layout.status.right > layout.mic.left || Math.abs(layout.status.centerY-layout.mic.centerY)>1 || overlaps(layout.status,layout.meta) || layout.status.left<layout.slot.left || layout.mic.right>layout.slot.right || layout.slot.left<layout.composer.left || layout.buttons.some(b=>b.right>layout.composer.right) || buttonOverlap || layout.overflow) throw new Error('Microphone status/buttons overlap or escape their layout: ' + JSON.stringify(layout));
   };
   let bounds = await microphoneBounds();
   win.webContents.sendInputEvent({type:'mouseMove',...bounds});
@@ -151,7 +152,7 @@ app.whenReady().then(async () => {
   fs.writeFileSync(path.join(root, 'logs/speech-smoke-loading.png'), (await win.webContents.capturePage()).toPNG());
   win.setSize(360, 800);
   await delay(100);
-  await evaluate("if (!document.querySelector('.app-shell').classList.contains('sidebar-collapsed')) document.querySelector('.mobile-nav-toggle').click()");
+  await evaluate("if (!document.querySelector('.app-shell').classList.contains('sidebar-collapsed')) dispatchEvent(new Event('mli:toggle-sidebar'))");
   await assertInlineStatus();
   const loadingBounds = await evaluate("(() => { const panel=document.querySelector('.voice-live'); const r=panel.getBoundingClientRect(); return {left:r.left,right:r.right,width:innerWidth,overflow:panel.scrollWidth > panel.clientWidth}; })()");
   if (loadingBounds.left < 0 || loadingBounds.right > loadingBounds.width || loadingBounds.overflow) throw new Error('Mobile loading feedback overflows: ' + JSON.stringify(loadingBounds));
@@ -177,10 +178,15 @@ app.whenReady().then(async () => {
   await waitFor("Boolean(document.querySelector('[aria-label=\"关闭待命麦克风\"]'))");
   await assertInlineStatus();
   if ((await microphoneBounds()).x !== bounds.x) throw new Error('Standby status moved the microphone button horizontally');
+  // Exercise the run-active Stop layout while the synthetic microphone is ready.
+  await evaluate("(() => { const stop=document.createElement('button');stop.className='send-button stop';stop.title='停止运行';stop.textContent='■';document.querySelector('.composer-actions').insertBefore(stop,document.querySelector('.composer-actions > .send-button')); })()");
+  await assertInlineStatus();
+  fs.writeFileSync(path.join(root, 'logs/speech-smoke-standby-with-stop.png'), (await win.webContents.capturePage()).toPNG());
   fs.writeFileSync(path.join(root, 'logs/speech-smoke-microphone-standby.png'), (await win.webContents.capturePage()).toPNG());
   win.setSize(360, 800); await delay(100);
   await assertInlineStatus();
   fs.writeFileSync(path.join(root, 'logs/speech-smoke-microphone-standby-mobile.png'), (await win.webContents.capturePage()).toPNG());
+  await evaluate("document.querySelector('.composer-actions > .send-button.stop').remove()");
   win.setSize(1440, 1000); await delay(100);
   await evaluate("document.querySelector('[aria-label=\"关闭待命麦克风\"]').click()");
   await waitFor("__speechSmoke.streams.every(s => s.getTracks().every(t => t.readyState === 'ended'))");
@@ -263,7 +269,7 @@ app.whenReady().then(async () => {
   await evaluate("[...document.querySelectorAll('.voice-modes button')].find(button=>button.innerText==='语音会议').click(); const check=document.querySelector('.voice-check input'); if(!check.checked)check.click(); [...document.querySelectorAll('#meeting-dialog button')].find(button=>button.innerText.includes('开始会议录制')).click()");
   await waitFor("Boolean(document.querySelector('.meeting-finish')) && Boolean(document.querySelector('.meeting-transcript article'))");
   await evaluate("document.querySelector('.meeting-finish').click()");
-  await waitFor("Boolean(__speechSmoke.summarySessionId) && !document.querySelector('.meeting-workspace') && Boolean(document.querySelector('.topbar-title b')) && document.querySelector('.topbar-title b').innerText.includes('会议纪要')");
+  await waitFor("Boolean(__speechSmoke.summarySessionId) && !document.querySelector('.meeting-workspace') && document.querySelector('.workspace-tabs > [role=tab][aria-selected=true]')?.textContent.includes('会议纪要')");
   await waitFor("!document.querySelector('.send-button.stop')");
   const report = await evaluate(`({ modes: __speechSmoke.sessions.map(s => s.mode), displayCalls: __speechSmoke.displayCalls, cameraCalls: __speechSmoke.cameraCalls, cameraConstraint: __speechSmoke.cameraConstraint, pcmBytes: __speechSmoke.pcmBytes, media: __speechSmoke.media, patches: __speechSmoke.patches, profiles: __speechSmoke.profiles, stopped: __speechSmoke.streams.every(s => s.getTracks().every(t => t.readyState === 'ended')), draft: document.querySelector('.composer textarea').value })`);
   if (!report.stopped || report.displayCalls !== 1 || report.cameraCalls < 4 || report.cameraConstraint.video.deviceId.exact !== 'test-camera-2' || !report.media.some(item => item.type.startsWith('video/') && item.mode==='camera') || !report.media.some(item => item.type.startsWith('video/') && item.mode==='screen') || !report.patches.some(item => item.participants?.['speaker-1']?.name === '小李')) throw new Error(JSON.stringify(report));
@@ -279,22 +285,21 @@ app.whenReady().then(async () => {
   await waitFor("document.querySelector('.permission-chip').innerText.includes('完全访问')");
   const mode = await evaluate("fetch('/api/session', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({title:'permission smoke'})}).then(r=>r.json()).then(s=>fetch('/api/session/'+s.id)).then(r=>r.json()).then(s=>s.mode)");
   if (mode !== 'auto-all') throw new Error('New session did not inherit toggle');
-  await evaluate("document.querySelector('[aria-label=\"设置\"]').click()");
-  await evaluate("[...document.querySelectorAll('[role=tab]')].find(b => b.innerText === '语音与声纹').click()");
+  await evaluate("dispatchEvent(new CustomEvent('mli:open-settings', {detail:{tab:'voice'}}))");
   await waitFor("document.querySelectorAll('.speech-model-card').length === 4");
   await evaluate("document.querySelector('[aria-label=\"删除 SenseVoice Small INT8\"]').click()");
   await waitFor("Boolean(document.querySelector('.action-popover-danger'))");
   await evaluate("document.querySelector('.action-popover-danger').click()");
   await waitFor("__speechSmoke.deleted === 'sensevoice' && !document.querySelector('[aria-label=\"删除 SenseVoice Small INT8\"]')");
   await evaluate("__speechSmoke.choices.find(m=>m.id==='qwen06').installed=false; dispatchEvent(new Event('speech-settings-changed'))");
-  await waitFor("[...document.querySelectorAll('.speech-model-card')].find(c => c.innerText.includes('Qwen3-ASR 0.6B')).querySelector('button').innerText.includes('下载')");
-  await evaluate("[...document.querySelectorAll('.speech-model-card')].find(c => c.innerText.includes('Qwen3-ASR 0.6B')).querySelector('button').click()");
+  await waitFor("[...document.querySelectorAll('.speech-model-card')].find(c => c.innerText.includes('Qwen3-ASR 0.6B')).querySelector('.speech-model-actions > button').innerText.includes('安装并使用')");
+  await evaluate("[...document.querySelectorAll('.speech-model-card')].find(c => c.innerText.includes('Qwen3-ASR 0.6B')).querySelector('.speech-model-actions > button').click()");
   await waitFor("Boolean(document.querySelector('.speech-model-card .speech-download-progress'))");
   const progress = await evaluate("document.querySelector('.speech-download-progress').innerText");
   if (!progress.includes('25%') || !progress.includes('2.0 KB/秒') || !progress.includes('剩余 3.0 KB')) throw new Error('Inline progress incorrect: ' + progress);
   fs.writeFileSync(path.join(screenshots, 'speech-smoke-models.png'), (await win.webContents.capturePage()).toPNG());
   win.setSize(430, 932); await delay(200);
-  await evaluate("if (!document.querySelector('.app-shell').classList.contains('sidebar-collapsed')) document.querySelector('.mobile-nav-toggle').click(); [...document.querySelectorAll('.speech-model-card')].find(c=>c.innerText.includes('Qwen3-ASR 0.6B')).scrollIntoView({block:'center'});");
+  await evaluate("if (!document.querySelector('.app-shell').classList.contains('sidebar-collapsed')) dispatchEvent(new Event('mli:toggle-sidebar')); [...document.querySelectorAll('.speech-model-card')].find(c=>c.innerText.includes('Qwen3-ASR 0.6B')).scrollIntoView({block:'center'});");
   await delay(100);
   const mobile = await evaluate("({width:innerWidth,content:document.documentElement.scrollWidth,cards:[...document.querySelectorAll('.speech-model-card')].map(c=>{const r=c.getBoundingClientRect();return [r.left,r.right]})})");
   if (mobile.content > mobile.width || mobile.cards.some(r=>r[0]<0 || r[1]>mobile.width)) throw new Error('Mobile model layout overflows: ' + JSON.stringify(mobile));

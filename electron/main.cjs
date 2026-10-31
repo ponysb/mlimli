@@ -12,7 +12,7 @@ function smokeStage(stage) {
   if (smokeArgument) fs.appendFileSync(`${path.resolve(smokeArgument.slice('--mli-smoke-report='.length))}.startup.log`, `${stage}\n`);
 }
 smokeStage('entry');
-const { app, BrowserWindow, dialog, ipcMain, Menu, Notification, shell, powerMonitor, nativeImage, screen, protocol } = require('electron');
+const { app, BrowserWindow, dialog, safeStorage, ipcMain, Menu, Notification, shell, powerMonitor, nativeImage, screen, protocol } = require('electron');
 smokeStage('electron');
 const { acquireRuntime } = require('./runtime.cjs');
 const { registerDebugConsole, observeDebugConsole } = require('./debug-console.cjs');
@@ -112,6 +112,10 @@ ipcMain.handle('choose-directory', async () => {
   const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] });
   return result.canceled ? null : result.filePaths[0];
 });
+ipcMain.handle('choose-ssh-key', async () => {
+  const result = await dialog.showOpenDialog({ properties: ['openFile'], title: '选择 SSH 私钥文件' });
+  return result.canceled ? null : result.filePaths[0];
+});
 ipcMain.handle('show-notification', async (_event, payload = {}) => {
   if (!Notification.isSupported()) return false;
   const title = String(payload.title || '魔力工作台').slice(0, 120);
@@ -177,7 +181,9 @@ if (ownsInstance) app.whenReady().then(async () => {
   smokeStage('runtime');
   server = runtime.child;
   serverUrl = runtime.url;
+  require('./ssh-credentials.cjs').registerSshCredentials({ ipcMain, safeStorage, dataRoot, getWindow: () => mainWindow, getServerUrl: () => serverUrl });
   meetingMini = createMeetingMiniController({ BrowserWindow, screen, ipcMain, preload: path.join(__dirname, 'preload.cjs'), page: path.join(__dirname, 'meeting-mini.html'), getMainWindow: () => mainWindow, getServerUrl: () => serverUrl });
+  require('./mcp-authorization.cjs').registerMcpAuthorization({ ipcMain, BrowserWindow, session: require('electron').session, getWindow: () => mainWindow, getServerUrl: () => serverUrl });
   appBrowser = createAppBrowser({ electron: require('electron'), getWindow: () => mainWindow, serverUrl, dataRoot });
   registerAppBrowser({
     ipcMain, controller: appBrowser, getWindow: () => mainWindow, serverUrl,

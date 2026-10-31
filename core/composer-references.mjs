@@ -1,5 +1,5 @@
-export function expandComposerReferences(text, { skills = [], plugins = [] } = {}) {
-  const references = [...String(text).matchAll(/@(file|folder|skill|plugin)\(("(?:[^"\\]|\\.)*")\)/g)].slice(0, 20);
+export function expandComposerReferences(text, { skills = [], plugins = [], mcpServers = [] } = {}) {
+  const references = [...String(text).matchAll(/@(file|folder|skill|plugin|mcp)\(("(?:[^"\\]|\\.)*")\)/g)].slice(0, 20);
   const instructions = [], seen = new Set();
   for (const [, kind, encoded] of references) {
     let name;
@@ -11,6 +11,10 @@ export function expandComposerReferences(text, { skills = [], plugins = [] } = {
       const skill = skills.find(item => item.name === name);
       instructions.push(skill ? `用户明确选择 Skill ${JSON.stringify(skill.name)}，先调用 read_skill 读取该技能，再按指南完成任务。` : `用户引用的 Skill ${JSON.stringify(name)} 当前未加载，请说明缺失，不要假定该能力可用。`);
     }
+    if (kind === 'mcp') {
+      const server = mcpServers.find(item => item.name === name && item.enabled !== false);
+      instructions.push(server ? `用户明确选择 MCP 服务 ${JSON.stringify(name)}。使用 mcp search 时指定 server 为该服务名称，随后用 describe 确认工具参数，再通过 ${JSON.stringify(name + '/工具名')} 调用适用工具；选择不代表连接成功或扩大权限。` : `用户选择的 MCP 服务 ${JSON.stringify(name)} 当前未配置或已停用，请说明缺失。`);
+    }
     if (kind === 'plugin') {
       const plugin = plugins.find(item => item.name === name || (name === 'desktop' && item.name === 'computer-use'));
       instructions.push(plugin ? `用户明确选择插件 ${JSON.stringify(plugin.name)}；使用其已注册且适用于任务的工具：${(plugin.tools || []).join(', ')}。如需该插件的 Skill，请按需调用 read_skill。` : `用户引用的插件 ${JSON.stringify(name)} 当前未加载，请说明缺失。`);
@@ -18,3 +22,7 @@ export function expandComposerReferences(text, { skills = [], plugins = [] } = {
   }
   return instructions.length ? `${text}\n\n[本轮显式引用]\n${instructions.join('\n')}` : text;
 }
+export function selectedMcpReferences(text) {
+  return [...new Set([...String(text || '').matchAll(/@mcp\(("(?:[^"\\]|\\.)*")\)/g)].slice(0, 20).map(match => JSON.parse(match[1])))];
+}
+

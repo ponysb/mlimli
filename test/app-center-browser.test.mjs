@@ -22,7 +22,7 @@ test('real Electron application browser waits for login, resumes actions, isolat
     try { await promisify(execFile)(executable, [root], { env, windowsHide: true, timeout: 50000 }); }
     catch (error) { throw new Error(fs.existsSync(report) ? fs.readFileSync(report, 'utf8') : error.message + '\n' + error.stderr); }
     const result = JSON.parse(fs.readFileSync(report, 'utf8'));
-    for (const name of ['loginWait', 'resumed', 'isolation', 'snapshot', 'action', 'persistence', 'revoked']) assert.equal(result[name], true, name);
+    for (const name of ['loginWait', 'resumed', 'isolation', 'snapshot', 'action', 'controlledInput', 'multilineEditor', 'actionableErrors', 'persistence', 'revoked']) assert.equal(result[name], true, name);
     t.diagnostic(`Electron ${result.electron}: 登录等待、继续操作、隔离、登录持久化和撤销通过`);
   }
 });

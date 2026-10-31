@@ -48,7 +48,7 @@ test('本任务允许只复用相同命令或同一文件路径', async () => {
   } finally { unsubscribe(); }
 });
 
-test('完全访问自动执行只读网络查询但仍保护桌面能力', async () => {
+test('完全访问自动执行已开放工具，但桌面能力仍需显式启用', async () => {
   const session = { id: `auto-all-${Date.now()}`, mode: 'auto-all', desktopEnabled: false };
   let prompts = 0;
   const unsubscribe = onEvent((event) => {
@@ -63,6 +63,7 @@ test('完全访问自动执行只读网络查询但仍保护桌面能力', async
     const blocked = await authorize({ session, tool: desktop, args: { x: 10, y: 20 }, timeoutMs: 10 });
     assert.equal(blocked.ok, false);
     assert.equal(blocked.decision, 'blocked');
+    assert.match(blocked.reason, /桌面能力未启用/);
     assert.equal(prompts, 0);
   } finally { unsubscribe(); }
 });

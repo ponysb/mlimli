@@ -1,11 +1,14 @@
+import { mcpServers } from './mcp.mjs';
 // core/loop.mjs —— Agent 循环本体：模型流式消费 → 工具执行 → 结果回灌，直到任务完成
 import { emit } from './events.mjs';
 import { chat, providerInfo, usageNumbers } from './llm.mjs';
+import { sessionStatistics } from './session-statistics.mjs';
 import { assembleToolCalls } from './stream.mjs';
 import { Session } from './session.mjs';
-import { getTool, getTools, executeTool, getHooks, getSkills, expandSlash, pluginsInfo } from './plugins.mjs';
-import { expandComposerReferences } from './composer-references.mjs';
+import { getTool, getTools, executeTool, getHooks, getSkills, expandSlash, executeSlashCommand, invokeTool, pluginsInfo } from './plugins.mjs';
+import { expandComposerReferences, selectedMcpReferences } from './composer-references.mjs';
 import { buildSystemPrompt } from './prompts.mjs';
+import { ProgressUpdates } from './progress-updates.mjs';
 import { authorize } from './permissions.mjs';
 import { maybeCompact } from './compact.mjs';
 import { discoverArtifacts, summarizeChanges, workspaceSnapshot } from './task-summary.mjs';
@@ -17,10 +20,11 @@ import { createTeamMemorySnapshot } from './team-memory.mjs';
 import { userProfileSnapshot } from './user-profiles.mjs';
 import { agentManager } from './agent-manager.mjs';
 import { qualityPolicy, assessTaskQuality, qualityFeedback } from './task-quality.mjs';
-import { RunControl, runLimits, runDeadline } from './run-control.mjs';
+import { RunControl, runLimits, runDeadline, runStatePrompt } from './run-control.mjs';
 import { prepareToolOutput } from './tool-output.mjs';
 import { QualityProgress, deliveryVersion } from './quality-progress.mjs';
 import { saveTaskCheckpoint, taskRecoveryState, recoveryPrompt, recoveryActionIsReadOnly } from './task-checkpoint.mjs';
+import { isExplicitDesktopTask } from './desktop-policy.mjs';
 
 let loopConfig = { agent: {}, security: {} };
 export function setLoopConfig(c) { loopConfig = c; }
@@ -121,9 +125,10 @@ function emitAssistantText(session, text) {
 /** 一轮对话：user 输入 → 循环 → turn_end */
 export async function runTurn(session, userText, attachments = [], { clientMessageId, queuedId, savedAttachments: queuedAttachments, resumeCheckpointId } = {}) {
   const existing = getRunContext();
+  const desktopIntentText = resumeCheckpointId !== undefined ? taskRecoveryState(session)?.goal || userText : userText;
   if (!existing?.userProfileSnapshot) {
     const snapshot = structuredClone(userProfileSnapshot());
-    return withRunContext(Object.freeze({ ...existing, userProfileSnapshot: snapshot }), () => runTurn(session, userText, attachments, { clientMessageId, queuedId, savedAttachments: queuedAttachments, resumeCheckpointId }));
+    return withRunContext(Object.freeze({ ...existing, userProfileSnapshot: snapshot, desktopTaskExplicit: isExplicitDesktopTask(desktopIntentText) }), () => runTurn(session, userText, attachments, { clientMessageId, queuedId, savedAttachments: queuedAttachments, resumeCheckpointId }));
   }
   const parent = getRunContext();
   let memorySnapshot = { body: '', ids: [] };
@@ -134,8 +139,17 @@ export async function runTurn(session, userText, attachments = [], { clientMessa
   catch (error) { emit('memory_warning', { sessionId: session.id, message: `团队记忆加载失败：${error.message}` }); }
   const usageRecords = [];
   const recordUsage = parent?.recordUsage;
-  const context = Object.freeze({ ...parent, memorySnapshot, teamMemorySnapshot, usageRecords,
-    recordUsage: row => { usageRecords.push(row); recordUsage?.(row); } });
+  const selectedMcpServers = selectedMcpReferences(resumeCheckpointId !== undefined ? taskRecoveryState(session)?.goal || userText : userText);
+  const context = Object.freeze({ ...parent, desktopTaskExplicit: isExplicitDesktopTask(desktopIntentText), selectedMcpServers, memorySnapshot, teamMemorySnapshot, usageRecords,
+    recordUsage: row => {
+      usageRecords.push(row); recordUsage?.(row);
+      if (row.kind !== 'stream' || row.sessionId !== session.id) return;
+      const turnId = session.entries().findLast(entry => entry.type === 'step_start')?.turnId;
+      const { promptTokens, completionTokens, cacheReadTokens, totalMs, estimatedTokens } = row.metrics || {};
+      session.append({ type: 'model_usage', requestId: row.id, turnId, step: row.step,
+        metrics: { promptTokens, completionTokens, cacheReadTokens, totalMs, estimatedTokens } });
+      emit('session_statistics', { sessionId: session.id, statistics: sessionStatistics(session.chain()) });
+    } });
   return withRunContext(context, () => runBoundTurn(session, userText, attachments, { clientMessageId, queuedId, savedAttachments: queuedAttachments, resumeCheckpointId }));
 }
 
@@ -149,6 +163,12 @@ async function runBoundTurn(session, userText, attachments = [], { clientMessage
   const recovery = resumeCheckpointId !== undefined ? taskRecoveryState(session) : null;
   if (recovery && (!recovery.available || recovery.checkpointId !== resumeCheckpointId)) throw new Error('检查点已改变或任务无需恢复，请重新加载会话');
   const slash = expandSlash(recovery?.goal || userText);
+  if (slash.kind === 'handler') {
+    const result = await executeSlashCommand(slash, session);
+    session.append({ type: 'message', role: 'user', content: userText });
+    emitAssistantText(session, result.content);
+    return;
+  }
   if (slash.kind === 'help' && !attachments.length && !queuedAttachments?.length) {
     const entry = session.append({ type: 'message', role: 'user', content: userText, clientMessageId: String(clientMessageId || '').slice(0, 80) || undefined });
     session.touchIndex();
@@ -157,7 +177,7 @@ async function runBoundTurn(session, userText, attachments = [], { clientMessage
     return;
   }
   const rawPrompt = recovery?.goal || (slash.kind === 'expand' ? slash.text : userText);
-  const promptText = recovery?.goal || expandComposerReferences(rawPrompt, { skills: getSkills(), plugins: pluginsInfo().plugins });
+  const promptText = recovery?.goal || expandComposerReferences(rawPrompt, { skills: getSkills(), plugins: pluginsInfo().plugins, mcpServers: mcpServers(cfg) });
 
   const savedAttachments = queuedAttachments || session.saveAttachments(attachments);
   const userContent = savedAttachments.length ? [{ type: 'text', text: rawPrompt }, ...savedAttachments] : rawPrompt;
@@ -166,6 +186,7 @@ async function runBoundTurn(session, userText, attachments = [], { clientMessage
   const signal = ac.signal;
   const turnId = recovery?.turnId || runId();
   const turnStartedAt = Date.now() - (recovery?.activeDurationMs || 0);
+  const progressUpdates = new ProgressUpdates();
   let stepCount = recovery?.stepCount || 0;
   let toolCount = recovery?.toolCount || 0;
   let lastAssistantText = '';
@@ -279,10 +300,13 @@ async function runBoundTurn(session, userText, attachments = [], { clientMessage
         emit('status', { sessionId, text: notice.text });
       }
       if (runState && responseWarning) runState.warning = [runState.warning, responseWarning].filter(Boolean).join('\n');
-      let system = buildSystemPrompt({
-        tools, skills: getSkills(), mode: session.mode, desktopEnabled: session.desktopEnabled, expertPrompt: session.expertPrompt, taskPrompt: promptText, runState, goal: session.goal,
+      const system = buildSystemPrompt({
+        tools, skills: getSkills(), mode: session.mode, desktopEnabled: session.desktopEnabled, desktopTaskExplicit: context?.desktopTaskExplicit, expertPrompt: session.expertPrompt, taskPrompt: promptText, goal: session.goal,
       });
-      if (recovery) system += '\n\n' + recoveryPrompt(recovery, context?.executionRoot || '.');
+      // Per-request counters/reminders must follow reusable history, otherwise the
+      // changing system suffix breaks prefix caching before any conversation tokens.
+      // This transient message is never persisted as a user instruction or history.
+      const runtimeContext = [runStatePrompt(runState), recovery ? recoveryPrompt(recovery, context?.executionRoot || '.') : '', progressUpdates.prompt()].filter(Boolean).join('\n\n');
       // Notify the UI with the exact message window selected for the next model request.
       emit('context_update', { sessionId, turnId, step, context: { ...session.contextStats(contextWindow), nextTurn: true } });
 
@@ -293,7 +317,7 @@ async function runBoundTurn(session, userText, attachments = [], { clientMessage
       session.append({ type: 'step_start', turnId, step, startedAt: stepStartedAt });
       checkpoint({});
       session.touchIndex();
-      emit('message_start', { sessionId, turnId, step, startedAt: stepStartedAt });
+      emit('message_start', { sessionId, turnId, step, startedAt: stepStartedAt, statistics: sessionStatistics(session.chain()) });
       let text = '';
       let thinking = '';
       let modelUsage = null;
@@ -310,7 +334,7 @@ async function runBoundTurn(session, userText, attachments = [], { clientMessage
       }
       let adjusted = false;
       try {
-        for await (const e of chat({ messages, system, tools, signal: modelController.signal, sessionId, step })) {
+        for await (const e of chat({ messages, system, runtimeContext, tools, signal: modelController.signal, sessionId, step })) {
           events.push(e);
           if (e.type === 'text_delta') { text += e.text; activeStep.text = text; emit('text_delta', { sessionId, turnId, step, text: e.text }); }
           else if (e.type === 'thinking_delta') { thinking += e.text; activeStep.thinking = thinking; emit('thinking_delta', { sessionId, turnId, step, text: e.text }); }
@@ -365,6 +389,7 @@ async function runBoundTurn(session, userText, attachments = [], { clientMessage
         continue;
       }
       incompleteResponses = 0; responseWarning = '';
+      progressUpdates.observe(text, toolCalls.length);
 
       if (!toolCalls.length) {
         session.append({
@@ -484,7 +509,7 @@ async function runBoundTurn(session, userText, attachments = [], { clientMessage
         checkpoint({ phase: 'tool_pending', inFlight: { callId: call.id, name: call.name, permission: tool.permission } });
         try {
           result = await executeTool(tool, call.args, {
-            session, signal,
+            session, signal, callId: call.id,
             timeoutMs: cfg.agent?.toolTimeoutMs ?? 60000,
           });
           for (const h of getHooks().process_tool_result) {
@@ -591,10 +616,9 @@ export async function runDevTool(session, toolName, args) {
   const cfg = getRunContext()?.config || loopConfig;
   const tool = getTool(toolName);
   if (!tool) throw new Error(`未知工具 ${toolName}`);
-  const perm = await authorize({ session, tool, args, timeoutMs: cfg.security?.permissionTimeoutMs });
-  if (!perm.ok) return { ok: false, reason: perm.reason };
-  emit('tool_call', { sessionId: session.id, call: { id: `dev_${Date.now()}`, name: toolName, args }, decision: perm.decision });
-  const result = await executeTool(tool, args, { session, timeoutMs: cfg.agent?.toolTimeoutMs ?? 60000 });
+  let result;
+  try { result = await invokeTool(toolName, args, { session, timeoutMs: cfg.agent?.toolTimeoutMs ?? 60000 }); }
+  catch (error) { if (error.code === 'PLUGIN_PERMISSION_DENIED') return { ok: false, reason: error.message }; throw error; }
   emit('tool_result', { sessionId: session.id, callId: 'dev', name: toolName, status: result.status ?? 'ok', content: clip(result.content, 4000), image: result.image, ui: result.ui });
   return { ok: true, result };
 }
